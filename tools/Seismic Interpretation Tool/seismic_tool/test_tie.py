@@ -354,6 +354,9 @@ def run_gui(check, tmp):
     check(res is not None and dlg.wavelet_kind == "Deterministic" and abs(res["phase_deg"]) < 20 and res["pep"] > 0.8
           and dlg.tie_corr() > c_r - 0.05, f"dialog: deterministic wavelet (phase {res['phase_deg']:+.0f} deg, PEP "
                                            f"{res['pep']:.2f}), synthetic corr {c_r:.3f} -> {dlg.tie_corr():.3f}")
+    mt = dlg.estimate_wavelet(method="multitaper")
+    check(mt is not None and mt["pep"] > 0.7 and abs(mt["phase_deg"]) < 25, f"dialog: multitaper wavelet (PEP {mt['pep']:.2f})")
+    dlg.estimate_wavelet(method="least squares")
     dlg.save_wavelet("W-1 det")
     from .tie import WaveletLibrary
     lib = WaveletLibrary(dlg.library_path())

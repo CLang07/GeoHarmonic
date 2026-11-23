@@ -113,6 +113,23 @@ def run(check, tmp):
           "2D edit: level moved at trace 30, rest of the line unchanged")
     e2.undo()
     check(np.allclose(S.load_rgt_line(e2.folder, "A"), before, atol=0.2), "2D edit undo")
+    # edits next to a tie keep the tie trace (network consistency) and update the 2D horizon stack
+    from .rgt.stack import build_stack_2d, load_stack_2d
+    build_stack_2d(p, ["A", "B"], n_levels=40)
+    e3 = RGTEditor2D(p, "A", radius=3)
+    if len(e3.ties):
+        jt = int(e3.ties[0])
+        tie_before = e3.tau[jt].copy()
+        j = min(len(e3.tau) - 1, jt + 3)
+        _, v3 = e3.move_level(j, 400.0, 410.0)
+        st = load_stack_2d(e3.folder)
+        from .rgt.stack import iso_times
+        check(np.allclose(e3.tau[jt], tie_before, atol=0.3) and abs(e3.value_at(j, 410.0) - v3) < 1.0 and np.allclose(
+            st["lines"]["A"], iso_times(e3.tau, st["levels"], p.line("A").times).T, equal_nan=True),
+            f"2D edit 3 traces from the tie: tie trace kept, stack updated (ties at {list(e3.ties)})")
+        e3.undo()
+    else:
+        check(False, "2D edit: test lines should cross")
     return True
 
 

@@ -99,6 +99,9 @@ class WellTieDialog(QtWidgets.QDialog):
         bar3 = QtWidgets.QHBoxLayout()
         self.btn_wav = QtWidgets.QPushButton("Estimate wavelet")
         self.btn_wav.setToolTip("Deterministic least-squares wavelet from the tied reflectivity and the seismic")
+        self.west_combo = QtWidgets.QComboBox()
+        self.west_combo.addItems(["Least squares", "Multitaper"])
+        self.west_combo.setToolTip("Wavelet estimation: least-squares (Tikhonov) or multitaper cross-spectrum")
         self.btn_wsave = QtWidgets.QPushButton("Save wavelet")
         self.lib_combo = QtWidgets.QComboBox()
         self.lib_combo.setToolTip("Wavelet library of this project (<project>_seismic/wavelets.json)")
@@ -107,7 +110,7 @@ class WellTieDialog(QtWidgets.QDialog):
         self.chk_dev.setToolTip("Deviated wells: seismic sampled along the well path instead of the surface location")
         self.btn_angle = QtWidgets.QPushButton("Angle gather")
         self.btn_batch = QtWidgets.QPushButton("Tie all wells...")
-        for w in (self.btn_wav, self.btn_wsave, self.lib_combo, self.chk_despike, self.chk_dev, self.btn_angle,
+        for w in (self.btn_wav, self.west_combo, self.btn_wsave, self.lib_combo, self.chk_despike, self.chk_dev, self.btn_angle,
                   self.btn_batch):
             bar3.addWidget(w)
         bar3.addStretch(1)
@@ -463,7 +466,7 @@ class WellTieDialog(QtWidgets.QDialog):
             self._trajs = {t.name: t for t in trajectories_from_wellset(self.ws)}
         return self._trajs.get(name)
 
-    def estimate_wavelet(self, half_ms=64.0):
+    def estimate_wavelet(self, half_ms=64.0, method=None):
         """Deterministic wavelet from the tied reflectivity and the seismic in the window; becomes the wavelet in
         use (wavelet box 'Deterministic')."""
         d = self._data or self.compute()
@@ -473,7 +476,20 @@ class WellTieDialog(QtWidgets.QDialog):
         tt = self.tied_times()[m]
         s = np.interp(tt, d["ts"], d["seis"], left=np.nan, right=np.nan)
         dt = d["t"][1] - d["t"][0]
-        res = TK.deterministic_wavelet(d["rc"][m], s, max(2, int(round(half_ms / dt))))
+        if method is None:
+            txt = self.west_combo.currentText()
+            method = "multitaper" if isinstance(txt, str) and txt.startswith("Multi") else "least squares"
+        nh = max(2, int(round(half_ms / dt)))
+        if method == "multitaper":
+            mt = TK.multitaper_wavelet(d["rc"][m], np.nan_to_num(s), nh, 5, dt)
+            w = mt["wavelet"]
+            R = TK.conv_matrix(d["rc"][m], nh)
+            ss = np.nan_to_num(s)
+            a = float((R @ w) @ ss) / max(float((R @ w) @ (R @ w)), 1e-30)  # amplitude scale, then PEP
+            nmse = float(((ss - a * (R @ w)) ** 2).sum() / max((ss * ss).sum(), 1e-30))
+            res = {"wavelet": w, "pep": 1 - nmse, "nmse": nmse, "phase_deg": mt["phase_deg"]}
+        else:
+            res = TK.deterministic_wavelet(d["rc"][m], s, nh)
         self.wavelet = res["wavelet"] / (np.abs(res["wavelet"]).max() or 1.0)
         self.last_wavelet = res
         self.wavelet_kind = "Deterministic"

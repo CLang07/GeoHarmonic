@@ -1,2 +1,2 @@
 """Seismic Interpretation Tool - part of the Geo Tool Kit."""
-__version__ = "0.20.2"
+__version__ = "0.20.3"

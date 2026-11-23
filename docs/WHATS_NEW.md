@@ -42,6 +42,12 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.20.3
+- 2D RGT edits keep the traces where the line crosses other RGT lines fixed (network stays consistent) and update
+  the 2D horizon stack (Wheeler / stratal views were stale after an edit).
+- Well tie: wavelet estimation method box (least squares / multitaper); after "Tie all wells..." the bulk-shift
+  map is shown on the basemap when the dialog closes.
+
 ## Seismic v0.20.2 / Well Correlation - second review round (run 2)
 Well Correlation Tool:
 - **Survey files**: a CSV like `MD,INC,AZI,TVD,NS,EW` was read as "seq, MD, INC, AZI" (columns shifted -> wrong TVD

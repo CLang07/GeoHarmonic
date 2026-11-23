@@ -241,6 +241,30 @@ class RGTEditor2D:
         self.p = S.RGTParams(node_traces=4)
         self.p.dx_tol = 1e-5
         self.undo_stack = []
+        self.ties = self._tie_traces()
+
+    def _tie_traces(self):
+        """Trace indices where this line crosses another line that has an RGT: kept fixed by edits so the network
+        stays consistent across the ties."""
+        from ..horizons import line_intersections
+        geo = {}
+        for l in self.project.lines:
+            n = l["name"]
+            try:
+                ln = self.project.line(n)
+            except Exception:
+                continue
+            if ln.has_coords and (n == self.name or S.load_rgt_line(self.folder, n) is not None):
+                geo[n] = (ln.x, ln.y)
+        if self.name not in geo:
+            return np.zeros(0, int)
+        out = []
+        for a, ia, b, ib in line_intersections(geo):
+            if a == self.name:
+                out.append(ia)
+            elif b == self.name:
+                out.append(ib)
+        return np.unique(np.asarray(out, int))
 
     def last_seq(self):
         return self.undo_stack[-1][0] if self.undo_stack else 0
@@ -254,7 +278,8 @@ class RGTEditor2D:
         step = self.p.node_traces
         a = max(0, int(j) - self.radius * step)
         b = min(n - 1, int(j) + self.radius * step)
-        pos = np.unique(np.r_[np.arange(a, b + 1, step), b, int(j)])
+        ties = self.ties[(self.ties >= a) & (self.ties <= b) & (np.abs(self.ties - int(j)) > 0)]
+        pos = np.unique(np.r_[np.arange(a, b + 1, step), b, int(j), ties])
         dt_ms, t0_ms = l.dt * 1000.0, l.t0 * 1000.0
         ntm = S.node_times(l.ns, dt_ms, t0_ms, self.p.node_ms)
         sysm = S.NodeSystem(self.p)
@@ -272,9 +297,10 @@ class RGTEditor2D:
         cur = np.array([np.interp(ntm, l.times, self.tau[c]) for c in pos])  # (ncols, K)
         fixed = [0, len(pos) - 1] if (a > 0 or b < n - 1) else []
         fixed = [c for c in fixed if (c == 0 and a > 0) or (c == len(pos) - 1 and b < n - 1)]
-        for c in fixed:
+        tie_cols = [int(np.searchsorted(pos, t)) for t in ties]  # tie columns keep their values
+        for c in fixed + tie_cols:
             u = sv["offset"][c] + np.arange(K)
-            sysm.eq.add([u], [np.ones(K)], cur[c], 100.0)
+            sysm.eq.add([u], [np.ones(K)], cur[c], 1e4 if c in tie_cols else 100.0)
         if not fixed:
             sysm.datum = True
         c = int(np.searchsorted(pos, int(j)))
@@ -296,6 +322,8 @@ class RGTEditor2D:
         c0 = c1 - 1
         wk = ((k - pos[c0]) / np.maximum(1, pos[c1] - pos[c0]))[:, None]
         self.tau[a:b + 1] = colfull[c0] * (1 - wk) + colfull[c1] * wk
+        for t in ties:  # tie traces exactly as before (node interpolation would smooth their fine detail)
+            self.tau[t] = old[t - a]
         self.undo_stack.append((next_seq(), (a, b), old))
         self._save()
         return sysm
@@ -312,6 +340,21 @@ class RGTEditor2D:
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in self.name)
         np.savez(os.path.join(self.folder, safe + "_rgt.npz"),
                  q=np.round((self.tau - lo) / (hi - lo) * 65535).astype(np.uint16), lo=lo, hi=hi)
+        self._update_stack()
+
+    def _update_stack(self):
+        """Keep this line's rows of the 2D horizon stack in step with the edited RGT (Wheeler / stratal views)."""
+        from .stack import iso_times
+        p = os.path.join(self.folder, "stack_2d.npz")
+        if not os.path.exists(p):
+            return
+        with np.load(p) as z:  # read everything and close before rewriting (Windows)
+            data = {k: z[k] for k in z.files}
+        key = "L_" + self.name
+        if key not in data:
+            return
+        data[key] = iso_times(self.tau, data["levels"], self.line.times).T
+        np.savez(p, **data)
 
     def undo(self):
         if not self.undo_stack:

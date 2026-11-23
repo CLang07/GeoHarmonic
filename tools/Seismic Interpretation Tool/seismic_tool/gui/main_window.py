@@ -644,6 +644,11 @@ class MainWindow(QtWidgets.QMainWindow):
             return None
         dlg._changed()
         dlg.exec()
+        if getattr(dlg, "batch_rows", None):  # "Tie all wells" was run: bulk-shift map on the basemap
+            from ..tie import shift_map
+            g = shift_map(dlg.batch_rows)
+            if g is not None:
+                self.basemap.show_grid(g)
         self.section.redraw()
         return dlg
 
