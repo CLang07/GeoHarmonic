@@ -39,6 +39,20 @@ Kingdom-like interaction; large data.
 6. **RGT step D - interactive editing** - status: todo
    - User adds/moves control points or horizons as constraints, local re-solve in a window around the edit
      (fast), fault re-linking; undo. Tests: constraint changes the model only locally.
+6b. **DLIS reader (numpy, RP66 v1)** - status: todo
+   - `tools/Well Correlation Tool/well_correlation/dlis.py`: parse storage unit label, visible records,
+     logical record segments (encryption/padding/trailer flags), EFLR sets (FILE-HEADER, ORIGIN, CHANNEL,
+     FRAME, PARAMETER, TOOL) with RP66 representation codes, IFLR frame data incl. multi-sample
+     (array) channels; return channels per frame with units, index (depth or time), origin metadata.
+     Export to LAS 2.0 (`--dlis2las IN.dlis OUT_DIR`, one LAS per frame, skip array channels > 1 sample
+     unless asked). Wire into project loading so wells/<Well>/dlis/*.dlis load like LAS.
+   - Test data: data/nz/wells/Tui-1/dlis (PEX/DSI/HALS repeat 084PUP, intermediate 045PUP),
+     Tui-1 + Pateke-2 checkshot DLIS (CSAT: VSP/checkshot - extract depth vs one-way/two-way time table).
+     Compare curves against the printed values where possible; sanity ranges (GR 0-200, RHOB 1.5-3.1).
+   - Add Tui-1 to the NZ well project (header from wells_header.csv; it already has PR3099 tops) using the
+     converted logs; the large main-pass DLIS (171 MB, not in repo) is converted by Chris on his PC with
+     `--dlis2las`. Document that in WHATS_NEW.
+   - Checkshot tables (Tui-1, Pateke-2, Maui-5, Maui-6) become the time-depth inputs for item 7.
 7. **Wells on seismic** - status: todo
    - Load well project wells; time-depth from checkshots (Maui-5, Maui-6 LAS in data/nz) or interval
      velocity from DT, nearest-checkshot fallback; show wells + tops (in TWT) on sections and basemap;

@@ -10,6 +10,10 @@ data/npra/      R_2.SGY, R_3.SGY (USGS NPRA 2D, int16, 4 ms, 1501 samples, CDP b
 data/nz/        Maui field wells (offshore Taranaki NZ): wells/<Well>/las, checkshot (Maui-5, Maui-6 LAS),
                 wells_header.csv, NZ Well Correlation.wcproj.json (tops incl. published PR3099 Table 1.1),
                 Maui seismic.seisproj.json (empty; links the well project)
+                Tui-1 (wells/Tui-1): DLIS only - checkshot/ (CSAT surveys, Suite 1 intermediate + Suite 2
+                main), dlis/ (PEX-DSI-HALS repeat pass, intermediate PEX-HRLA-DSI), mudlog/ gas chromatograph
+                CSV, samples/ cuttings metadata. Location from log header: NZMG E 2,531,255 N 6,196,747,
+                DF 25 m above LAT, water depth 123 m. Pateke-2/checkshot: 4 CSI DLIS files.
 dev/fakeqt/     Qt + pyqtgraph mock for testing GUI code without Qt
 docs/           HANDOFF (this), PLAN (ordered work), RUNLOG (one entry per run)
 ```
