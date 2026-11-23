@@ -210,7 +210,9 @@ Kingdom-like interaction; large data.
    overview volume only if zoomed-out display is slow there)
    PC bench 2026-11-23 (5 GB, docs/BENCHMARKS.md): inline 13.5 ms, time slice 15 ms, crossline 95 ms (fix: crossline
    access is strided - add an xline-major store or 64x64xns bricks, opt-in at import if disk allows), import 48 MB/s
-   (50 GB ~18 min; check SSD vs HDD before parallelising), well index / laterals fine. Windows RAM probe fixed.
+   (50 GB ~18 min; Chris's C: is a Toshiba XG5 NVMe SSD (KXG50ZNV512G, GB/s class) -> import is CPU-bound:
+   fuse the per-chunk conversions, write sorted traces as contiguous slabs instead of fancy-index scatter, thread
+   the chunks, faster time-major transpose; target >= 150 MB/s on his PC), well index / laterals fine. Windows RAM probe fixed.
    - Scale targets (Chris wants big datasets): 3D volume 20-50 GB SEG-Y, 1,000+ 2D lines, 10,000 wells,
      1,000 laterals on the dashboard, all responsive on a 16-32 GB RAM PC.
    - Seismic: import in parallel (threads over trace chunks; numpy releases the GIL in I/O/copy), bricked
