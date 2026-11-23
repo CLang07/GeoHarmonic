@@ -501,3 +501,407 @@ def write_td_csv(path, z, t, well="", note=""):
 def save_json(path, obj):
     with open(path, "w") as fh:
         json.dump(obj, fh, indent=1)
+
+
+# ====================================================================== 16c: wavelets
+def _taper(n_half, frac=0.2):
+    """Cosine taper on the outer frac of a (2 n_half + 1) wavelet."""
+    n = 2 * n_half + 1
+    w = np.ones(n)
+    m = max(1, int(round(frac * n_half)))
+    ramp = 0.5 * (1 - np.cos(np.pi * (np.arange(m) + 0.5) / m))
+    w[:m] = ramp
+    w[-m:] = ramp[::-1]
+    return w
+
+
+def conv_matrix(r, n_half):
+    """R (n, 2 n_half + 1) with (R w)[i] = sum_k w[k] r[i - (k - n_half)] - 'same' convolution with a centred wavelet."""
+    r = np.asarray(r, float)
+    n = len(r)
+    L = 2 * n_half + 1
+    R = np.zeros((n, L))
+    for k in range(L):
+        lag = k - n_half
+        if lag >= 0:
+            R[lag:, k] = r[:n - lag]
+        else:
+            R[:n + lag, k] = r[-lag:]
+    return R
+
+
+def deterministic_wavelet(r, s, n_half, lam=0.01, taper=True):
+    """Least-squares (Tikhonov-damped) wavelet w minimising |s - r * w|^2 + lam * trace(R'R)/L * |w|^2, given
+    the reflectivity r and the seismic s on the same (tied) time samples. Returns dict(wavelet, pep
+    (predictability = 1 - |residual|^2 / |s|^2), nmse, phase_deg)."""
+    r = np.asarray(r, float)
+    s = np.asarray(s, float)
+    ok = np.isfinite(r) & np.isfinite(s)
+    r, s = np.where(ok, r, 0.0), np.where(ok, s, 0.0)
+    R = conv_matrix(r, n_half)
+    G = R.T @ R
+    L = G.shape[0]
+    G[np.diag_indices(L)] += lam * np.trace(G) / L
+    w = np.linalg.solve(G, R.T @ s)
+    if taper:
+        w = w * _taper(n_half)
+    res = s - R @ w
+    ss = float((s * s).sum()) or 1.0
+    nmse = float((res * res).sum()) / ss
+    return {"wavelet": w, "pep": 1.0 - nmse, "nmse": nmse, "phase_deg": wavelet_phase(w)}
+
+
+def _sine_tapers(n, k):
+    i = np.arange(1, n + 1)
+    return np.array([np.sqrt(2.0 / (n + 1)) * np.sin(np.pi * (j + 1) * i / (n + 1)) for j in range(k)])
+
+
+def multitaper_wavelet(r, s, n_half, n_tapers=5, dt_ms=4.0):
+    """Wavelet from the multitaper cross-spectrum W(f) = sum S R* / sum |R|^2 (sine tapers) - robust to noise -
+    with the coherence of seismic and reflectivity per frequency. Returns dict(wavelet, freqs_hz, coherence)."""
+    r = np.nan_to_num(np.asarray(r, float))
+    s = np.nan_to_num(np.asarray(s, float))
+    n = len(r)
+    tp = _sine_tapers(n, n_tapers)
+    nf = 1 << int(math.ceil(math.log2(2 * n)))
+    Rk = np.fft.rfft(tp * r[None], nf, axis=1)
+    Sk = np.fft.rfft(tp * s[None], nf, axis=1)
+    srx = (Sk * np.conj(Rk)).sum(0)
+    rr = (np.abs(Rk) ** 2).sum(0)
+    ss = (np.abs(Sk) ** 2).sum(0)
+    W = srx / np.maximum(rr, 1e-12 * rr.max())
+    coh = np.abs(srx) ** 2 / np.maximum(rr * ss, 1e-30)
+    w = np.fft.irfft(W, nf)
+    w = np.r_[w[-n_half:], w[:n_half + 1]] * _taper(n_half)
+    return {"wavelet": w, "freqs_hz": np.fft.rfftfreq(nf, dt_ms / 1000.0), "coherence": coh, "phase_deg": wavelet_phase(w)}
+
+
+def zero_phase_of(w):
+    """Zero-phase wavelet with the same amplitude spectrum, centred like w."""
+    w = np.asarray(w, float)
+    n = len(w)
+    c = n // 2
+    a = np.abs(np.fft.rfft(np.roll(w, -c)))
+    return np.roll(np.fft.irfft(a, n), c)
+
+
+def wavelet_phase(w):
+    """Constant-phase estimate (deg) of a centred wavelet: the rotation of its zero-phase equivalent that fits it
+    best (atan2 of the projections on the zero-phase wavelet and its Hilbert transform)."""
+    w0 = zero_phase_of(w)
+    h = analytic(w0).imag
+    A, B = float((w * w0).sum()), float((w * h).sum())
+    return math.degrees(math.atan2(-B, A))
+
+
+def wavelet_spectrum(w, dt_ms, nfft=256):
+    """(freqs Hz, amplitude normalised to 1, phase deg about the centre sample)."""
+    w = np.asarray(w, float)
+    c = len(w) // 2
+    nf = max(nfft, 1 << int(math.ceil(math.log2(len(w)))))
+    buf = np.zeros(nf)
+    buf[:len(w) - c] = w[c:]
+    buf[nf - c:] = w[:c]
+    W = np.fft.rfft(buf)
+    a = np.abs(W)
+    return np.fft.rfftfreq(nf, dt_ms / 1000.0), a / (a.max() or 1.0), np.degrees(np.angle(W))
+
+
+def align_wavelets(ws, max_shift=None):
+    """Shift wavelets (same length) to best match the first one (integer samples, circular-safe zero padding) and
+    normalise to unit RMS - the input for an average wavelet."""
+    ws = [np.asarray(w, float) for w in ws]
+    ref = ws[0] / (np.sqrt((ws[0] ** 2).mean()) or 1.0)
+    n = len(ref)
+    ms = n // 4 if max_shift is None else max_shift
+    out = []
+    for w in ws:
+        w = w / (np.sqrt((w ** 2).mean()) or 1.0)
+        best = max(range(-ms, ms + 1), key=lambda k: float((ref * _shift0(w, k)).sum()))
+        out.append(_shift0(w, best))
+    return out
+
+
+def _shift0(w, k):
+    out = np.zeros_like(w)
+    if k >= 0:
+        out[k:] = w[:len(w) - k]
+    else:
+        out[:k] = w[-k:]
+    return out
+
+
+def average_wavelet(ws):
+    a = np.mean(align_wavelets(ws), axis=0)
+    return a / (np.abs(a).max() or 1.0)
+
+
+class WaveletLibrary:
+    """Named wavelets in one JSON file: {name: {dt_ms, samples, centre, source, ...}}."""
+
+    def __init__(self, path=None):
+        self.path = path
+        self.items = {}
+        if path:
+            try:
+                with open(path) as fh:
+                    self.items = json.load(fh)
+            except (OSError, ValueError):
+                self.items = {}
+
+    def add(self, name, w, dt_ms, **meta):
+        w = np.asarray(w, float)
+        self.items[name] = {"dt_ms": float(dt_ms), "samples": [float(v) for v in w], "centre": len(w) // 2, **meta}
+        return name
+
+    def get(self, name, dt_ms=None):
+        """Wavelet samples, resampled to dt_ms when given."""
+        d = self.items[name]
+        w = np.array(d["samples"], float)
+        if dt_ms is None or abs(dt_ms - d["dt_ms"]) < 1e-9:
+            return w
+        c = d.get("centre", len(w) // 2)
+        t = (np.arange(len(w)) - c) * d["dt_ms"]
+        nh = int(t[-1] // dt_ms)
+        tn = np.arange(-nh, nh + 1) * dt_ms
+        return np.interp(tn, t, w)
+
+    def names(self):
+        return sorted(self.items)
+
+    def save(self, path=None):
+        self.path = path or self.path
+        save_json(self.path, self.items)
+        return self.path
+
+
+# ====================================================================== 16c: log conditioning
+def running_median(x, win):
+    x = np.asarray(x, float)
+    h = win // 2
+    p = np.r_[np.full(h, x[0]), x, np.full(h, x[-1])]
+    v = np.lib.stride_tricks.sliding_window_view(p, 2 * h + 1)
+    return np.nanmedian(v, axis=1)
+
+
+def despike(x, win=11, n_mad=4.0):
+    """Replace samples further than n_mad robust sigmas from the running median by the median.
+    Returns (cleaned, spike mask)."""
+    x = np.asarray(x, float)
+    med = running_median(x, win)
+    dev = x - med
+    mad = 1.4826 * np.nanmedian(np.abs(dev - np.nanmedian(dev)))
+    if not mad > 0:  # smooth log: the running median reproduces it exactly, so fall back to the mean deviation
+        mad = 1.2533 * float(np.nanmean(np.abs(dev)))
+    bad = np.isfinite(x) & (np.abs(dev) > n_mad * (mad if mad > 0 else np.inf))
+    return np.where(bad, med, x), bad
+
+
+def washout_mask(cali, bit_in, tol_in=1.0, drho=None, drho_max=0.15):
+    """True where the hole is washed out (caliper > bit + tol, inches) or the density correction is large."""
+    m = np.asarray(cali, float) > float(bit_in) + float(tol_in)
+    if drho is not None:
+        m |= np.abs(np.asarray(drho, float)) > drho_max
+    return m
+
+
+def backus(z, vp, vs, rho, length):
+    """Backus average over a running window of `length` (same units as z, regular sampling assumed):
+    vertical P and S velocities of the equivalent medium. Returns (vp_b, vs_b, rho_b)."""
+    z = np.asarray(z, float)
+    dz = float(np.median(np.diff(z))) if len(z) > 1 else 1.0
+    n = max(1, int(round(length / dz)))
+
+    def mavg(a):
+        a = np.asarray(a, float)
+        c = np.r_[0.0, np.cumsum(a)]
+        h = n // 2
+        i = np.arange(len(a))
+        lo, hi = np.clip(i - h, 0, len(a)), np.clip(i + h + 1, 0, len(a))
+        return (c[hi] - c[lo]) / (hi - lo)
+    rho_b = mavg(rho)
+    M = 1.0 / mavg(1.0 / (np.asarray(rho, float) * np.asarray(vp, float) ** 2))
+    mu = 1.0 / mavg(1.0 / (np.asarray(rho, float) * np.asarray(vs, float) ** 2))
+    return np.sqrt(M / rho_b), np.sqrt(mu / rho_b), rho_b
+
+
+# ====================================================================== 16c: angle synthetics
+def vs_castagna(vp):
+    """Mudrock line (Castagna 1985), m/s."""
+    return 0.8621 * np.asarray(vp, float) - 1172.4
+
+
+def rc_aki_richards(vp, vs, rho, angles_deg):
+    """P-P reflection coefficients (n-1 interfaces, n_angles) - Aki-Richards linearisation, angle = incidence
+    angle in the upper layer (average angle used in the terms)."""
+    vp, vs, rho = (np.asarray(a, float) for a in (vp, vs, rho))
+    th1 = np.radians(np.atleast_1d(np.asarray(angles_deg, float)))[None, :]
+    a1, a2, b1, b2, r1, r2 = vp[:-1, None], vp[1:, None], vs[:-1, None], vs[1:, None], rho[:-1, None], rho[1:, None]
+    p = np.sin(th1) / a1
+    th2 = np.arcsin(np.clip(p * a2, -1, 1))
+    th = 0.5 * (th1 + th2)
+    a, b, r = 0.5 * (a1 + a2), 0.5 * (b1 + b2), 0.5 * (r1 + r2)
+    da, db, dr = a2 - a1, b2 - b1, r2 - r1
+    k = (b / a) ** 2
+    return (0.5 * (1 - 4 * k * np.sin(th) ** 2) * dr / r + 0.5 / np.cos(th) ** 2 * da / a
+            - 4 * k * np.sin(th) ** 2 * db / b)
+
+
+def rc_shuey(vp, vs, rho, angles_deg, terms=3):
+    """Shuey (1985) form A + B sin^2 + C (tan^2 - sin^2) from the Aki-Richards intercept / gradient / curvature."""
+    vp, vs, rho = (np.asarray(a, float) for a in (vp, vs, rho))
+    th = np.radians(np.atleast_1d(np.asarray(angles_deg, float)))[None, :]
+    a, b, r = 0.5 * (vp[1:] + vp[:-1]), 0.5 * (vs[1:] + vs[:-1]), 0.5 * (rho[1:] + rho[:-1])
+    da, db, dr = np.diff(vp), np.diff(vs), np.diff(rho)
+    A = 0.5 * (da / a + dr / r)
+    B = 0.5 * da / a - 2 * (b / a) ** 2 * (dr / r + 2 * db / b)
+    C = 0.5 * da / a
+    out = A[:, None] + B[:, None] * np.sin(th) ** 2
+    if terms >= 3:
+        out = out + C[:, None] * (np.tan(th) ** 2 - np.sin(th) ** 2)
+    return out
+
+
+def angle_synthetics(vp, vs, rho, angles_deg, wavelet, method="aki-richards"):
+    """Angle gather (n, n_angles): reflectivity at each sample boundary (assigned to the lower sample, as
+    welltie.synthetic) convolved with the wavelet."""
+    f = rc_shuey if method == "shuey" else rc_aki_richards
+    rc = f(vp, vs, rho, angles_deg)
+    r = np.vstack([np.zeros((1, rc.shape[1])), rc])
+    return np.column_stack([np.convolve(r[:, k], wavelet, "same") for k in range(r.shape[1])]), r
+
+
+def elastic_in_time(well, td, dt_ms):
+    """Vp, Vs, rho (blocked per output sample) on a regular TWT axis: Vp from DT, Vs from DTS when the well has
+    it else the mudrock line, rho from RHOB else Gardner. Returns (t, vp, vs, rho) or None."""
+    if not well.logs or well.depth is None or well.logs.get("DT") is None:
+        return None
+    md = np.asarray(well.depth, float)
+    dtl = np.asarray(well.logs["DT"], float)
+    vp = 304800.0 / np.where((dtl > 30) & (dtl < 250), dtl, np.nan)
+    dts = well.logs.get("DTS")
+    vs = 304800.0 / np.where((np.asarray(dts, float) > 50) & (np.asarray(dts, float) < 600), dts, np.nan) \
+        if dts is not None else vs_castagna(vp)
+    rho = well.logs.get("RHOB")
+    rho = np.where((np.asarray(rho, float) > 1.0) & (np.asarray(rho, float) < 3.5), rho, np.nan) if rho is not None \
+        else 0.31 * np.power(vp, 0.25)
+    ok = np.isfinite(vp) & np.isfinite(vs) & np.isfinite(rho)
+    if ok.sum() < 50:
+        return None
+    t = td.twt_raw(well.md_to_tvdss(md))
+    i0, i1 = np.nonzero(ok)[0][[0, -1]]
+    sl = slice(i0, i1 + 1)
+    t, ok = t[sl], ok[sl]
+    tt = np.arange(np.ceil(t[0] / dt_ms) * dt_ms, t[-1], dt_ms)
+    edges = np.r_[tt - dt_ms / 2, tt[-1] + dt_ms / 2]
+    out = []
+    for a in (vp[sl], vs[sl], rho[sl]):
+        a = np.interp(t, t[ok], a[ok])
+        cum = np.r_[0.0, np.cumsum(0.5 * (a[1:] + a[:-1]) * np.diff(t))]
+        out.append(np.diff(np.interp(edges, t, cum)) / dt_ms)
+    return (tt, *out)
+
+
+# ====================================================================== 16c: deviated wells + multi-well batch
+def seismic_along_wellbore(traj, td, vol, t):
+    """Seismic sampled along a deviated wellbore at the synthetic times t: for each time the wellbore position at
+    that depth (td.depth -> TVDSS -> x, y on the trajectory), nearest trace, sample at t. NaN outside the survey."""
+    t = np.asarray(t, float)
+    z = td.depth(t)
+    order = np.argsort(traj.z)
+    zs = traj.z[order]
+    x = np.interp(z, zs, traj.x[order])
+    y = np.interp(z, zs, traj.y[order])
+    il, xl = vol.ilxl_at(x, y)
+    ii = np.rint((np.asarray(il) - vol.il0) / vol.il_step).astype(int)
+    jj = np.rint((np.asarray(xl) - vol.xl0) / vol.xl_step).astype(int)
+    k = np.rint((t - vol.times[0]) / (vol.times[1] - vol.times[0])).astype(int)
+    out = np.full(len(t), np.nan)
+    ok = (ii >= 0) & (ii < vol.nil) & (jj >= 0) & (jj < vol.nxl) & (k >= 0) & (k < vol.ns)
+    if ok.any():
+        out[ok] = np.asarray(vol.ilxl[ii[ok], jj[ok], k[ok]], np.float32) * vol.inv
+    return out, x, y
+
+
+def batch_tie(ws, kind, survey, wells=None, wavelet=None, freq=30.0, max_shift_ms=100.0, stretches=None,
+              window=None, n_half_ms=64.0, deviated=False):
+    """Tie every well with a sonic near the survey: Ricker (or given) wavelet synthetic, FFT auto tie, then a
+    deterministic wavelet from the tied reflectivity. Returns [row] with well, x, y, shift_ms, stretch, t_centre,
+    corr, nrms, corr_holdout, wavelet_phase_deg, pep, wavelet (array) - or a row with 'error'."""
+    from . import welltie as WT
+    dt_ms = survey.dt * 1000.0
+    rows = []
+    for n in (wells or ws.names):
+        w = ws.well(n)
+        row = {"well": n, "x": w.x, "y": w.y}
+        try:
+            if w.x is None:
+                raise ValueError("no location")
+            ws.wcp.load_well(n)
+            td = ws.td_for(n)
+            r = WT.logs_in_time(w, td, dt_ms)
+            if r is None:
+                raise ValueError("no sonic")
+            t, ai = r
+            wav = WT.ricker(freq, dt_ms) if wavelet is None else wavelet
+            rc, syn = WT.synthetic(t, ai, wav)
+            if deviated and kind == "3D":
+                from .laterals import trajectories_from_wellset
+                traj = next((tr for tr in trajectories_from_wellset(ws) if tr.name == n), None)
+                ts = survey.times
+                seis, _, _ = seismic_along_wellbore(traj, td, survey, ts)
+            else:
+                ts, trs = ws.trace_at_well(kind, survey, n)
+                seis = trs[0]
+            if not np.isfinite(seis).any():
+                raise ValueError("outside the survey")
+            seis = np.nan_to_num(seis)
+            a = auto_tie_fft(t, syn, ts, seis, max_shift_ms, stretches, window)
+            row.update({k: a[k] for k in ("shift_ms", "stretch", "t_centre", "corr", "nrms", "corr_holdout")})
+            tt = stretch_times(t, a["stretch"], a["t_centre"]) + a["shift_ms"]
+            s_t = np.interp(tt, ts, seis)
+            nh = max(2, int(round(n_half_ms / dt_ms)))
+            dw = deterministic_wavelet(rc, s_t, nh)
+            row.update(wavelet=dw["wavelet"], wavelet_phase_deg=dw["phase_deg"], pep=dw["pep"])
+        except Exception as e:  # one bad well must not stop the batch
+            row["error"] = str(e)
+        rows.append(row)
+    return rows
+
+
+def batch_summary(rows):
+    """Average wavelet of the good ties, mean/spread of the bulk shift."""
+    good = [r for r in rows if "error" not in r and r.get("corr", 0) > 0.3]
+    if not good:
+        return {"n": 0}
+    sh = np.array([r["shift_ms"] for r in good])
+    return {"n": len(good), "shift_mean": float(sh.mean()), "shift_std": float(sh.std()),
+            "corr_mean": float(np.mean([r["corr"] for r in good])),
+            "average_wavelet": average_wavelet([r["wavelet"] for r in good])}
+
+
+def shift_map(rows, cell=None):
+    """Bulk-shift map (maps.MapGrid, IDW) from the batch rows - a trend means a velocity / datum problem, a
+    single odd well a bad tie or time-depth."""
+    from .maps import MapGrid, idw_grid
+    good = [r for r in rows if "error" not in r and r.get("x") is not None]
+    if len(good) < 2:
+        return None
+    x = np.array([r["x"] for r in good], float)
+    y = np.array([r["y"] for r in good], float)
+    v = np.array([r["shift_ms"] for r in good], float)
+    span = max(np.ptp(x), np.ptp(y), 1.0)
+    cell = cell or span / 50.0
+    gx, gy, z = idw_grid(x, y, v, cell, reach=span, pad=0.1 * span)
+    return MapGrid(z, "xy", "ms", "Well tie bulk shift", None, gx[0], gy[0], cell, cell)
+
+
+def write_batch_csv(path, rows):
+    cols = ["well", "x", "y", "shift_ms", "stretch", "t_centre", "corr", "nrms", "corr_holdout", "wavelet_phase_deg",
+            "pep", "error"]
+    with open(path, "w", newline="") as fh:
+        fh.write(",".join(cols) + "\n")
+        for r in rows:
+            fh.write(",".join("" if r.get(c) is None else (f"{r[c]:.4g}" if isinstance(r.get(c), float) else str(r[c]))
+                              for c in cols) + "\n")
+    return path

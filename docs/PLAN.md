@@ -221,7 +221,7 @@ Kingdom-like interaction; large data.
    - Read every module for bugs, edge cases (irregular 3D geometry, missing traces, dead traces, IBM vs
      IEEE, big files > 2 GB on Windows), performance on a 2 GB synthetic, docs/WHATS_NEW.md refresh.
 
-16. **Well tie upgrade (HRS-style auto-correlate + constrained stretch/squeeze)** - status: partial (run 2: 16a + 16b done, v0.19.0 - tie.py, dialog row 2, test_tie.py; 16c next)
+16. **Well tie upgrade (HRS-style auto-correlate + constrained stretch/squeeze)** - status: done (run 2: 16a + 16b v0.19.0, 16c v0.20.0 - tie.py, dialog rows 2 + 3, test_tie.py. Follow-ups: multitaper wavelet button, shift map on the basemap, batch with DTW for sonic-only wells)
    Chris asked for this on 2026-11-23 (he likes the Hampson-Russell auto-correlate). Comparison with HRS, RokDoc,
    Kingdom/GeoSyn, Petrel, GeoGraphix + references: Claude doc "Well tie & synthetics" (link in RUNLOG).
    16a. Auto-correlate panel: window, correlation-vs-lag curve (FFT), polarity + phase scan, sub-sample peak,

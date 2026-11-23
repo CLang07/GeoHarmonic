@@ -111,6 +111,13 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `write_td_csv`. `WellTD.warp_in/out` applied after shift/stretch; ties store warp_in/out/kind/pairs;
   `WellSet.calibrated_td`, display["td_mode"]. Dialog methods: correlate, find_best_trace, dtw, pick_event /
   add_pair, undo, clear_warp, drift_qc, export_td, tied_times, tie_corr. `test_tie.py`.
+  16c (v0.20): `conv_matrix`, `deterministic_wavelet` (Tikhonov, PEP/NMSE), `multitaper_wavelet` (sine tapers,
+  coherence), `zero_phase_of`, `wavelet_phase` (atan2 on w0 / H(w0)), `wavelet_spectrum`, `align_wavelets` /
+  `average_wavelet`, `WaveletLibrary` (JSON, resample on get), `despike`, `washout_mask`, `backus`, `vs_castagna`,
+  `rc_aki_richards`, `rc_shuey`, `angle_synthetics`, `elastic_in_time`, `seismic_along_wellbore` (td.depth ->
+  trajectory x/y -> nearest trace), `batch_tie` / `batch_summary` / `shift_map` / `write_batch_csv`.
+  Dialog: estimate_wavelet, save_wavelet, use_library_wavelet, angle_gather, batch, despike_logs / along_wellbore
+  flags (`_conditioned` = SimpleNamespace copy of the well). Library: `<project>_seismic/wavelets.json`.
 - `maps.py` (v0.9): `MapGrid` (kind "ilxl" on a survey grid or "xy"; node_xy, sample (bilinear),
   to_xy (axis-aligned resample), transform (QTransform), contours via well_correlation.mapping.contour_segments),
   `idw_grid`, `horizon_grid(project, h, key)` (3D grid or gridded 2D picks), `isochron`,

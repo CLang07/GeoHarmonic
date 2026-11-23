@@ -32,7 +32,7 @@ class WellTieDialog(QtWidgets.QDialog):
         if well:
             self.well_combo.setCurrentText(well)
         self.wav_combo = QtWidgets.QComboBox()
-        self.wav_combo.addItems(["Ricker", "Statistical (from seismic)"])
+        self.wav_combo.addItems(["Ricker", "Statistical (from seismic)", "Deterministic (from tie)"])
         self.f_spin = QtWidgets.QDoubleSpinBox()
         self.f_spin.setRange(5, 120)
         self.f_spin.setValue(30)
@@ -93,6 +93,23 @@ class WellTieDialog(QtWidgets.QDialog):
                   self.btn_export):
             bar2.addWidget(w)
         lay.addLayout(bar2)
+        # row 3 (item 16c): wavelets, log conditioning, deviated wells, angle synthetics, multi-well batch
+        bar3 = QtWidgets.QHBoxLayout()
+        self.btn_wav = QtWidgets.QPushButton("Estimate wavelet")
+        self.btn_wav.setToolTip("Deterministic least-squares wavelet from the tied reflectivity and the seismic")
+        self.btn_wsave = QtWidgets.QPushButton("Save wavelet")
+        self.lib_combo = QtWidgets.QComboBox()
+        self.lib_combo.setToolTip("Wavelet library of this project (<project>_seismic/wavelets.json)")
+        self.chk_despike = QtWidgets.QCheckBox("Despike logs")
+        self.chk_dev = QtWidgets.QCheckBox("Seismic along wellbore")
+        self.chk_dev.setToolTip("Deviated wells: seismic sampled along the well path instead of the surface location")
+        self.btn_angle = QtWidgets.QPushButton("Angle gather")
+        self.btn_batch = QtWidgets.QPushButton("Tie all wells...")
+        for w in (self.btn_wav, self.btn_wsave, self.lib_combo, self.chk_despike, self.chk_dev, self.btn_angle,
+                  self.btn_batch):
+            bar3.addWidget(w)
+        bar3.addStretch(1)
+        lay.addLayout(bar3)
         self.glw = pg.GraphicsLayoutWidget()
         self.glw.setBackground("w")
         lay.addWidget(self.glw, 1)
@@ -126,6 +143,21 @@ class WellTieDialog(QtWidgets.QDialog):
         self.btn_clear.clicked.connect(lambda: self.clear_warp())
         self.btn_drift.clicked.connect(lambda: self.drift_qc())
         self.btn_export.clicked.connect(lambda: self._export_dialog())
+        self.btn_wav.clicked.connect(lambda: self.estimate_wavelet())
+        self.btn_wsave.clicked.connect(lambda: self._save_wavelet_dialog())
+        self.lib_combo.currentTextChanged.connect(lambda name: self.use_library_wavelet(name))
+        self.chk_despike.toggled.connect(lambda on: self._opt_changed())
+        self.chk_dev.toggled.connect(lambda on: self._opt_changed())
+        self.btn_angle.clicked.connect(lambda: self.angle_gather())
+        self.btn_batch.clicked.connect(lambda: self.batch())
+        self._trajs = None  # {name: laterals.Trajectory}, built on first use
+        self.wavelet = None  # deterministic / library wavelet in use
+        self.despike_logs = False
+        self.along_wellbore = False
+        self.last_wavelet = None
+        self.batch_rows = None
+        self.library = TK.WaveletLibrary(self.library_path())
+        self._refresh_library()
         self.state = TK.TieState()
         self.window = None  # (top, base) ms of raw synthetic time, None = whole log
         self.max_lag_ms, self.max_strain = 20.0, 0.10
@@ -149,7 +181,9 @@ class WellTieDialog(QtWidgets.QDialog):
     # ------------------------------------------------------------ logic (testable)
     def _changed(self):
         self.well_name = self.well_combo.currentText() or self.well_name
-        self.wavelet_kind = "Statistical" if self.wav_combo.currentText().startswith("Statistical") else "Ricker"
+        txt = self.wav_combo.currentText()
+        self.wavelet_kind = "Statistical" if txt.startswith("Statistical") else \
+            "Deterministic" if txt.startswith("Deterministic") else "Ricker"
         self.freq = float(self.f_spin.value()) or self.freq
         self.compute()
         self.draw()
@@ -173,7 +207,7 @@ class WellTieDialog(QtWidgets.QDialog):
         td = ws.td_for(n)
         w = ws.well(n)
         dt_ms = self.survey.dt * 1000.0
-        r = WT.logs_in_time(w, td, dt_ms)
+        r = WT.logs_in_time(self._conditioned(w), td, dt_ms)
         if r is None:
             self.info.setText(f"{n}: no sonic (DT) - cannot make a synthetic")
             self._data = None
@@ -189,7 +223,13 @@ class WellTieDialog(QtWidgets.QDialog):
             wav = WT.ricker(self.freq, dt_ms)
         rc, syn = WT.synthetic(t, ai, wav)
         k = int(np.clip(len(trs) // 2 + self.trace_offset, 0, len(trs) - 1))
-        self._data = {"t": t, "ai": ai, "rc": rc, "syn": syn, "ts": ts, "seis": trs[k], "traces": trs,
+        seis = trs[k]
+        if self.along_wellbore and self.source[0] == "3D":
+            traj = self._trajectory(n)
+            if traj is not None:
+                along, _, _ = TK.seismic_along_wellbore(traj, td, self.survey, ts)
+                seis = np.where(np.isfinite(along), along, seis)
+        self._data = {"t": t, "ai": ai, "rc": rc, "syn": syn, "ts": ts, "seis": seis, "traces": trs,
                       "wavelet": wav, "td_source": td.source}
         if self.t_centre is None:
             self.t_centre = float(np.median(t))
@@ -375,6 +415,148 @@ class WellTieDialog(QtWidgets.QDialog):
         td = self._tied_td()
         z = np.arange(0.0, float(td.z.max()) + step_m, step_m)
         return TK.write_td_csv(path, z, td.twt(z), self.well_name, "(tied in the Seismic Interpretation Tool)")
+
+    # -------------------------------------------------- item 16c
+    def library_path(self):
+        return os.path.join(self.project.seismic_dir(), "wavelets.json") if self.project.path else None
+
+    def _refresh_library(self):
+        try:
+            self.lib_combo.blockSignals(True)
+            self.lib_combo.clear()
+            self.lib_combo.addItems(["(library)"] + self.library.names())
+            self.lib_combo.blockSignals(False)
+        except Exception:
+            pass
+
+    def _opt_changed(self):
+        self.despike_logs = bool(self.chk_despike.isChecked())
+        self.along_wellbore = bool(self.chk_dev.isChecked())
+        self.compute()
+        self.draw()
+
+    def _conditioned(self, w):
+        """The well, or a light copy whose DT / RHOB are despiked (the project's logs are not changed)."""
+        if not self.despike_logs or not w.logs:
+            return w
+        import types
+        logs = dict(w.logs)
+        for k in ("DT", "RHOB"):
+            if logs.get(k) is not None:
+                logs[k] = TK.despike(np.asarray(logs[k], float))[0]
+        return types.SimpleNamespace(logs=logs, depth=w.depth, md_to_tvdss=w.md_to_tvdss, name=w.name)
+
+    def _trajectory(self, name):
+        from ..laterals import trajectories_from_wellset
+        if self._trajs is None:
+            self._trajs = {t.name: t for t in trajectories_from_wellset(self.ws)}
+        return self._trajs.get(name)
+
+    def estimate_wavelet(self, half_ms=64.0):
+        """Deterministic wavelet from the tied reflectivity and the seismic in the window; becomes the wavelet in
+        use (wavelet box 'Deterministic')."""
+        d = self._data or self.compute()
+        if d is None:
+            return None
+        m = self._win_mask()
+        tt = self.tied_times()[m]
+        s = np.interp(tt, d["ts"], d["seis"], left=np.nan, right=np.nan)
+        dt = d["t"][1] - d["t"][0]
+        res = TK.deterministic_wavelet(d["rc"][m], s, max(2, int(round(half_ms / dt))))
+        self.wavelet = res["wavelet"] / (np.abs(res["wavelet"]).max() or 1.0)
+        self.last_wavelet = res
+        self.wavelet_kind = "Deterministic"
+        try:
+            self.wav_combo.blockSignals(True)
+            self.wav_combo.setCurrentText("Deterministic (from tie)")
+            self.wav_combo.blockSignals(False)
+        except Exception:
+            pass
+        self.compute()
+        self.draw()
+        self.info.setText(f"Deterministic wavelet: phase {res['phase_deg']:+.0f} deg, predictability {res['pep']:.2f}, "
+                          f"NMSE {res['nmse']:.2f}; synthetic recomputed with it")
+        return res
+
+    def save_wavelet(self, name):
+        if self.wavelet is None or not name:
+            return None
+        if self.library.path is None:
+            self.library.path = self.library_path()
+        self.library.add(name, self.wavelet, self.survey.dt * 1000.0, source="deterministic", well=self.well_name)
+        if self.library.path:
+            os.makedirs(os.path.dirname(self.library.path), exist_ok=True)
+            self.library.save()
+        self._refresh_library()
+        return name
+
+    def _save_wavelet_dialog(self):
+        name, ok = QtWidgets.QInputDialog.getText(self, "Save wavelet", "Name:", text=f"{self.well_name} deterministic")
+        if ok and name:
+            self.save_wavelet(name)
+            self.info.setText(f"Wavelet '{name}' saved to the project library")
+
+    def use_library_wavelet(self, name):
+        if not name or name not in self.library.items:
+            return None
+        self.wavelet = self.library.get(name, self.survey.dt * 1000.0)
+        self.wavelet_kind = "Deterministic"
+        self.compute()
+        self.draw()
+        return self.wavelet
+
+    def angle_gather(self, angles=(0, 10, 20, 30, 40)):
+        """Angle synthetics (Aki-Richards) at the well with the wavelet in use; Vs from DTS or the mudrock line."""
+        if not self.well_name:
+            return None
+        d = self._data or self.compute()
+        if d is None:
+            return None
+        w = self.ws.well(self.well_name)
+        el = TK.elastic_in_time(self._conditioned(w), self.ws.td_for(self.well_name), self.survey.dt * 1000.0)
+        if el is None:
+            return None
+        t, vp, vs, rho = el
+        g, _ = TK.angle_synthetics(vp, vs, rho, list(angles), d["wavelet"])
+        tc = self.tied_times(t)
+        try:
+            self.p_cc.clear()
+            self.p_cc.setTitle("Angle synthetics " + ", ".join(f"{a}" for a in angles) + " deg")
+            sc = np.abs(g).max() or 1.0
+            for k in range(g.shape[1]):
+                self.p_cc.plot(k + 0.8 * g[:, k] / sc, tc, pen=pg.mkPen((0, 0, 0)))
+            self.p_cc.setYLink(self.p_ai)
+        except Exception:
+            pass
+        return t, g
+
+    def batch(self, write_csv=True):
+        """Tie every well (FFT auto tie with the current wavelet settings, deterministic wavelet per well), write
+        the table next to the project, report the mean / spread of the bulk shift and the average wavelet."""
+        wav = self.wavelet if self.wavelet_kind == "Deterministic" else None
+        rows = TK.batch_tie(self.ws, self.source[0], self.survey, None, wav, self.freq,
+                            deviated=self.along_wellbore)
+        self.batch_rows = rows
+        summ = TK.batch_summary(rows)
+        path = None
+        if write_csv and self.project.path:
+            os.makedirs(self.project.seismic_dir(), exist_ok=True)
+            path = TK.write_batch_csv(os.path.join(self.project.seismic_dir(), "well_tie_batch.csv"), rows)
+        if summ.get("n"):
+            self.wavelet_avg = summ["average_wavelet"]
+            if self.library.path is None:
+                self.library.path = self.library_path()
+            self.library.add("average (batch)", summ["average_wavelet"], self.survey.dt * 1000.0, source="batch",
+                             wells=[r["well"] for r in rows if "error" not in r])
+            if self.library.path:
+                os.makedirs(os.path.dirname(self.library.path), exist_ok=True)
+                self.library.save()
+            self._refresh_library()
+        self.info.setText(f"Batch: {summ.get('n', 0)} of {len(rows)} wells tied"
+                          + (f", bulk shift {summ['shift_mean']:+.1f} +/- {summ['shift_std']:.1f} ms, mean corr "
+                             f"{summ['corr_mean']:.2f}" if summ.get("n") else "")
+                          + (f"; table {path}" if path else "") + "; average wavelet saved to the library")
+        return rows, summ
 
     def _export_dialog(self):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export tied time-depth", f"{self.well_name}_tied_td.csv",

@@ -42,6 +42,25 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.20.0 - well tie upgrade, part 2 (PLAN item 16c; item 16 done)
+Third button row in Interpret > Well tie:
+- **Estimate wavelet**: deterministic least-squares wavelet from the tied reflectivity and the seismic (window
+  applies), reports its constant phase, predictability (PEP) and NMSE, and recomputes the synthetic with it
+  (wavelet box "Deterministic (from tie)"). **Save wavelet** puts it in the project's wavelet library
+  (`<project>_seismic/wavelets.json`); the library box loads any saved wavelet (resampled to the survey rate).
+  A multitaper (coherence) estimate is in `tie.multitaper_wavelet` (no button yet).
+- **Despike logs** (DT, RHOB; running median + MAD; the project's logs are not changed).
+- **Seismic along wellbore**: for deviated wells the seismic is sampled along the well path (survey) at each
+  synthetic time instead of the trace at the surface location.
+- **Angle gather**: Aki-Richards synthetics at 0-40 deg (Vs from DTS, else the mudrock line) in the top-right plot.
+- **Tie all wells...**: FFT auto tie + deterministic wavelet for every well; table
+  `<project>_seismic/well_tie_batch.csv` (shift, stretch, corr, NRMS, held-out corr, wavelet phase, PEP), mean /
+  spread of the bulk shift, and an "average (batch)" wavelet in the library. `tie.shift_map(rows)` grids the
+  bulk shifts (a trend = velocity / datum problem; one odd well = bad tie or time-depth).
+- Library functions also cover washout masks (caliper vs bit, DRHO) and Backus averaging (`tie.backus`).
+- Real-data check: Tui-1 sonic integrated from the top checkshot level drifts to -21 ms at TD vs the checkshot;
+  "calibrated sonic" removes it at every level.
+
 ## Seismic v0.19.0 - well tie upgrade, part 1 (PLAN item 16a + 16b)
 Interpret > Well tie has a second button row:
 - **Window** (top/base ms of the synthetic; "all" = whole log) - Auto tie, Correlate and stretch/squeeze use it.
