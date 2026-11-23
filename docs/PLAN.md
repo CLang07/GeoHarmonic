@@ -75,7 +75,15 @@ Kingdom-like interaction; large data.
      reference lines held fixed (0 shift, 0 deg, gain 1), per-survey "key line" option for multi-vintage
      2D, horizon-based misties (from picked horizons at ties) as an alternative to waveform, constant or
      time-variant (windowed) corrections, max-shift and correlation-window limits, outlier tie rejection,
-     residual-mistie map/table before vs after, redundancy handling: ties weighted by correlation quality,
+     **Flex mode** (after the constant solve): per-line smooth correction functions instead of one constant -
+     along-line (shift as a spline of CDP) and optionally time-variant (shift as a smooth function of TWT,
+     from windowed/dynamic-warping correlation at several times per tie) - solved as one regularised least-
+     squares system: tie residuals + smoothness penalty (slider: 0 = exact closure, high = constant per
+     line) + anchors (3D, well ties, reference lines) + max-gradient cap. QC: flex map / profile per line,
+     added structural curvature vs original, before/after loop closure, warning when a tie needs a large
+     local flex (likely cycle skip or navigation error rather than a real mistie). Apply to seismic display,
+     horizons only, or both; export corrected SEG-Y optional.
+     Residual-mistie map/table before vs after, redundancy handling: ties weighted by correlation quality,
      robust re-weighting (IRLS/Huber) to down-weight bad ties, loop-closure report, minimum-norm or
      reference-line datum (the network only fixes relative shifts), phase solved as unit vectors so 350/10 deg
      don't average to 180, collinear/overlapping lines (reprocessed vintages, overlapping segments) tied
