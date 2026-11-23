@@ -165,6 +165,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   Tests: `test_engineering.run_gui`.
   `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
   Pearson/Spearman, vif, pca, regression_line). `test_analytics.py`.
+- `laterals.py` (14a): min_curvature, Trajectory (from_survey, resample, lateral_mask/length, heel_toe),
+  synthetic_survey/synthetic_laterals, read_survey_csv, read_stages_csv, sample_grid, sample_volume (nearest
+  trace, twt_of_z callable), sample_log, stage_values, zone_along, distance_to_surface, lateral_stats,
+  stats_table (-> AttributeTable for analytics), color_bins / batch_color_bins (NaN-separated polylines per
+  colour bin: one PlotCurveItem(connect='finite') per bin), lod_indices, colormap_rgb. `dashboard_model.py`:
+  DashboardModel (filters range/in, selection replace/add/toggle/remove, select_box/lasso/hist_bin/ids,
+  subscribe(kind), histogram, crossplot, table_rows, summary, save/load_layout JSON, export_html).
+  Tests: `test_laterals.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

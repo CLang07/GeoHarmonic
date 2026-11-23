@@ -171,7 +171,12 @@ Kingdom-like interaction; large data.
    TreeSHAP values sum to prediction minus expected value (local accuracy) and match brute-force Shapley
    on small trees exactly; KernelSHAP close to exact; GBM beats linear on the nonlinear case; group CV
    gives a worse (honest) score than random CV on spatially correlated synthetic wells.
-14. **Dashboard with lateral (horizontal-well) attribute maps** - status: todo
+14. **Dashboard with lateral (horizontal-well) attribute maps** - status: partial (run 1: 14a core done -
+   `laterals.py` (min-curvature trajectories, synthetic laterals, survey/stage CSV, attributes along MD from
+   grids / 3D volume / logs / stages / zones, per-lateral stats table, colour bins batched over many wells + LOD)
+   and `dashboard_model.py` (filters, linked selection, histogram/crossplot/table data, layouts, HTML export).
+   LEFT: Dashboard window (pyqtgraph panels on the model), loading real trajectories from the well project,
+   well strip / geosteering view, predicted-property colouring)
    - Dashboard window (dockable, linked panels, Spotfire-style): map, histogram, crossplot, data table,
      well strip view; selecting wells/points in one panel highlights them in all others; filters
      (formation, operator, date, attribute ranges); save/restore layouts; export PNG + standalone HTML.

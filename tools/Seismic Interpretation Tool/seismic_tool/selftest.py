@@ -146,6 +146,8 @@ def run():
         test_explain.run(check, tmp)
         from . import test_qc
         test_qc.run(check, tmp)
+        from . import test_laterals
+        test_laterals.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
