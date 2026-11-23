@@ -2,6 +2,15 @@
 
 Newest first. Each section: what it does, how to use it, what to test.
 
+## v0.6.0 - Horizon stack, Wheeler view, stratal slices (PLAN item 5)
+- Interpret > Build horizon stack (3D / 2D); mode "Stratal slice" with slider through the stack; domain box
+  Time / Wheeler (flattened RGT view with hiatus gaps); Interpret > Convert stack level to horizon.
+- Tests: stack surfaces equal direct iso-surfaces and never cross; stratal slice = volume interpolated on the
+  surface (err 1e-4); Wheeler flattens the synthetic (98% of variance between levels) and shows a true hiatus
+  as a gap; NPRA R-2 Wheeler view is flat.
+- Known limits: thin layers below seismic tuning do not reach zero thickness in the RGT, so a pinch-out
+  shows as converging levels, not as a gap; stratal slices show amplitude only (not dip/attributes yet).
+
 ## v0.5.0 - RGT model, step B: mesh + global solve (PLAN item 4)
 - Interpret > Compute RGT (current 3D volume) / (all 2D lines): settings dialog (node spacing, interval,
   correlation window, min correlation, links across faults, max throw, horizons/faults as constraints),

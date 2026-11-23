@@ -32,7 +32,7 @@ Kingdom-like interaction; large data.
      interpreted horizons; interpolate RGT to the full volume (store float16 `rgt.npy`).
    - 2D: same on each line, tie lines at intersections. Tests: synthetic with onlap/pinch-out + fault ->
      extracted iso-RGT surfaces match true horizons.
-5. **RGT step C - horizon stack, Wheeler, stratal slices** - status: todo
+5. **RGT step C - horizon stack, Wheeler, stratal slices** - status: done (run 1, 2026-11-23; v0.6.0)
    - Extract N horizons (iso-RGT) as a horizon stack; Wheeler view (seismic resampled to RGT axis,
      hiatuses shown as gaps); stratal-slice viewer (amplitude on any iso-RGT surface, slider through the
      stack) in the section panel as a new mode; convert any stack surface to an editable horizon.

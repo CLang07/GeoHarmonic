@@ -200,6 +200,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Compute &dip field (current 3D volume)...", self.compute_dip)
         self._act(m, "Compute &RGT (current 3D volume)...", self.compute_rgt_3d)
         self._act(m, "Compute RGT (all &2D lines)...", self.compute_rgt_2d)
+        self._act(m, "Build horizon &stack (3D)...", self.build_stack_3d)
+        self._act(m, "Build horizon stack (2D lines)...", self.build_stack_2d)
+        self._act(m, "Convert stack &level to horizon...", self.stack_level_to_horizon)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -538,6 +541,72 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f"RGT done ({len(names)} lines): {getattr(self, '_rgt_stats', {})}", 15000)
 
         self.run_job("RGT 2D lines", fn, done)
+
+    def build_stack_3d(self, n_levels=None):
+        src = self.section.source
+        if not src or src[0] != "3D":
+            QtWidgets.QMessageBox.information(self, "Horizon stack", "Show a 3D volume with an RGT model first.")
+            return
+        from ..rgt.solve import RGTVolume
+        from ..rgt.stack import build_stack_3d
+        vol = self.project.volume(src[1])
+        folder = os.path.join(vol.store, "rgt")
+        if not RGTVolume.exists(folder):
+            QtWidgets.QMessageBox.information(self, "Horizon stack", "Compute the RGT model first.")
+            return
+        if n_levels is None:
+            n_levels, ok = QtWidgets.QInputDialog.getInt(self, "Horizon stack", "Number of iso-RGT surfaces:", 100, 5, 2000)
+            if not ok:
+                return
+
+        def fn(progress, cancel):
+            build_stack_3d(vol, RGTVolume(folder), int(n_levels), progress=progress, cancel=cancel)
+
+        def done():
+            self.section.mode_combo.setCurrentText("Stratal slice")
+            self.section._mode_changed("Stratal slice")
+
+        self.run_job(f"Horizon stack {src[1]}", fn, done)
+
+    def build_stack_2d(self, n_levels=None):
+        from ..rgt.stack import build_stack_2d
+        if n_levels is None:
+            n_levels, ok = QtWidgets.QInputDialog.getInt(self, "Horizon stack (2D)", "Number of iso-RGT surfaces:", 100, 5, 2000)
+            if not ok:
+                return
+        try:
+            st = build_stack_2d(self.project, [l["name"] for l in self.project.lines], int(n_levels))
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Horizon stack (2D)", str(e))
+            return
+        self.statusBar().showMessage(f"2D horizon stack: {len(st['levels'])} levels on {len(st['lines'])} lines", 8000)
+        self.section.redraw()
+
+    def stack_level_to_horizon(self, level=None, name=None):
+        """New horizon from a stack level (3D: the current stratal slice level by default; 2D: all lines)."""
+        from ..rgt.stack import HorizonStack3D, load_stack_2d, stack_to_horizon
+        src = self.section.source
+        st3 = vol_name = None
+        if src and src[0] == "3D":
+            folder = os.path.join(self.project.volume(src[1]).store, "rgt")
+            st3 = HorizonStack3D(folder) if HorizonStack3D.exists(folder) else None
+            vol_name = src[1]
+        st2 = load_stack_2d(os.path.join(self.project.seismic_dir(), "rgt")) if self.project.path else None
+        if st3 is None and st2 is None:
+            QtWidgets.QMessageBox.information(self, "Stack level", "Build a horizon stack first.")
+            return None
+        n = len(st3) if st3 is not None else len(st2["levels"])
+        if level is None:
+            cur = int(self.section.number or 0) if self.section.mode == "Stratal slice" else 0
+            level, ok = QtWidgets.QInputDialog.getInt(self, "Stack level to horizon", f"Level (0-{n - 1}):", cur, 0, n - 1)
+            if not ok:
+                return None
+        h = stack_to_horizon(self.project.horizons, name or f"RGT level {int(level)}", int(level), st3, vol_name, st2)
+        self.horizon_dock.refresh(h.name)
+        self.section.active_horizon = h.name
+        self._horizons_changed()
+        self.statusBar().showMessage(f"Horizon {h.name} created from stack level {level} - edit it like any horizon", 8000)
+        return h
 
     def closeEvent(self, ev):
         if self._job:

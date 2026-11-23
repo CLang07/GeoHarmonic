@@ -81,6 +81,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `iso_surface`), `iso_from_traces`, `build_2d` (ties as extra node columns) / `solve_2d_multires` /
   `write_rgt_2d` / `load_rgt_line` / `compute_rgt_2d`. `synth.rgt_geology` (random reflectivity, fold,
   pinch-out wedge, low-angle fault) + `test_rgt.py`.
+- `rgt/stack.py` (v0.6): `iso_times(tau (T, ns), levels, times)` (one global searchsorted, fast),
+  `build_stack_3d` -> `<store>/rgt/stack.npy` (N, nil, nxl) + stack.json, `HorizonStack3D`, `stratal_slice(vol,
+  surface)` (reads only the time slab from data_t), `wheeler(seis, tau, levels, times, gap_frac)` (gap = interval
+  < gap_frac x its median thickness), `build_stack_2d` / `load_stack_2d` (`stack_2d.npz`), `stack_to_horizon`.
+  Panel: mode "Stratal slice" (number = stack level), `domain` Time/Wheeler (`wheeler_on()`, `_to_wheeler`,
+  horizons converted to RGT), picking disabled there. `test_stack.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

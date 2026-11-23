@@ -113,6 +113,9 @@ def run():
         # ---- RGT step B: mesh + global solve
         from . import test_rgt
         test_rgt.run(check, tmp)
+        # ---- RGT step C: horizon stack, Wheeler, stratal slices
+        from . import test_stack
+        test_stack.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -142,6 +145,8 @@ def run_gui():
         test_dip.run_gui(check, tmp)
         from . import test_rgt
         test_rgt.run_gui(check, tmp)
+        from . import test_stack
+        test_stack.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

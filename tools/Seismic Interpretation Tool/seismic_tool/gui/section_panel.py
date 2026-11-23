@@ -10,7 +10,8 @@ from . import colormaps  # noqa: E402
 from .. import faults as flt  # noqa: E402
 from .. import horizons as hz  # noqa: E402
 
-MODES = ["Inline", "Crossline", "Time slice"]
+MODES = ["Inline", "Crossline", "Time slice", "Stratal slice"]
+DOMAINS = ["Time", "Wheeler"]
 ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity", "RGT"]  # 2D lines: either dip = dip along the line
 
 
@@ -123,7 +124,12 @@ class SectionPanel(QtWidgets.QWidget):
         self.attr_combo.setToolTip("What to display: seismic amplitude or a computed attribute "
                                    "(Interpret > Compute dip field)")
         self.attr = "Seismic"
-        for w in (self.src_combo, self.mode_combo, self.num_spin, self.slider, self.step_spin, self.attr_combo,
+        self.dom_combo = QtWidgets.QComboBox()
+        self.dom_combo.addItems(DOMAINS)
+        self.dom_combo.setToolTip("Wheeler: vertical axis = relative geologic time (needs RGT); gaps = hiatus")
+        self.domain = "Time"
+        for w in (self.src_combo, self.mode_combo, self.num_spin, self.slider, self.step_spin, self.dom_combo,
+                  self.attr_combo,
                   self.cmap_combo, self.clip_spin, self.rev_chk):
             bar.addWidget(w)
         bar.addStretch(1)
@@ -144,6 +150,7 @@ class SectionPanel(QtWidgets.QWidget):
         self.clip_spin.valueChanged.connect(lambda *_: self._apply_colors())
         self.rev_chk.toggled.connect(lambda *_: self._apply_colors())
         self.attr_combo.currentTextChanged.connect(self.set_attr)
+        self.dom_combo.currentTextChanged.connect(self.set_domain)
         from PySide6 import QtGui
         for key, d in (("PgUp", -1), ("PgDown", 1), ("Shift+PgUp", -10), ("Shift+PgDown", 10)):
             s = QtGui.QShortcut(QtGui.QKeySequence(key), self)
@@ -217,6 +224,11 @@ class SectionPanel(QtWidgets.QWidget):
             lo, hi, st = int(v.inlines[0]), int(v.inlines[-1]), v.il_step
         elif mode == "Crossline":
             lo, hi, st = int(v.xlines[0]), int(v.xlines[-1]), v.xl_step
+        elif mode == "Stratal slice":
+            st3 = self._stack3d()
+            lo, hi, st = 0, (len(st3) - 1 if st3 is not None else 0), 1
+            if st3 is None:
+                self.cursorInfo.emit("No horizon stack yet - Interpret > Build horizon stack (3D)")
         else:
             lo, hi, st = int(v.times[0]), int(v.times[-1]), max(1, int(round(v.dt * 1000)))
         num = number if number is not None and lo <= number <= hi else (lo + hi) // 2 // st * st + (lo % st)
@@ -257,7 +269,9 @@ class SectionPanel(QtWidgets.QWidget):
             return
         kind, name = self.source
         try:
-            if self.attr != "Seismic":
+            if kind == "3D" and self.mode == "Stratal slice":
+                arr, x, y, xl, yl = self._stratal()
+            elif self.attr != "Seismic":
                 arr, x, y, xl, yl = self._attribute_section()
             elif kind == "3D":
                 v = self.project.volume(name)
@@ -274,6 +288,8 @@ class SectionPanel(QtWidgets.QWidget):
                 l = self.project.line(name)
                 arr = l.data().T  # (ns, ntr)
                 x, y, xl, yl = l.cdp, l.times, "CDP", "TWT (ms)"
+            if self.wheeler_on():
+                arr, y, yl = self._to_wheeler(arr)
         except Exception as e:
             self.cursorInfo.emit(f"Could not read data: {e}")
             return
@@ -287,7 +303,7 @@ class SectionPanel(QtWidgets.QWidget):
         self.plot.addItem(self._img)
         self.plot.setLabel("bottom", xl)
         self.plot.setLabel("left", yl)
-        self.plot.getPlotItem().invertY(self.mode != "Time slice" or kind == "2D")
+        self.plot.getPlotItem().invertY(self.mode not in ("Time slice", "Stratal slice") or kind == "2D")
         self._apply_colors()
         self._hz_items = []
         self._flt_items = []
@@ -308,9 +324,81 @@ class SectionPanel(QtWidgets.QWidget):
         t = f"{name} - {self.mode} {self.number}" if kind == "3D" else f"2D line {name}"
         if self.mode == "Time slice" and kind == "3D":
             t += " ms"
+        if self.mode == "Stratal slice" and kind == "3D":
+            t = f"{name} - Stratal slice (stack level {self.number})"
         if self.attr != "Seismic":
             t += f"  [{self.attr}{' ms/trace' if 'dip' in self.attr else ''}]"
+        if self.wheeler_on():
+            t += "  [Wheeler]"
         self.plot.setTitle(t)
+
+    # ------------------------------------------------------------ RGT views (Wheeler, stratal slices)
+    def set_domain(self, name):
+        self.domain = name if name in DOMAINS else "Time"
+        self.redraw(reset_view=True)
+
+    def wheeler_on(self):
+        return self.domain == "Wheeler" and (self.source[0] == "2D" or self.mode in ("Inline", "Crossline"))
+
+    def _rgt_folder(self, kind, name):
+        return os.path.join(self.project.volume(name).store, "rgt") if kind == "3D" else \
+            os.path.join(self.project.seismic_dir(), "rgt")
+
+    def _stack3d(self):
+        from ..rgt.stack import HorizonStack3D
+        if not self.source or self.source[0] != "3D":
+            return None
+        folder = self._rgt_folder(*self.source)
+        return HorizonStack3D(folder) if HorizonStack3D.exists(folder) else None
+
+    def rgt_section(self):
+        """(n traces, ns) RGT of the section shown (time domain)."""
+        from ..rgt.solve import RGTVolume, load_rgt_line
+        kind, name = self.source
+        folder = self._rgt_folder(kind, name)
+        if kind == "2D":
+            tau = load_rgt_line(folder, name)
+            if tau is None:
+                raise RuntimeError("no RGT for this line - Interpret > Compute RGT (2D lines)")
+            return tau
+        if not RGTVolume.exists(folder):
+            raise RuntimeError("no RGT for this volume - Interpret > Compute RGT (3D)")
+        return RGTVolume(folder).section(self.project.volume(name), self.mode, self.number).T
+
+    def wheeler_levels(self, tau):
+        from ..rgt.stack import default_levels, load_stack_2d
+        kind, name = self.source
+        if kind == "3D":
+            st = self._stack3d()
+            if st is not None:
+                return st.levels
+        else:
+            st = load_stack_2d(self._rgt_folder(kind, name))
+            if st is not None:
+                return st["levels"]
+        return default_levels(tau, 200)
+
+    def _to_wheeler(self, arr):
+        """Time-domain display array (ns, n) -> Wheeler (levels, n)."""
+        from ..rgt.stack import wheeler
+        tau = self.rgt_section()
+        kind, name = self.source
+        times = self.project.volume(name).times if kind == "3D" else self.project.line(name).times
+        levels = self.wheeler_levels(tau)
+        amp, _ = wheeler(np.asarray(arr, np.float32).T, tau, levels, times)
+        self._wheeler = (tau, times, levels)
+        return amp, levels, "RGT (relative geologic time)"
+
+    def _stratal(self):
+        from ..rgt.stack import stratal_slice
+        st = self._stack3d()
+        if st is None:
+            raise RuntimeError("no horizon stack yet - Interpret > Build horizon stack (3D)")
+        v = self.project.volume(self.source[1])
+        k = int(np.clip(self.number or 0, 0, len(st) - 1))
+        surf = st.surface(k)
+        self._stratal_surface = surf
+        return stratal_slice(v, surf), v.xlines, v.inlines, "Crossline", "Inline"
 
     def set_attr(self, name):
         self.attr = name if name in ATTRS else "Seismic"
@@ -391,14 +479,21 @@ class SectionPanel(QtWidgets.QWidget):
         kind, name = self.source
         if kind == "3D":
             v = self.project.volume(name)
+            tl = "RGT" if self.wheeler_on() else "t"
             if self.mode == "Inline":
                 il, xl, t = self.number, x[j], y[i]
             elif self.mode == "Crossline":
                 il, xl, t = x[j], self.number, y[i]
+            elif self.mode == "Stratal slice":
+                il, xl = y[i], x[j]
+                surf = getattr(self, "_stratal_surface", None)
+                t = float(surf[i, j]) if surf is not None else np.nan
+                tl = f"level {self.number}  t"
             else:
                 il, xl, t = y[i], x[j], self.number
             X, Y = v.xy(il, xl)
-            self.cursorInfo.emit(f"IL {il:.0f}  XL {xl:.0f}  t {t:.0f} ms  amp {amp:.4g}   X {X:.1f}  Y {Y:.1f}")
+            self.cursorInfo.emit(f"IL {il:.0f}  XL {xl:.0f}  {tl} {t:.0f}{'' if tl == 'RGT' else ' ms'}  amp {amp:.4g}"
+                                 f"   X {X:.1f}  Y {Y:.1f}")
         else:
             l = self.project.line(name)
             self.cursorInfo.emit(f"{name}  CDP {x[j]:.0f}  t {y[i]:.0f} ms  amp {amp:.4g}   X {l.x[j]:.1f}  Y {l.y[j]:.1f}")
@@ -416,8 +511,10 @@ class SectionPanel(QtWidgets.QWidget):
         return hz.survey_key(*self.source)
 
     def trace_at(self, xval):
-        """(i, j) grid indices of the trace nearest to section x value, or None (time slice)."""
+        """(i, j) grid indices of the trace nearest to section x value, or None (time/stratal slice, Wheeler)."""
         kind, name = self.source
+        if self.wheeler_on() or self.mode == "Stratal slice":
+            return None
         if kind == "2D":
             cdp = self.project.line(name).cdp
             return 0, int(np.argmin(np.abs(cdp - xval)))
@@ -557,9 +654,13 @@ class SectionPanel(QtWidgets.QWidget):
         """Section coordinates -> map (x, y, t), or None on a time slice."""
         kind, name = self.source
         if kind == "2D":
+            if self.wheeler_on():
+                return None
             l = self.project.line(name)
             return float(np.interp(xval, l.cdp, l.x)), float(np.interp(xval, l.cdp, l.y)), float(t)
         v = self.project.volume(name)
+        if self.wheeler_on():
+            return None
         if self.mode == "Inline":
             X, Y = v.xy(self.number, xval)
         elif self.mode == "Crossline":
@@ -669,7 +770,7 @@ class SectionPanel(QtWidgets.QWidget):
         'cut' (pairs of points, surface intersection), 'stick' (polyline) or 'new' (stick being drawn)."""
         fs = self.fset()
         out = []
-        if fs is None or not self.source or self._data is None:
+        if fs is None or not self.source or self._data is None or self.wheeler_on() or self.mode == "Stratal slice":
             return out
         kind, name = self.source
         for f in fs.items:
@@ -739,6 +840,9 @@ class SectionPanel(QtWidgets.QWidget):
             surv = self.project.volume(name) if kind == "3D" else self.project.line(name)
         except Exception:
             return
+        if kind == "3D" and self.mode == "Stratal slice":
+            return
+        wh = self.wheeler_on() and getattr(self, "_wheeler", None) is not None
         for h in hs.items:
             if not h.visible:
                 continue
@@ -752,12 +856,21 @@ class SectionPanel(QtWidgets.QWidget):
                 c = hz.section_curve(h, key, surv, self.mode, self.number)
                 if c is None or not np.isfinite(c[1]).any():
                     continue
+                if wh:  # horizon time -> RGT on each trace
+                    tau, times, _ = self._wheeler
+                    tk = (np.asarray(c[1], float) - times[0]) / (times[1] - times[0])
+                    ok = np.isfinite(tk)
+                    tk = np.clip(np.where(ok, tk, 0), 0, len(times) - 1.000001)
+                    k0 = np.floor(tk).astype(int)
+                    w = tk - k0
+                    r = np.arange(len(tk))
+                    c = (c[0], np.where(ok, tau[r, k0] * (1 - w) + tau[r, k0 + 1] * w, np.nan))
                 it = pg.PlotCurveItem(np.asarray(c[0], float), np.asarray(c[1], float), connect="finite",
                                       pen=pg.mkPen(h.color, width=width))
             self.plot.addItem(it)
             self._hz_items.append(it)
         for k, i, j in self.seeds:
-            if k != key or (kind == "3D" and self.mode == "Time slice"):
+            if k != key or (kind == "3D" and self.mode == "Time slice") or wh:
                 continue
             g = hs.get(self.active_horizon).get(k) if hs.get(self.active_horizon) else None
             if g is None:

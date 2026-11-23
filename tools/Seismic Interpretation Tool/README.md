@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.5: loading, viewing, horizons, faults, dip field, RGT model
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.6: loading, viewing, horizons, faults, dip field, RGT model, horizon stack / Wheeler / stratal slices
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -79,7 +79,19 @@ Starter projects:
   fault (so the window does not mix the blocks). A global least-squares solve (all nodes at once) gives the
   geologic age of every node; interpreted horizons are hard constraints (one age per horizon); 2D lines are
   solved together and tied at intersections. Result: an RGT value for every sample (display box **RGT**).
-- Iso-RGT surfaces are the model's horizons (horizon stack / Wheeler view come next).
+- Iso-RGT surfaces are the model's horizons.
+
+## Horizon stack, Wheeler view, stratal slices (step C)
+- **Interpret > Build horizon stack (3D)** (number of surfaces, default 100) or **(2D lines)**: evenly spaced
+  iso-RGT surfaces, saved next to the RGT.
+- Mode **Stratal slice** (3D mode box): amplitude on one stack surface; the slider / PgUp / PgDn step
+  through the stack - the PaleoScan-style way to look at depositional geometry (channels, fans) slice by slice.
+- Domain box **Time / Wheeler**: Wheeler puts relative geologic time on the vertical axis (inlines,
+  crosslines, 2D lines). Reflectors become flat; where an interval is much thinner than along the rest of the
+  section (or missing - hiatus, erosion) the Wheeler view shows a gap. Horizons are drawn in RGT too.
+  Picking and fault sticks are off in Wheeler and stratal-slice views.
+- **Interpret > Convert stack level to horizon**: makes an ordinary, editable horizon from a stack level (the
+  current stratal slice by default; 2D: on every line).
 - Files: 3D `<volume store>\rgt\rgt.npy` (uint16, ~0.1 ms resolution) + `rgt.json` + `rgt_nodes.npz`;
   2D `<project>_seismic\rgt\<line>_rgt.npz`.
 
