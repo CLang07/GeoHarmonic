@@ -78,7 +78,21 @@ Kingdom-like interaction; large data.
 12. **Velocity model + depth conversion** - status: todo
    - Interval/average velocity from well time-depth pairs + horizons (layer-cake), gridded; convert
      horizons and sections to depth; well misfit table.
-13. **Hardening** - status: todo
+13. **Analytics (Transform-style multi-attribute / predictive)** - status: todo
+   - `seismic_tool/analytics/`: a common "attribute table" built from horizon/zone extractions (seismic
+     attributes from item 11, isochrons, structure, curvature) sampled at wells and on the map grid, joined
+     with well properties (zone stats from the Well Correlation Tool: net sand, NtG, avg PHID/Vsh) and any
+     CSV of per-well targets (e.g. production / EUR when Chris has it).
+   - Tools: correlation matrix + crossplots with regression lines; PCA; k-means and self-organizing map
+     (SOM) clustering of multi-attribute maps and volumes (facies classes); multi-linear and ridge
+     regression and a small numpy MLP predicting a well property from attributes, with leave-one-well-out
+     cross-validation and honest error bars; predicted-property map + uncertainty map; attribute
+     ranking (which inputs matter, permutation importance).
+   - GUI: Analytics window (pick inputs/target, crossplot matrix, train/validate, push results back as
+     maps/volumes). Warn clearly when wells are too few for the number of inputs.
+   - Tests: synthetic attributes with a known linear/nonlinear relation to a target - recovered; clusters
+     recovered on synthetic facies.
+14. **Hardening** - status: todo
    - Read every module for bugs, edge cases (irregular 3D geometry, missing traces, dead traces, IBM vs
      IEEE, big files > 2 GB on Windows), performance on a 2 GB synthetic, docs/WHATS_NEW.md refresh.
 
