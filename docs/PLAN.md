@@ -75,7 +75,11 @@ Kingdom-like interaction; large data.
      reference lines held fixed (0 shift, 0 deg, gain 1), per-survey "key line" option for multi-vintage
      2D, horizon-based misties (from picked horizons at ties) as an alternative to waveform, constant or
      time-variant (windowed) corrections, max-shift and correlation-window limits, outlier tie rejection,
-     residual-mistie map/table before vs after, and corrections applied on the fly to BOTH seismic display
+     residual-mistie map/table before vs after, redundancy handling: ties weighted by correlation quality,
+     robust re-weighting (IRLS/Huber) to down-weight bad ties, loop-closure report, minimum-norm or
+     reference-line datum (the network only fixes relative shifts), phase solved as unit vectors so 350/10 deg
+     don't average to 180, collinear/overlapping lines (reprocessed vintages, overlapping segments) tied
+     along the whole overlap with a "preferred version" flag and duplicate hiding, and corrections applied on the fly to BOTH seismic display
      and interpretation (horizons) without rewriting SEG-Y (optional export of corrected SEG-Y).
 11. **Seismic attributes** - status: todo
    - Volume attributes computed in chunks to new float16 stores, viewable like any volume: envelope,
