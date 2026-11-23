@@ -1,4 +1,4 @@
-# Build plan - Seismic Interpretation Tool (Nov 23 - Dec 1, 2026, one item per run)
+# Build plan - Seismic Interpretation Tool (Nov 23 - Dec 2, 2026, two runs a day, one item per run)
 
 Status values: `todo`, `partial`, `done`, `blocked: <reason>`. Do the first `todo`/`partial` item.
 Chris's priorities: both 2D and 3D everywhere; PaleoScan-style relative geologic time (RGT) workflow;
@@ -50,6 +50,23 @@ Kingdom-like interaction; large data.
      grids (XYZ, CPS-3 ASCII), PNG.
 9. **Write-up** - status: todo
    - `docs/WHATS_NEW.md` for Chris: features, how to use, test checklist ordered by risk, known limits.
+
+10. **2D-3D merge / tie** - status: todo
+   - Match 2D lines to a 3D volume: extract the 3D along each 2D line (arbitrary line), estimate per-line
+     bulk time shift, phase rotation and amplitude scalar by cross-correlation in a window; apply and show
+     before/after; integrate with the Mistie Tool network solve (2D-2D + 2D-3D ties). Tests: synthetic 2D
+     made from the 3D with a known shift/phase/gain - recovered within tolerance.
+11. **Seismic attributes** - status: todo
+   - Volume attributes computed in chunks to new float16 stores, viewable like any volume: envelope,
+     instantaneous phase/frequency (Hilbert via numpy FFT), RMS amplitude, coherence/semblance, dip-steered
+     variance, curvature on horizons, spectral decomposition (short-window FFT bands). Attribute picker in
+     the section panel.
+12. **Velocity model + depth conversion** - status: todo
+   - Interval/average velocity from well time-depth pairs + horizons (layer-cake), gridded; convert
+     horizons and sections to depth; well misfit table.
+13. **Hardening** - status: todo
+   - Read every module for bugs, edge cases (irregular 3D geometry, missing traces, dead traces, IBM vs
+     IEEE, big files > 2 GB on Windows), performance on a 2 GB synthetic, docs/WHATS_NEW.md refresh.
 
 Later (Chris back): Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.
