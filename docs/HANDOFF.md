@@ -103,6 +103,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `statistical_wavelet`, `synthetic`, `tie_correlation`, `auto_tie`. `SeisProject.wellset()` cached.
   Panel `well_overlay()` / `draw_wells()`; `gui/welltie_dialog.WellTieDialog` (compute/auto/save testable
   without drawing). `test_welltie.py` (synthetic wells + survey with a known 12 ms shift; real Tui-1/Maui-5).
+- `tie.py` (v0.19, item 16): `correlate` (FFT xcorr A + Hilbert B per lag, envelope lag, phase = atan2(-B, A) at
+  the envelope peak, polarity, cycle-skip = other peak >= 0.85 x best at >= half a dominant period), `best_trace`,
+  `auto_tie_fft` (stretch about the window top / anchor, parabolic refine, NRMS, held-out lower 30 %), `TieState`
+  (bulk + warp (pairs | dtw) with undo, to/from_dict), `dtw_lags` (Hale strain-limited DTW, b = ceil(1/strain))
+  + `dtw_warp` (box smooth then `_lipschitz` clamp so the cap holds exactly), `drift_table`, `calibrate_sonic`,
+  `write_td_csv`. `WellTD.warp_in/out` applied after shift/stretch; ties store warp_in/out/kind/pairs;
+  `WellSet.calibrated_td`, display["td_mode"]. Dialog methods: correlate, find_best_trace, dtw, pick_event /
+  add_pair, undo, clear_warp, drift_qc, export_td, tied_times, tie_corr. `test_tie.py`.
 - `maps.py` (v0.9): `MapGrid` (kind "ilxl" on a survey grid or "xy"; node_xy, sample (bilinear),
   to_xy (axis-aligned resample), transform (QTransform), contours via well_correlation.mapping.contour_segments),
   `idw_grid`, `horizon_grid(project, h, key)` (3D grid or gridded 2D picks), `isochron`,

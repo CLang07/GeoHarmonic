@@ -150,6 +150,9 @@ def run():
         test_laterals.run(check, tmp)
         from . import test_hardening
         test_hardening.run(check, tmp)
+        from . import test_tie
+        os.makedirs(os.path.join(tmp, "tie16"))
+        test_tie.run(check, os.path.join(tmp, "tie16"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -205,6 +208,8 @@ def run_gui():
         test_laterals.run_gui(check, tmp)
         from . import test_hardening
         test_hardening.run_gui(check, tmp)
+        from . import test_tie
+        test_tie.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

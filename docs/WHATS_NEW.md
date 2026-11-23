@@ -42,6 +42,24 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.19.0 - well tie upgrade, part 1 (PLAN item 16a + 16b)
+Interpret > Well tie has a second button row:
+- **Window** (top/base ms of the synthetic; "all" = whole log) - Auto tie, Correlate and stretch/squeeze use it.
+- **Auto tie** is now FFT-based (all shifts at once per stretch), stretches about the window top, reports NRMS and a
+  held-out score (fit on the upper 70 % of the window, correlation on the lower 30 %).
+- **Correlate** (Hampson-Russell style): correlation vs lag (blue) with its envelope (grey), polarity, a constant
+  phase scan (bottom-right plot; best rotation = wavelet phase error, 180 = reversed polarity) and a
+  **cycle-skip warning** when another peak correlates nearly as well.
+- **Find best trace** within N traces of the well (spin box) - the tie then uses that trace.
+- **Auto stretch/squeeze**: constrained dynamic time warping after the bulk tie; max lag (default 20 ms) and
+  max interval-velocity change (default 10 %) are hard limits. **Pick event pair**: click an event on the red
+  synthetic, then the matching black seismic event (<= 10 pairs, no folding). **Undo** / **Clear warp**.
+- **Drift QC**: tied time-depth minus checkshot at each level (plot + worst level). **Export TD CSV**: tied
+  time-depth in the checkshot CSV format (keep it out of the well's checkshot folder - it would be averaged in).
+- Saved ties keep the warp; it is applied wherever the well's time-depth is used (tops in TWT, sections, maps).
+- `project.display["td_mode"] = "calibrated sonic"` uses the sonic calibrated to the well's own checkshot
+  (drift interpolated between levels) instead of the checkshot alone (no menu yet).
+
 ## Seismic v0.18.0 - scale: many wells on the basemap, threaded import (PLAN item 15 finished)
 - Basemap with thousands of wells: all wells are one scatter item; well names are drawn only for wells inside the
   view and only when at most 150 are in view (zoom in to see names). Above 2,000 wells the view query uses the

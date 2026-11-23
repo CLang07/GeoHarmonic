@@ -121,6 +121,8 @@ class WellTD:
         self.shift = 0.0
         self.stretch = 1.0
         self.t_centre = float(np.median(self.t)) if len(self.t) else 0.0
+        self.warp_in = None  # optional piecewise warp after shift/stretch (event pairs / DTW, see tie.py)
+        self.warp_out = None
 
     def twt_raw(self, z_ss):
         z = np.asarray(z_ss, float)
@@ -135,7 +137,10 @@ class WellTD:
 
     def twt(self, z_ss):
         t = self.twt_raw(z_ss)
-        return t + self.shift + (self.stretch - 1.0) * (t - self.t_centre)
+        t = t + self.shift + (self.stretch - 1.0) * (t - self.t_centre)
+        if self.warp_in is not None and len(self.warp_in):
+            t = t + np.interp(t, self.warp_in, self.warp_out - self.warp_in)
+        return t
 
     def depth(self, twt):
         """Inverse: TVDSS at a (corrected) TWT."""
@@ -194,6 +199,11 @@ class WellSet:
             return self.td[name]
         w = self.well(name)
         cs = self.checkshots().get(name)
+        if cs is not None and self.sp.display.get("td_mode") == "calibrated sonic":
+            td = self.calibrated_td(name)
+            if td is not None:
+                self.td[name] = td
+                return td
         if cs is not None:
             td = WellTD(name, cs[0], cs[1], f"checkshot {cs[2]}")
         else:
@@ -222,7 +232,42 @@ class WellSet:
         if tie:
             td.shift, td.stretch = float(tie.get("shift_ms", 0)), float(tie.get("stretch", 1))
             td.t_centre = float(tie.get("t_centre", td.t_centre))
+            if tie.get("warp_in"):
+                td.warp_in = np.asarray(tie["warp_in"], float)
+                td.warp_out = np.asarray(tie["warp_out"], float)
         self.td[name] = td
+        return td
+
+    def calibrated_td(self, name):
+        """WellTD from the sonic calibrated to the well's own checkshot (drift interpolated between levels), or
+        None when the well lacks a checkshot or a usable sonic. The saved tie is applied as in td_for."""
+        from .tie import calibrate_sonic
+        cs = self.checkshots().get(name)
+        if cs is None:
+            return None
+        w = self.well(name)
+        try:
+            self.wcp.load_well(name)
+        except Exception:
+            pass
+        dt = w.logs.get("DT") if w.logs else None
+        anchor = lambda z: float(np.interp(z, cs[0], cs[1]))  # noqa: E731
+        st = sonic_td(w.depth, dt, w.md_to_tvdss, anchor) if dt is not None else None
+        if st is None:
+            return None
+        z, t = st
+        tcal, _ = calibrate_sonic(z, t, cs[0], cs[1])
+        above, below = cs[0] < z[0], cs[0] > z[-1]
+        td = WellTD(name, np.r_[cs[0][above], z, cs[0][below]], np.r_[cs[1][above], tcal, cs[1][below]],
+                    f"sonic calibrated to checkshot {cs[2]}")
+        keep = np.r_[True, np.diff(td.t) > 0] & np.r_[True, np.diff(td.z) > 0]
+        td.z, td.t = td.z[keep], td.t[keep]
+        tie = (self.sp.display.get("well_ties") or {}).get(name)
+        if tie:
+            td.shift, td.stretch = float(tie.get("shift_ms", 0)), float(tie.get("stretch", 1))
+            td.t_centre = float(tie.get("t_centre", td.t_centre))
+            if tie.get("warp_in"):
+                td.warp_in, td.warp_out = np.asarray(tie["warp_in"], float), np.asarray(tie["warp_out"], float)
         return td
 
     def tops_twt(self, name):
