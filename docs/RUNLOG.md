@@ -158,3 +158,11 @@ the 2D lines, Tui-1/Amokura-1 wells).
   6. Basemap with your biggest well project: names appear when zoomed in, panning stays smooth.
 - Next: no todo items left in PLAN; "Later (Chris back)" items (Maui subset cut, mistie with the 2D lines,
   Tui-1/Amokura-1 wells) and the PC-benchmark-driven import work Chris's session started (v0.21.0).
+
+## 2026-11-23 - plan update (interactive session with Chris)
+- Added PLAN item 17: Dynamic depth conversion (Kingdom DDC-style), building on item 12 velocity.py.
+  Sub-items 17a velocity functions (V0+kZ, V0+kT, T-D function, cross-plots), 17b gridding (TPS, kriging,
+  seismic-velocity guide), 17c live update when tops/horizons change, 17d well prognosis / geosteering view,
+  17e scenarios, blind-well test, P10/P50/P90, depth SEG-Y. Run order 17a -> 17c -> 17b -> 17d -> 17e.
+- No code changed.
+- Next: PLAN item 17a.

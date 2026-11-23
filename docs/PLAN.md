@@ -245,5 +245,46 @@ Kingdom-like interaction; large data.
    1 ms / 0.5% / 5 deg; DTW warp respects the velocity cap; deterministic wavelet = true wavelet (corr > 0.95)
    at 10% noise; polarity flip detected; cycle-skip case flagged; multi-well batch on 10 synthetic wells.
 
+17. **Dynamic depth conversion (Kingdom DDC-style)** - status: todo
+   Chris asked for this on 2026-11-23: he likes Kingdom's Dynamic Depth Conversion (new well tops update the
+   velocity model and depth maps immediately; used for geosteering prognosis). Petrel's equivalent is Domain
+   Conversion (+ Velit = Kingdom VelPAK as a Petrel plugin, Cegal Blueback Rocks Velocity); GeoGraphix has
+   average/interval models with "dynamic depth conversion using inter-well depth point integration".
+   Builds on item 12 (`velocity.py` VelocityModel: constant V_int per layer, IDW, optional residual grid). Keep
+   the item-12 behaviour as the default; everything below is additive. numpy only (no scipy / pykrige).
+   17a. Velocity functions per layer: V0 (current), V0 + kZ (k from a least-squares fit of V_int vs mid-layer
+        depth over the wells, or user-fixed k; V0 gridded, k constant per layer), V0 + kT, and "well T-D
+        function" (layer uses the nearest/averaged checkshot curve). Depth in a V0 + kZ layer with interval
+        time dt: z_base = (z_top + V0/k)·exp(k·dt/2) − V0/k. Cross-plot data per layer (V_int vs depth, fitted
+        line, R², outliers flagged > 2 sigma) returned by a function the dialog can plot.
+        Tests: synthetic V0 + kZ earth, 6 wells -> k within 2%, depths within 1 m; k → 0 gives the V0 result.
+   17b. Gridding choices for V0 / residuals: IDW (current), thin-plate spline (port or import
+        well_correlation/mapping.py TPS), simple kriging with a spherical/exponential variogram fitted to
+        the well values (numpy solve, ≤ 500 wells). Optional seismic-velocity guide: a stacking/RMS velocity
+        volume or grid -> Dix interval velocity per layer used as a trend, scaled to the wells (ratio or
+        difference, then grid the scale factor). Tests: kriging exact at wells, smooth between; guide recovers
+        a synthetic lateral trend that 3 wells alone miss.
+   17c. **Dynamic update** (the core DDC feature): the seismic tool watches the linked .wcproj.json
+        (QFileSystemWatcher + mtime check, debounce ~1 s) and the horizon files. When tops or horizons change,
+        rebuild only what depends on the change: re-read the changed well(s), recompute their V_int rows, re-grid
+        only the affected layers and the layers below, cache everything else. Depth maps, depth sections and
+        the misfit table refresh in place; a status-bar line says what changed ("Maui-6 F0 top moved +4 m ->
+        rebuilt layers 4-6 in 0.3 s"). Toggle in View: "Auto-update depth model". Also a "what-if" well: add a
+        pseudo-top at map X,Y without touching the well project. Tests: change one top in a copied wcproj ->
+        only layers at/below that horizon change; maps above are bit-identical; 50-well rebuild < 2 s.
+   17d. Well prognosis / geosteering view: for a planned or drilling well (trajectory from the well project or
+        laterals.py), list predicted depth (TVDSS + MD) of every horizon, the uncertainty (see 17e) and the
+        change since the last update; prognosis updates live as 17c rebuilds. Export as CSV. Entering a new top
+        while "drilling" re-runs the model with that well included and shows predicted depths ahead of the bit.
+   17e. Uncertainty + scenarios: save several named velocity models (different functions / gridding / wells
+        held out), compare depth maps (difference grids), leave-one-well-out blind test table (predicted vs
+        actual top for each well = honest error estimate), and a simple P10/P50/P90 depth-to-target map from
+        the blind-test error spread (optionally Monte-Carlo on V0/k). Depth-convert a full volume to SEG-Y in
+        depth (reuse segy writer; threaded, cancellable) and depth -> time for depth grids.
+   Data: Maui-5 / Maui-6 checkshot LAS are in data/nz; look for checkshots / VSPs in the other Maui and Tui
+   well completion reports (NZP&M catalogue) - Chris to download if needed.
+   Run order: 17a -> 17c -> 17b -> 17d -> 17e (dynamic update is the priority after the velocity functions).
+   Update docs/WHATS_NEW.md with a "Dynamic depth conversion" section and test checklist.
+
 Later (Chris back): run `dev/bench.py --gb 5..20` on the PC and fix what it shows (overview volume only if zoomed-out display is slow); Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.
