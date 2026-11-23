@@ -171,7 +171,7 @@ Kingdom-like interaction; large data.
    TreeSHAP values sum to prediction minus expected value (local accuracy) and match brute-force Shapley
    on small trees exactly; KernelSHAP close to exact; GBM beats linear on the nonlinear case; group CV
    gives a worse (honest) score than random CV on spatially correlated synthetic wells.
-14. **Dashboard with lateral (horizontal-well) attribute maps** - status: partial (run 1: 14a core done -
+14. **Dashboard with lateral (horizontal-well) attribute maps** - status: done (run 1, v0.16.2: 14a core done -
    `laterals.py` (min-curvature trajectories, synthetic laterals, survey/stage CSV, attributes along MD from
    grids / 3D volume / logs / stages / zones, per-lateral stats table, colour bins batched over many wells + LOD)
    and `dashboard_model.py` (filters, linked selection, histogram/crossplot/table data, layouts, HTML export).
@@ -180,8 +180,8 @@ Kingdom-like interaction; large data.
    seismic via well time-depth / stage CSV / in-zone, lateral stats, send to Analytics, layouts, HTML export).
    14c done: well strip / geosteering view (`gui/well_strip.py`: log vs MD, TVDSS vs MD with zone top/base,
    seismic along the wellbore with the well's time path) and log curves as colour sources.
-   LEFT (small): background grid image under the dashboard map; text filters in the UI (only via saved layouts);
-   bubbles/pies per well; predicted-property maps need "Add basemap grid" after Predict map)
+   14d: background grid under the dashboard map, text filters (Filter by text...).
+   Possible follow-ups: bubbles/pies per well; predicted-property maps need "Add basemap grid" after Predict map)
    - Dashboard window (dockable, linked panels, Spotfire-style): map, histogram, crossplot, data table,
      well strip view; selecting wells/points in one panel highlights them in all others; filters
      (formation, operator, date, attribute ranges); save/restore layouts; export PNG + standalone HTML.

@@ -29,6 +29,7 @@ class DashboardWindow(QtWidgets.QMainWindow):
         self._ws = None
         self._table_rows = []
         self._log_names = None
+        self.background = None  # grid name drawn under the wells
         self.model = DashboardModel()
         self.model.subscribe(self._on_model)
         self._items = []
@@ -58,18 +59,20 @@ class DashboardWindow(QtWidgets.QMainWindow):
         self.hist_box = QtWidgets.QComboBox()
         self.x_box = QtWidgets.QComboBox()
         self.y_box = QtWidgets.QComboBox()
-        for lab, w in (("Colour laterals by", self.color_box), ("Histogram", self.hist_box), ("X", self.x_box),
+        self.bg_box = QtWidgets.QComboBox()
+        for lab, w in (("Background", self.bg_box), ("Colour laterals by", self.color_box), ("Histogram", self.hist_box), ("X", self.x_box),
                        ("Y", self.y_box)):
             tb.addWidget(QtWidgets.QLabel(f" {lab} "))
             tb.addWidget(w)
         for text, fn in (("Wells from project", self.load_project_wells), ("Add basemap grid", self._add_basemap_grid),
                          ("Stage CSV...", self._stages_dialog), ("Lateral stats", self.add_lateral_stats), ("Well strip", lambda: self.open_strip()),
-                         ("Send to Analytics", self.send_to_analytics), ("Clear filters", lambda: self.model.clear_filters()),
+                         ("Send to Analytics", self.send_to_analytics), ("Filter by text...", self._text_filter_dialog), ("Clear filters", lambda: self.model.clear_filters()),
                          ("Save layout...", self._save_layout), ("Load layout...", self._load_layout),
                          ("Export HTML...", self._export_dialog)):
             a = tb.addAction(text)
             a.triggered.connect(fn)
         self.color_box.currentTextChanged.connect(lambda s: s and self.color_by(s))
+        self.bg_box.currentTextChanged.connect(lambda s: self.set_background(s))
         self.hist_box.currentTextChanged.connect(lambda s: self.draw_histogram())
         self.x_box.currentTextChanged.connect(lambda s: self.draw_crossplot())
         self.y_box.currentTextChanged.connect(lambda s: self.draw_crossplot())
@@ -270,6 +273,7 @@ class DashboardWindow(QtWidgets.QMainWindow):
 
     def draw_map(self):
         self.map.clear()
+        self._draw_background()
         if not self.trajs:
             return
         vis = self.model.visible() if len(self.model) else np.ones(len(self.trajs), bool)
@@ -346,6 +350,46 @@ class DashboardWindow(QtWidgets.QMainWindow):
         self.table.blockSignals(False)
         self._sync_table_selection()
 
+    def set_background(self, name):
+        self.background = name if name in self.grids else None
+        self.draw_map()
+
+    def text_filter(self, col, text):
+        """'A, B' -> keep rows whose text column is A or B; empty text removes the filter."""
+        vals = [v.strip() for v in str(text).split(",") if v.strip()]
+        if vals:
+            self.model.set_filter(col, values=vals)
+        else:
+            self.model.set_filter(col)
+
+    def _text_filter_dialog(self):
+        cols = list(self.model.text)
+        if not cols:
+            self.status.setText("No text columns (formation, operator...) in the dashboard table.")
+            return
+        col, ok = QtWidgets.QInputDialog.getItem(self, "Filter by text", "Column", cols, 0, False)
+        if not ok:
+            return
+        present = sorted(set(self.model.text[col]))
+        text, ok = QtWidgets.QInputDialog.getText(self, "Filter by text", f"Keep values (comma separated)\n"
+                                                  f"present: {', '.join(present[:30])}")
+        if ok:
+            self.text_filter(col, text)
+
+    def _draw_background(self):
+        g = self.grids.get(self.background) if self.background else None
+        if g is None:
+            return
+        from PySide6 import QtGui
+        from .. import horizons as hz
+        from . import colormaps
+        rgba, lo, hi = hz.structure_rgba(g.z, colormaps.lut("Grey", reverse=g.unit in ("ms", "m")))
+        it = pg.ImageItem(rgba)
+        it.setTransform(QtGui.QTransform(*g.transform()))
+        it.setOpacity(0.6)
+        it.setZValue(-10)
+        self.map.addItem(it)
+
     def _refresh_boxes(self):
         cols = self.model.columns()
         for box in (self.hist_box, self.x_box, self.y_box):
@@ -356,6 +400,13 @@ class DashboardWindow(QtWidgets.QMainWindow):
             if cur in cols:
                 box.setCurrentText(cur)
             box.blockSignals(False)
+        self.bg_box.blockSignals(True)
+        cur = self.bg_box.currentText()
+        self.bg_box.clear()
+        self.bg_box.addItems(["(none)"] + list(self.grids))
+        if cur in self.grids:
+            self.bg_box.setCurrentText(cur)
+        self.bg_box.blockSignals(False)
         self.color_box.blockSignals(True)
         self.color_box.clear()
         self.color_box.addItems(self.color_sources())

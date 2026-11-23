@@ -232,6 +232,13 @@ def run_gui(check, tmp):
     check(sd is not None and "section" in sd and "GR" in sd["logs"] and "top" in sd and np.isfinite(sd["twt"]).all(),
           "dashboard: well strip (log, zone, seismic along the wellbore)")
     check(win.nearest_well(tb.x[-1] + 5, tb.y[-1]) == trajs.index(tb), "dashboard: map click picks the nearest wellbore")
+    win.set_background("H1 time")
+    check(win.background == "H1 time", "dashboard: background grid")
+    win.model.add_text("operator", ["X", "Y", "X"])
+    win.text_filter("operator", "X, Z")
+    check(list(np.nonzero(win.model.visible())[0]) == [0, 2], "dashboard: text filter")
+    win.text_filter("operator", "")
+    check(win.model.visible().all(), "dashboard: text filter removed")
     win.model.select([1])
     check(win.model.selected == {1}, "dashboard: linked selection")
     win.filter_from_region("eur", 1.5, 10.0, (1.0, 3.0))
