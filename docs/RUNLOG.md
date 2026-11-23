@@ -6,7 +6,7 @@
 - All self-tests pass. Plan in docs/PLAN.md; nightly scheduled runs work on branch `dev`.
 - Next: PLAN item 1 (horizon picking + autotracking).
 
-## 2026-11-23 run 1 (scheduled) - IN PROGRESS, started 07:20 UTC
+## 2026-11-23 run 1 (scheduled) - 07:20-10:00 UTC, branch dev, Seismic tool v0.2.0 -> v0.17.1
 - Item 1 DONE - horizon picking + autotracking (v0.2.0): new horizons.py, synth.py, test_horizons.py,
   gui/horizon_dock.py; section_panel (pick mode, overlays), basemap (time map), main_window (dock,
   Interpret menu P/T/Ctrl+Z), project (horizons saved in <project>_seismic/horizons). Tests: --selftest 47
@@ -56,3 +56,55 @@
   learning curves). On the benchmark GBM R2 0.97 vs linear 0.29; random CV 0.86 vs group 0.36 / block 0.59.
 - 13c done: explain.py (exact TreeSHAP == brute force, KernelSHAP, permutation importance, PDP/ICE, save/load,
   HTML report), Analytics window, --check-ml + optional extras installer. Tests PASS (v0.14.0).
+- 13d done (v0.15.0): analytics/qc.py model QC toolkit - baselines (mean, IDW of target, best single input),
+  y-randomisation, noise-feature test, residual QQ / variogram / Moran's I, split-conformal + quantile-GBM
+  intervals with coverage, calibration (Brier), applicability domain, importance stability, hyperparameter
+  sensitivity, PDP direction checks, paired fold comparison, blind/temporal/repeated designs; Analytics window
+  "Model QC..." button (HTML) and applicability mask on predicted maps. Tests: Moran z 24.9 -> 4.1 with x/y,
+  conformal 80% covers 84%, y-randomisation collapses. Item 13 DONE with v0.15.1: engineering / production
+  CSV import dialog (presets, mapping + units, saved mappings; works without a well project).
+- Item 14 DONE (v0.16.0-0.16.2): laterals.py (min-curvature trajectories, attributes along MD from grids /
+  3D volume / logs / stages / zones, per-lateral stats, batched colour drawing + LOD), dashboard_model.py
+  (filters, linked selection, histogram/crossplot/table data, layouts, HTML export), gui/dashboard_window.py
+  (Interpret > Dashboard), gui/well_strip.py (geosteering strip: log, TVDSS + zone, seismic along wellbore).
+  1,000 laterals -> 16 batched curves in 0.1 s. Tests PASS.
+- Item 15 PARTIAL (v0.17.0-0.17.1): Cancel button for all threaded jobs incl. 3D import (partial store
+  removed); wellindex.py SQLite well index (10k wells, box query ~1 ms, exact k-nearest); dev/bench.py +
+  docs/BENCHMARKS.md (0.6 GB: import 166 MB/s, slices 0.4-1.3 ms); import replaces NaN/inf samples;
+  irregular-geometry test; dashboard draws all wellbores as one curve and caps the table at 3,000 rows.
+  Left for item 15: run the benchmark at 5-20 GB on Chris's PC, then fix what it shows (wire the well index
+  into basemap/dashboard, parallel import / overview volume only if needed).
+
+Files: see the commits on dev (git log main..dev). New this run (seismic_tool): horizons, faults, rgt/*,
+welltie, maps, mistie, attributes, velocity, laterals, dashboard_model, wellindex, analytics/*, gui/*
+(horizon_dock, fault_dock, welltie_dialog, map_dialog, mistie_dialog, velocity_dialog, analytics_window,
+engineering_dialog, dashboard_window, well_strip) and their test_*.py; Well Correlation: dlis.py; dev/bench.py.
+
+Tests at the end: seismic_tool --selftest PASS, --guitest (Qt mock) PASS, well_correlation --selftest PASS,
+mistie_tool --selftest PASS.
+
+Decisions (Chris away): GUI built against the Qt mock only - every new window is real-Qt code that has never
+been opened; analytics models are numpy re-implementations (xgboost/sklearn/shap optional); well index built
+but not yet used by the GUI until the PC benchmark shows the need; stopped at ~10:00 UTC because the rest of
+item 15 needs measurements on Chris's PC.
+
+Known limitations: no real Qt window opened yet; 3D autotracking runs in the GUI thread; RGT between node
+columns is interpolated and thin layers do not pinch to zero; 2D RGT edits do not propagate through ties;
+wells vertical in the seismic tool except in the dashboard (surveys used there); tie = one shift + one
+stretch; Maui checkshot LAS files hold no time-depth pairs; velocity model uses inverse-distance gridding;
+dashboard colouring needs grids added from the basemap; benchmark "peak RAM" includes memory-mapped pages.
+
+What Chris should test first:
+1. Pull dev; run each tool's self-test, then `python -m seismic_tool --guitest` with real PySide6.
+2. Seismic tool on NPRA 2D: horizon pick + autotrack (T), fault sticks (N), RGT (node 8) + Wheeler, and the
+   new Cancel button next to the progress bar.
+3. Well Correlation NZ project: Tui-1 (from DLIS) tracks; --dlis2las on the big Tui-1 DLIS.
+4. Maui 3D + NZ wells: well tie, horizon maps, velocity model + Depth domain.
+5. Interpret > Analytics: grids + CSV target, Train, Model QC...; Import engineering / production CSV on the
+   synthetic set from dev/make_synthetic_engineering.py.
+6. Interpret > Dashboard: deviated wells from surveys, colour by TVDSS / grid / seismic, histogram range
+   filter, linked selection, Well strip.
+7. `python dev/bench.py --gb 5 --dir D:\bench` and send me docs/BENCHMARKS.md.
+
+Next: item 15 leftovers after the PC benchmark; then "Later (Chris back)" items (Maui subset cut, mistie with
+the 2D lines, Tui-1/Amokura-1 wells).
