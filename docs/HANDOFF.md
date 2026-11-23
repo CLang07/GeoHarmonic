@@ -146,6 +146,11 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   KMeans++, GaussianMixture (diag EM), SOM, silhouette, elbow, make_model with optional xgboost/sklearn),
   `validation` (r2/rmse/mae/accuracy/f1/confusion, kfold, group_kfold, leave_one_group_out, spatial_blocks with
   buffer, cross_val_predict/score, grid_search, nested_cv, learning_curve). `test_models.py`.
+  `explain` (13c: permutation / grouped permutation importance, exact path-dependent TreeSHAP (Lundberg Alg. 2;
+  tested == brute-force Shapley), tree_expectation, brute_force_shap, kernel_shap, partial_dependence + ICE,
+  ensemble_map, save_model/load_model JSON, matplotlib plots, html_report), `check_ml` (--check-ml).
+  `gui/analytics_window.AnalyticsWindow` (add_grid, add_csv, add_zone, build_table, explore, train, predict_map,
+  report). `Install analytics extras (optional).bat`. `test_explain.py` (run + run_gui).
   `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
   Pearson/Spearman, vif, pca, regression_line). `test_analytics.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),

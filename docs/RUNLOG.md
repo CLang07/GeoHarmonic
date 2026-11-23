@@ -54,3 +54,5 @@
 - 13b done: models (OLS/ridge/lasso, kNN, tree, RF, XGBoost-style GBM with NaN handling + monotone constraints +
   early stopping + logistic, MLP, k-means, GMM, SOM) and honest validation (group/spatial-block CV, nested CV,
   learning curves). On the benchmark GBM R2 0.97 vs linear 0.29; random CV 0.86 vs group 0.36 / block 0.59.
+- 13c done: explain.py (exact TreeSHAP == brute force, KernelSHAP, permutation importance, PDP/ICE, save/load,
+  HTML report), Analytics window, --check-ml + optional extras installer. Tests PASS (v0.14.0).

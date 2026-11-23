@@ -142,6 +142,8 @@ def run():
         test_engineering.run(check, tmp)
         from . import test_models
         test_models.run(check, tmp)
+        from . import test_explain
+        test_explain.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -186,6 +188,9 @@ def run_gui():
         from . import test_velocity
         os.makedirs(os.path.join(tmp, "velgui"))
         test_velocity.run_gui(check, os.path.join(tmp, "velgui"))
+        from . import test_explain
+        os.makedirs(os.path.join(tmp, "angui"))
+        test_explain.run_gui(check, os.path.join(tmp, "angui"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

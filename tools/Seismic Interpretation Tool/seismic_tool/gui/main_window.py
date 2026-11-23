@@ -214,6 +214,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Horizon &maps (structure, isochron, amplitude, depth)...", self.horizon_maps, "Ctrl+M")
         self._act(m, "M&istie analysis (2D-3D, 2D-2D)...", self.mistie_analysis)
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
+        self._act(m, "&Analytics (attribute table, models, SHAP)...", self.analytics)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -596,6 +597,13 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg._changed()
         dlg.exec()
         self.section.redraw()
+        return dlg
+
+    def analytics(self):
+        from .analytics_window import AnalyticsWindow
+        dlg = AnalyticsWindow(self.project, self.basemap, self)
+        dlg.show()
+        self._analytics = dlg
         return dlg
 
     def velocity_model(self):

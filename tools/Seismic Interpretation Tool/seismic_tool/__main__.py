@@ -1,4 +1,4 @@
-"""python -m seismic_tool [project.seisproj.json] | --selftest | --guitest | --info FILE.sgy | --png PROJECT OUT.png"""
+"""python -m seismic_tool [project.seisproj.json] | --selftest | --guitest | --check-ml | --info FILE.sgy | --png PROJECT OUT.png"""
 import os
 import sys
 
@@ -54,6 +54,10 @@ def main(argv=None):
     if argv and argv[0] == "--guitest":
         from .selftest import run_gui
         sys.exit(0 if run_gui() else 1)
+    if argv and argv[0] == "--check-ml":
+        from .analytics.check_ml import run as check_ml
+        check_ml()
+        return
     if argv and argv[0] == "--info":
         for a in argv[1:]:
             _info(a)

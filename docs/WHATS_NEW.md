@@ -34,6 +34,19 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.14.0 - Analytics 13a-13c (PLAN item 13, first parts)
+- analytics package: attribute table + joins (API/name), data prep (imputation, outliers, correlation, VIF,
+  PCA), engineering/production features (presets, units, cums, IP, GOR, Arps EUR, parent/child, FracFocus, lease
+  allocation), models (linear/ridge/lasso, kNN, tree, RF, XGBoost-style GBM with NaN handling + monotone
+  constraints + early stopping, MLP, k-means, GMM, SOM), honest validation (LOO well, group, spatial blocks,
+  nested CV, learning curves), explainability (exact TreeSHAP, KernelSHAP, permutation importance, PDP/ICE,
+  HTML report), Analytics window (Interpret > Analytics), optional xgboost/sklearn/shap installer + --check-ml.
+- Tests: GBM R2 0.97 vs linear 0.29 on a nonlinear benchmark; random CV 0.86 vs group 0.36 on clustered wells;
+  TreeSHAP equals brute-force Shapley (2.8e-16) and sums to the prediction; KernelSHAP exact for linear; Arps
+  EUR within 0.0% on the synthetic production set.
+- Still to do (next run): 13d QC report (baselines, y-randomisation, residual variogram, conformal intervals,
+  applicability domain, stability), engineering CSV import dialog, dashboard (item 14).
+
 ## Seismic v0.13.0 - Velocity model + depth conversion (PLAN item 12)
 - Interpret > Velocity model: layer cake from horizons + well tops (or time-depth), gridded interval
   velocities, depth maps, well misfit table + CSV, optional residual correction; Depth domain on sections.

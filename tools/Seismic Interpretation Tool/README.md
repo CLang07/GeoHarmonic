@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.13: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties, attributes, velocity model + depth
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.14: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties, attributes, velocity model + depth, analytics
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -164,8 +164,23 @@ Starter projects:
 - **Use for depth display**: the domain box gets **Depth** - inlines, crosslines and 2D lines converted to
   depth (TVDSS, m) with horizons and well tops in depth.
 
+## Analytics (Interpret > Analytics)
+- Inputs: any map shown on the basemap ("Add basemap grid as input" - structure, isochron, amplitude,
+  curvature, depth...), zone statistics from the well project (net sand, NtG, PHID...), well CSV files
+  (targets, engineering / production features - joined by API or well name).
+- Explore (missing values, correlation, VIF), train with GBM (XGBoost-style), random forest, linear / ridge /
+  lasso, kNN or MLP, validated honestly: leave-one-well-out, group k-fold, spatial blocks (random k-fold is
+  there only to show how optimistic it is). A warning appears when there are too few wells for the inputs.
+- SHAP values (exact TreeSHAP) for tree models; HTML report; **Predict map** = mean of the CV-fold models with
+  an uncertainty map (spread).
+- Engineering / production helpers (CSV presets for Enverus, IHS, Texas RRC, FracFocus, NDIC, ECMC, NM OCD, OCC;
+  units; cums, IP, GOR, Arps EUR, parent/child) are in `seismic_tool/analytics/engineering.py` - a GUI import
+  dialog comes next. `python dev/make_synthetic_engineering.py OUT` writes a synthetic data set to try.
+- Optional: `Install analytics extras (optional).bat` installs xgboost, scikit-learn, shap;
+  `python -m seismic_tool --check-ml` compares them with the built-in numpy models.
+
 ## Command line
-`python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.
+`python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--check-ml`, `--png PROJECT OUT.png`.
 
 ## Coming next
 2. Relative geologic time (RGT) workflow: dip field, global solve, horizon stack, Wheeler view.
