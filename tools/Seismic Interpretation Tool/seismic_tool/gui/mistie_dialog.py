@@ -215,7 +215,12 @@ class MistieDialog(QtWidgets.QDialog):
 
     def apply(self):
         if not self.sol:
-            self.compute()
+            self._read()  # the dialog's window / lag / groups / flex, not the defaults
+            try:
+                self.compute()
+            except Exception as e:
+                self.info.setText(f"Mistie analysis failed: {e}")
+                return
         MI.apply_solution(self.project, self.sol)
         if self.project.path:
             self.project.save()

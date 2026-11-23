@@ -42,6 +42,25 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.20.4 / Mistie Tool - third review round (run 2)
+Seismic:
+- Well strip: the seismic along the wellbore was drawn transposed (MD on the time axis) - fixed.
+- Velocity dialog: "Depth map of selected layer" used the table row, not the layer (wrong map / crash when a row
+  above was unticked); horizons without picks no longer scramble the layer order; errors show in the dialog.
+- Mistie dialog: "Apply corrections" before "Measure + solve" now uses the dialog's window / lag / groups / flex.
+- Analytics window: errors (e.g. spatial CV without coordinates) show in the output box; the target is never used
+  as its own input.
+- Engineering import: the Data box shows the auto-detected / loaded kind (completions / production).
+- `--png` on a project without data gives a clear message. Launch .bat files (Seismic, Well Correlation): a dragged
+  project path containing ")" no longer breaks the launcher.
+Mistie Tool:
+- Tie measurement with a max lag longer than half the window returned -max lag (e.g. -40 ms for a true +8 ms);
+  halved-window QC was affected first. Fixed + self-test check.
+- Closing after a failed save (file locked) no longer discards the work; display windows past the record end no
+  longer crash the overlay; a failing window change is rolled back; Ctrl+Z with Caps Lock undoes (redo =
+  Ctrl+Shift+Z / Ctrl+Y); network menu items do nothing without a project; `--batch` on a saved project solves like
+  the GUI (locked lines, per-survey grouping).
+
 ## Seismic v0.20.3
 - 2D RGT edits keep the traces where the line crosses other RGT lines fixed (network stays consistent) and update
   the 2D horizon stack (Wheeler / stratal views were stale after an edit).

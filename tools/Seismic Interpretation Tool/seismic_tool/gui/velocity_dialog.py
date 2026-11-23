@@ -50,14 +50,18 @@ class VelocityDialog(QtWidgets.QDialog):
         lay.addWidget(self.info)
         self.resize(820, 640)
         self.b_build.clicked.connect(lambda: self._build())
-        self.b_map.clicked.connect(lambda: self.show_depth_map(max(0, self.table.currentRow())))
-        self.b_use.clicked.connect(lambda: self.use())
+        self.b_map.clicked.connect(lambda: self._safe(lambda: self.show_depth_map(self.layer_index_of_row(
+            max(0, self.table.currentRow())))))
+        self.b_use.clicked.connect(lambda: self._safe(self.use))
         self.b_csv.clicked.connect(lambda *_: self._csv())
 
     def _fill_layers(self):
         hs = self.project.horizons.items
-        order = sorted(hs, key=lambda h: np.nanmean(np.concatenate([np.ravel(a) for a in h.data.values()]))
-                       if h.data else 0.0)
+        def depth_key(h):  # horizons without picks go last (a NaN key would scramble the sort)
+            v = np.concatenate([np.ravel(a) for a in h.data.values()]) if h.data else np.array([])
+            v = v[np.isfinite(v)]
+            return float(v.mean()) if v.size else np.inf
+        order = sorted(hs, key=depth_key)
         self.table.setRowCount(len(order))
         self._combos = []
         for r, h in enumerate(order):
@@ -97,6 +101,24 @@ class VelocityDialog(QtWidgets.QDialog):
         self.info.setText(f"{len(self.model.grids()['wells'])} wells; misfit RMS {np.sqrt(np.mean(res ** 2)):.1f} m, "
                           f"max {np.max(np.abs(res)):.1f} m")
         return self.model
+
+    def layer_index_of_row(self, row):
+        """Table row -> index among the model's (ticked) layers; unticked rows are not in the model."""
+        if self.model is None:
+            self.build()
+        item = self.table.item(row, 1)
+        name = item.text() if item is not None else None
+        names = [n for n, _ in self.model.layers]
+        if name not in names:
+            raise ValueError(f"layer '{name}' is not ticked / not in the model")
+        return names.index(name)
+
+    def _safe(self, fn):
+        try:
+            return fn()
+        except Exception as e:
+            self.info.setText(f"Velocity model: {e}")
+            return None
 
     def _build(self):
         try:

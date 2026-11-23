@@ -69,8 +69,18 @@ class EngineeringImportDialog(QtWidgets.QDialog):
         mp = E.auto_mapping(self.headers)
         self.kind = "production" if "month" in mp and ("oil" in mp or "gas" in mp) and "proppant" not in mp \
             else "completions"
+        self._sync_kind_box()
         self._remap()
         return self
+
+    def _sync_kind_box(self):
+        """Show the auto-detected / loaded kind in the Data box without re-triggering set_kind."""
+        try:
+            self.kind_box.blockSignals(True)
+            self.kind_box.setCurrentIndex(1 if self.kind == "production" else 0)
+            self.kind_box.blockSignals(False)
+        except Exception:
+            pass
 
     def set_preset(self, preset):
         self.preset = preset
@@ -174,6 +184,7 @@ class EngineeringImportDialog(QtWidgets.QDialog):
 
     def apply_saved(self, d):
         self.kind = d.get("kind", self.kind)
+        self._sync_kind_box()
         self.mapping = {k: v for k, v in d.get("mapping", {}).items() if v in self.headers}
         self.units.update(d.get("units", {}))
         self._refresh_form()

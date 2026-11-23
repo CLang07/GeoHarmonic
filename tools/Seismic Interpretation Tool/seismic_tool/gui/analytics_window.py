@@ -83,11 +83,11 @@ class AnalyticsWindow(QtWidgets.QDialog):
         self.b_csv.clicked.connect(lambda *_: self._load_csv_dialog())
         self.b_eng.clicked.connect(lambda *_: self._engineering_dialog())
         self.b_zone.clicked.connect(lambda: self.add_zone(self.zone.currentText()))
-        self.b_explore.clicked.connect(lambda: self._show(self.explore()))
-        self.b_train.clicked.connect(lambda *_: self._train_clicked())
-        self.b_map.clicked.connect(lambda: self.predict_map())
-        self.b_report.clicked.connect(lambda *_: self._report_dialog())
-        self.b_qc.clicked.connect(lambda *_: self._qc_dialog())
+        self.b_explore.clicked.connect(lambda *_: self._guarded(lambda: self._show(self.explore()), 'Explore'))
+        self.b_train.clicked.connect(lambda *_: self._guarded(lambda: self._train_clicked(), 'Train'))
+        self.b_map.clicked.connect(lambda *_: self._guarded(lambda: self.predict_map(), 'Predict map'))
+        self.b_report.clicked.connect(lambda *_: self._guarded(lambda: self._report_dialog(), 'Report'))
+        self.b_qc.clicked.connect(lambda *_: self._guarded(lambda: self._qc_dialog(), 'Model QC'))
 
     # ------------------------------------------------------------ data
     def wells(self):
@@ -186,8 +186,13 @@ class AnalyticsWindow(QtWidgets.QDialog):
 
     def train(self, inputs, target, model_name="gbm", cv=CVS[0]):
         t = self.table or self.build_table()
+        inputs = [c for c in inputs if c != target]  # the target as an input would leak (R2 ~ 1)
+        if not inputs:
+            raise ValueError("choose at least one input other than the target")
         y = t.cols[target]
         ok = np.isfinite(y)
+        if ok.sum() < 2:
+            raise ValueError(f"only {int(ok.sum())} wells have a value for {target}")
         X = prep.impute(t.matrix(inputs)[ok], "median")
         y = y[ok]
         ids = np.array(t.ids)[ok]
@@ -347,6 +352,14 @@ class AnalyticsWindow(QtWidgets.QDialog):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "HTML report", self.project.base(), "HTML (*.html)")
         if path:
             self.report(path)
+
+    def _guarded(self, fn, what):
+        """Run a button action; errors go to the output box instead of disappearing on stderr."""
+        try:
+            return fn()
+        except Exception as e:
+            self._show(f"{what} failed: {e}")
+            return None
 
     def _show(self, text):
         self.out.setPlainText(str(text))

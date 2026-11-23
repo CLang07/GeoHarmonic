@@ -218,7 +218,7 @@ class App:
         ax = self.ax_wig; ax.clear()
         a, b, _, _ = P.tie_traces(t)
         bc = apply_correction(b, dt, t["shift"], t["phase"], t["gain"])
-        i0, i1 = int(w[0] / dt), int(w[1] / dt); tt_ = np.arange(i0, i1) * dt
+        i1 = min(int(w[1] / dt), len(a), len(b)); i0 = min(int(w[0] / dt), max(0, i1 - 2)); tt_ = np.arange(i0, i1) * dt
         m = max(np.abs(a[i0:i1]).max(), np.abs(b[i0:i1]).max(), 1e-12)
         ax.plot(a[i0:i1] / m, tt_, "k", lw=0.9); ax.plot(b[i0:i1] / m, tt_, color="#d9480f", lw=0.9, alpha=0.85)
         ax.plot(a[i0:i1] / m + 2.4, tt_, "k", lw=0.9); ax.plot(bc[i0:i1] / m + 2.4, tt_, color="#1c64d6", lw=0.9, alpha=0.85)

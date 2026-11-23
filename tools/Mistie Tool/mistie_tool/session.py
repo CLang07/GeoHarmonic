@@ -66,7 +66,11 @@ class Session:
 
     def _change(self, fn):
         before = self.state()
-        fn()
+        try:
+            fn()
+        except Exception:
+            self._apply_state(before)  # a failure half-way must not leave some ties changed without an undo step
+            raise
         self.undo_stack.append(before)
         del self.undo_stack[:-self.MAX_UNDO]
         self.redo_stack.clear()

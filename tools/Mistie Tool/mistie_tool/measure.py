@@ -41,6 +41,7 @@ def measure_mistie(a, b, dt, window, max_lag_ms=40.0):
     L = max(1, int(max_lag_ms / 1000 / dt))
     full = np.correlate(aw, bw, mode="full")
     mid = len(bw) - 1
+    L = min(L, mid)  # lags beyond the window length would wrap the slice (bogus +/- max-lag shifts)
     seg = np.abs(hilbert(full))[mid - L: mid + L + 1]      # envelope: shift independent of phase
     k = int(np.argmax(seg))
     frac = 0.0

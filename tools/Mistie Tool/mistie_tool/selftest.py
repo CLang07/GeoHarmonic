@@ -61,6 +61,14 @@ def run(verbose=True):
     rt = back.data.shape == P.lines["L2"].data.shape and back.fmt == 5
     ok &= rt
     msgs.append(f"corrected SEG-Y write/read round trip {'ok' if rt else 'FAIL'}")
+    # a max lag longer than half the window must not wrap the lag axis (was a bogus -max-lag shift)
+    from .measure import measure_mistie
+    a = earth
+    b = fourier_shift(earth, -8.0 / 1000 / dt)
+    sh = measure_mistie(a, b, dt, (1.0, 1.4), 600.0)[0]  # lag > window: was -600 ms
+    good = abs(abs(sh) - 8.0) < 1.5
+    ok &= good
+    msgs.append(f"short window with a long max lag: shift {sh:+.1f} ms (|8|) {'ok' if good else 'FAIL'}")
     if verbose:
         print("\n".join(msgs)); print("SELFTEST", "PASSED" if ok else "FAILED", "(files in", d + ")")
     return ok

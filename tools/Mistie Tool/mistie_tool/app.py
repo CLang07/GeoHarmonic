@@ -277,7 +277,8 @@ class MistieApp:
     def _keys(self):
         r = self.root
         r.bind_all("<Control-z>", lambda e: self.undo()); r.bind_all("<Control-y>", lambda e: self.redo())
-        r.bind_all("<Control-Z>", lambda e: self.redo()); r.bind_all("<Control-s>", lambda e: self.save())
+        r.bind_all("<Control-Shift-Z>", lambda e: self.redo())
+        r.bind_all("<Control-Z>", lambda e: self.undo())  # Caps Lock on: still undo; r.bind_all("<Control-s>", lambda e: self.save())
         r.bind_all("<Control-o>", lambda e: self.open_dialog())
         keymap = {"n": lambda: self.step(1), "p": lambda: self.step(-1), "w": self.next_worst,
                   "a": lambda: self.use_selected("auto"), "o": lambda: self.use_selected("on"), "x": lambda: self.use_selected("off"),
@@ -305,6 +306,16 @@ class MistieApp:
         except Exception as ex:
             traceback.print_exc()
             messagebox.showerror("Mistie Tool", f"{type(ex).__name__}: {ex}")
+
+    def _guard_ok(self, fn):
+        """Like _guard, but True only when fn ran without an error (a failed save must not count as saved)."""
+        try:
+            fn()
+            return True
+        except Exception as ex:
+            traceback.print_exc()
+            messagebox.showerror("Mistie Tool", f"{type(ex).__name__}: {ex}")
+            return False
 
     def confirm_discard(self):
         if self.S and self.S.dirty:
@@ -366,7 +377,9 @@ class MistieApp:
             return False
         if not self.S.path:
             return self.save_as()
-        self._guard(self.S.save); self.add_recent(self.S.path); self.refresh_status(); return True
+        if not self._guard_ok(self.S.save):
+            return False
+        self.add_recent(self.S.path); self.refresh_status(); return True
 
     def save_as(self):
         if not self.S:
@@ -376,7 +389,9 @@ class MistieApp:
                                          filetypes=[("Mistie project", "*.mistie.json")])
         if not p:
             return False
-        self._guard(lambda: self.S.save(p)); self.add_recent(p); self.refresh_status(); return True
+        if not self._guard_ok(lambda: self.S.save(p)):
+            return False
+        self.add_recent(p); self.refresh_status(); return True
 
     def export_csv(self):
         if not self.S:
@@ -609,6 +624,8 @@ class MistieApp:
         idx = self.selected_idxs(); self.edit(lambda: self.S.reset_windows(idx))
 
     def copy_window(self):
+        if not self.S:  # no project open
+            return
         w = list(self.S.P.ties[self.cur]["window"]); idx = self.selected_idxs()
         self.edit(lambda: self.S.set_window(idx, w))
 
@@ -622,19 +639,27 @@ class MistieApp:
             self.edit(lambda: self.S.set_window(idx, d.result))
 
     def reject_worst(self):
+        if not self.S:  # no project open
+            return
         i = self.edit(self.S.reject_worst)
         t = self.S.P.ties[i] if i is not None else None
         self.status.config(text=f"Excluded {t['a']} x {t['b']}" if t else "Worst tie not excluded: it is the only link for a line")
 
     def auto_reject(self):
+        if not self.S:  # no project open
+            return
         out = self.edit(self.S.auto_reject) or []
         messagebox.showinfo("Auto-reject", ("Excluded:\n" + "\n".join(f"{self.S.P.ties[i]['a']} x {self.S.P.ties[i]['b']}" for i in out))
                             if out else "No auto tie is far enough out of line to reject.")
 
     def all_auto(self):
+        if not self.S:  # no project open
+            return
         self.edit(self.S.all_auto)
 
     def set_solve_by(self):
+        if not self.S:  # no project open
+            return
         v = self.solve_by.get()
         if v == "survey" and len(set(self.S.survey_of.values())) == len(self.S.names):
             messagebox.showinfo("Surveys", "Every line is its own survey. Add \"survey\": \"NAME\" to the lines in the project's config "
@@ -875,7 +900,7 @@ class MistieApp:
         S, t, dt = self.S, self.S.P.ties[self.cur], self.S.P.dt
         a, b, _, _ = S.P.tie_traces(t); w = t["window"]
         bc = apply_correction(b, dt, t["shift"], t["phase"], t["gain"])
-        i0, i1 = int(w[0] / dt), int(w[1] / dt); tt = np.arange(i0, i1) * dt
+        i1 = min(int(w[1] / dt), len(a), len(b)); i0 = min(int(w[0] / dt), max(0, i1 - 2)); tt = np.arange(i0, i1) * dt
         m = max(np.abs(a[i0:i1]).max(), np.abs(b[i0:i1]).max(), 1e-12)
         self.ov_fig.clear(); ax = self.ov_fig.add_subplot(111)
         ax.plot(a[i0:i1] / m, tt, "k", lw=0.9); ax.plot(b[i0:i1] / m, tt, color="#d9480f", lw=0.9, alpha=0.85)

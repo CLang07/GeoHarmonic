@@ -44,18 +44,30 @@ def main(argv=None):
         except ImportError:
             print("tkinter not available - using the basic matplotlib viewer")
     from .project import Project
-    if json.load(open(a.config)).get("format") == "mistie_tool project":
+    S = None
+    with open(a.config) as fh:
+        is_session = json.load(fh).get("format") == "mistie_tool project"
+    if is_session:
         from .session import Session
         S = Session(a.config); P = S.P
     else:
         P = Project(a.config)
     print(f"{len(P.names)} lines, {len(P.ties)} ties, dt {P.dt * 1000:.1f} ms, reference {P.ref}")
     if a.batch:
-        P.solve()
-        if a.auto_reject:
-            for line in P.auto_reject():
-                print("  " + line)
-        P.solve(); out = P.save()
+        if S is not None:  # a saved project: same solve as the GUI (locked lines, per-survey grouping)
+            S.solve()
+            if a.auto_reject:
+                for i in S.auto_reject():
+                    t = P.ties[i]
+                    print(f"  rejected tie {t['a']} x {t['b']}")
+            S.solve()
+        else:
+            P.solve()
+            if a.auto_reject:
+                for line in P.auto_reject():
+                    print("  " + line)
+            P.solve()
+        out = P.save()
         s = P.summary()
         print(f"RMS mistie {s['before_ms']:.1f} -> {s['after_ms']:.1f} ms, {s['before_deg']:.0f} -> {s['after_deg']:.0f} deg "
               f"({s['n_used']}/{s['n_ties']} ties used)")

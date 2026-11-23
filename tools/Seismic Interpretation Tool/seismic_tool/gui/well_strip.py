@@ -58,7 +58,8 @@ class WellStrip(QtWidgets.QWidget):
         if "section" in d:
             sec = d["section"][rng]
             t = d["times"]
-            img = pg.ImageItem(np.nan_to_num(sec, nan=0.0))
+            # the app uses imageAxisOrder="row-major": rows are y (time), so transpose (n_md, ns) -> (ns, n_md)
+            img = pg.ImageItem(np.nan_to_num(sec, nan=0.0).T)
             clip = float(np.nanpercentile(np.abs(sec), 99)) if np.isfinite(sec).any() else 1.0
             img.setLookupTable(colormaps.lut(colormaps.NAMES[0]))
             img.setLevels([-clip, clip])

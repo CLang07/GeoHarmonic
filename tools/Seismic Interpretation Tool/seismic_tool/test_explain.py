@@ -93,4 +93,11 @@ def run_gui(check, tmp):
     r2 = win.train(["H1 time", "H2 time"], "Porosity", "gbm", "group 5-fold")
     rep = win.report(os.path.join(tmp, "an.html"))
     check("shap" in r2 and os.path.getsize(rep) > 1000, "analytics: GBM + SHAP + HTML report")
+    r3 = win.train(["H1 time", "Porosity"], "Porosity", "linear", "leave one well out")
+    try:
+        win.train(["Porosity"], "Porosity", "linear", "leave one well out")
+        only_target = False
+    except ValueError:
+        only_target = True
+    check(only_target and r3["r2"] < 0.99, "analytics: the target is never used as its own input (no leak)")
     return True

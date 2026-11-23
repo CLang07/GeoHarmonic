@@ -22,6 +22,8 @@ def _png(project, out):
     import numpy as np
     from .project import SeisProject
     p = SeisProject.open(project)
+    if not (p.lines or p.volumes):
+        raise SystemExit(f"{project}: no 3D volumes or 2D lines to render")
     fig, axes = plt.subplots(1, len(p.lines) + len(p.volumes), figsize=(7 * (len(p.lines) + len(p.volumes)), 6),
                              squeeze=False)
     k = 0
@@ -63,6 +65,8 @@ def main(argv=None):
             _info(a)
         return
     if argv and argv[0] == "--png":
+        if len(argv) < 3:
+            raise SystemExit("usage: --png PROJECT OUT.png")
         _png(argv[1], argv[2])
         return
     try:
