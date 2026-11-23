@@ -136,7 +136,11 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `test_velocity.py`.
 - `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
   (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
-  Correlation zones)), `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
+  Correlation zones)), `engineering` (13a+: ALIASES/PRESETS column mapping + prefix fallback, unit detection
+  lb/t, bbl/m3/gal, ft/m; completion_table, spacing_features (nn spacing, child flag), qc_flags, monthly_series,
+  production_features (cums, BOE, IP30/90, GOR, WC, per-1000 ft, Arps fit + EUR), fracfocus_estimates,
+  allocate_lease), `synthetic.make` (known geology + completion effects; also dev/make_synthetic_engineering.py),
+  `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
   Pearson/Spearman, vif, pca, regression_line). `test_analytics.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`

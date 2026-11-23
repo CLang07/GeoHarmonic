@@ -48,3 +48,6 @@
   domain, test_velocity.py. Tests PASS.
 - Item 13 PARTIAL - 13a done: analytics package (attribute table, joins by API/name, zone stats, missing
   values, kNN/median imputation, scaling, outliers, Pearson/Spearman, VIF, PCA, regression lines). Tests PASS.
+- 13a+ done: engineering/production import (presets, unit detection), completion + spacing + parent/child,
+  production features (cums, IP, GOR, WC, Arps + EUR within 0.0% on synthetic), FracFocus, lease allocation,
+  synthetic data set generator (dev/make_synthetic_engineering.py). Tests PASS.
