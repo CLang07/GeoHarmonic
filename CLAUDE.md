@@ -8,7 +8,7 @@ and `docs/PLAN.md` (ordered work) before changing anything.
 1. Read `docs/RUNLOG.md` (latest entry at the bottom) and `docs/PLAN.md`. Do the FIRST plan item whose
    status is `todo` (or finish one marked `partial`). When an item is finished, tested, committed and
    pushed, continue with the next item in the same run. Keep going until the plan is done, you have
-   worked about 4 hours of wall-clock time (then stop so runs never overlap), or usage runs out.
+   worked about 3.5 hours of wall-clock time (then stop so runs never overlap; runs start every 4-5 h), or usage runs out.
    Quality rule still applies: each item fully tested before moving on.
 1a. Checkpoint often - usage can run out without warning: commit + push `dev` after every finished item,
    and at least every ~45 minutes during a long item (mark it `partial` in PLAN.md with a note of what is
