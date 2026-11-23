@@ -44,4 +44,6 @@
   residual map, tie table CSV, corrected SEG-Y export. Item 10 DONE. Tests PASS.
 - Item 11 DONE - seismic attributes (v0.12.0): attributes.py, panel on-the-fly attributes, attribute volumes,
   curvature maps, test_attributes.py. Tests PASS; NPRA R-2 coherence/envelope/frequency look sensible (2.6 s).
-- Working on PLAN item 12 next.
+- Item 12 DONE - velocity model + depth conversion (v0.13.0): velocity.py, gui/velocity_dialog.py, panel Depth
+  domain, test_velocity.py. Tests PASS.
+- Working on PLAN item 13 next.

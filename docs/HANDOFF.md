@@ -128,6 +128,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   interpolation), `section_attribute(vol, name, mode, number)` (reads +/-1 inline/xline or a +/-48-sample
   time slab), `line_attribute`, `compute_volume` (inline blocks with halo -> new store + project volume
   "<vol> [<attr>]"), `horizon_curvature(MapGrid, kind, velocity)`. Panel ATTRS includes them. `test_attributes.py`.
+- `velocity.py` (v0.13): `VelocityModel(project, key, [(horizon, formation|None)], residual_correction)`:
+  `time_grids`, `well_table` (vint per layer at wells), `build` (IDW of vint, cumulative depth, optional residual
+  grid), `depth_grid(k)`, `velocity_grid(k)`, `misfit_table`, `depth_of_time(x, y, times)`, `section_to_depth`,
+  `to_dict`/`from_dict` (stored in project.display["velocity_model"]). Panel domain "Depth" (`depth_on`,
+  `_to_depth`, generic `_ymap` used for horizon conversion in Wheeler and Depth). `gui/velocity_dialog.py`,
+  `test_velocity.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

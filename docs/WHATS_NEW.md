@@ -34,6 +34,15 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.13.0 - Velocity model + depth conversion (PLAN item 12)
+- Interpret > Velocity model: layer cake from horizons + well tops (or time-depth), gridded interval
+  velocities, depth maps, well misfit table + CSV, optional residual correction; Depth domain on sections.
+- Tests (3 synthetic wells, laterally varying layer-1 velocity): layer-2 velocity exact, well misfit 0.05 m,
+  H2 depth everywhere within 1.3% (median), residual correction 0.00 m at wells, depth section reflector within
+  4 m of the model depth.
+- Known limits: inverse-distance velocity gridding (no kriging / trends); depth display converts the shown
+  section only (no depth volume yet); below the deepest horizon the last layer velocity continues.
+
 ## Seismic v0.12.0 - Seismic attributes (PLAN item 11)
 - On-the-fly attributes in the display box (complex trace, RMS, coherence, dip-steered coherence, spectral
   bands) for any section; Interpret > Compute attribute volume (new project volume); horizon curvature/dip maps.

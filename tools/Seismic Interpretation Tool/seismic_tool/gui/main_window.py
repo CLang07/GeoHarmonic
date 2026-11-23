@@ -213,6 +213,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&Well tie (synthetic seismogram)...", self.well_tie)
         self._act(m, "Horizon &maps (structure, isochron, amplitude, depth)...", self.horizon_maps, "Ctrl+M")
         self._act(m, "M&istie analysis (2D-3D, 2D-2D)...", self.mistie_analysis)
+        self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -595,6 +596,17 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg._changed()
         dlg.exec()
         self.section.redraw()
+        return dlg
+
+    def velocity_model(self):
+        if not self.project.horizons.items or not self.project.well_project:
+            QtWidgets.QMessageBox.information(self, "Velocity model", "Needs horizons and a linked well project "
+                                              "(with tops or time-depth).")
+            return None
+        from .velocity_dialog import VelocityDialog
+        dlg = VelocityDialog(self.project, self.basemap, self, lambda: self.section.redraw())
+        dlg.show()
+        self._velocity_dialog = dlg
         return dlg
 
     def mistie_analysis(self):

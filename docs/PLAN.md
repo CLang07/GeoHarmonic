@@ -94,7 +94,7 @@ Kingdom-like interaction; large data.
      instantaneous phase/frequency (Hilbert via numpy FFT), RMS amplitude, coherence/semblance, dip-steered
      variance, curvature on horizons, spectral decomposition (short-window FFT bands). Attribute picker in
      the section panel.
-12. **Velocity model + depth conversion** - status: todo
+12. **Velocity model + depth conversion** - status: done (run 1, 2026-11-23; v0.13.0)
    - Interval/average velocity from well time-depth pairs + horizons (layer-cake), gridded; convert
      horizons and sections to depth; well misfit table.
 13. **Analytics (Transform-style + modern data-science workflow)** - status: todo

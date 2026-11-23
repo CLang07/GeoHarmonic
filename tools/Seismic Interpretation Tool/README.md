@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.12: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties, attributes
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.13: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties, attributes, velocity model + depth
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -154,6 +154,15 @@ Starter projects:
 - **Interpret > Compute attribute volume**: writes a full volume (background job) added to the project as
   `<volume> [<attribute>]` - view it, pick on it, map it, extract it on horizons like any volume.
 - Horizon maps: **Curvature / dip** (mean, Gaussian, most +/-, dip, azimuth) with a velocity for time -> depth.
+
+## Velocity model and depth conversion (Interpret > Velocity model)
+- Layer cake: tick the horizons (ordered by time) and link each to a formation top in the well project (or
+  leave "(time-depth at the wells)"). Interval velocity per layer at every well = 2 x thickness / isochron,
+  gridded between wells; depth = sum of V x dt / 2. Optional residual correction ties the wells exactly.
+- **Well misfit** table (well, horizon, z well, z model, residual) + CSV export; **depth map** of a layer on
+  the basemap (export it from the Horizon maps window or as XYZ/CPS-3 via the map tools).
+- **Use for depth display**: the domain box gets **Depth** - inlines, crosslines and 2D lines converted to
+  depth (TVDSS, m) with horizons and well tops in depth.
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.

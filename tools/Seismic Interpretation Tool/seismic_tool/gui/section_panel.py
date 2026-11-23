@@ -11,7 +11,7 @@ from .. import faults as flt  # noqa: E402
 from .. import horizons as hz  # noqa: E402
 
 MODES = ["Inline", "Crossline", "Time slice", "Stratal slice"]
-DOMAINS = ["Time", "Wheeler"]
+DOMAINS = ["Time", "Wheeler", "Depth"]
 from ..attributes import ATTRIBUTES as _SEIS_ATTRS  # noqa: E402
 
 ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity", "RGT"] + list(_SEIS_ATTRS)
@@ -104,6 +104,7 @@ class SectionPanel(QtWidgets.QWidget):
         self._ctr_items = []
         self._well_items = []
         self._wheeler = None
+        self._ymap = None
         self._stratal_surface = None
         self.modeChanged = []  # callbacks(mode) when pick/fault/rgt mode switches
         self._flt_items = []
@@ -308,8 +309,11 @@ class SectionPanel(QtWidgets.QWidget):
                 l = self.project.line(name)
                 arr = l.data().T  # (ns, ntr)
                 x, y, xl, yl = l.cdp, l.times, "CDP", "TWT (ms)"
+            self._ymap = None
             if self.wheeler_on():
                 arr, y, yl = self._to_wheeler(arr)
+            elif self.depth_on():
+                arr, y, yl = self._to_depth(arr)
         except Exception as e:
             self.cursorInfo.emit(f"Could not read data: {e}")
             return
@@ -354,6 +358,8 @@ class SectionPanel(QtWidgets.QWidget):
             t += f"  [{self.attr}{' ms/trace' if 'dip' in self.attr else ''}]"
         if self.wheeler_on():
             t += "  [Wheeler]"
+        if self.depth_on():
+            t += "  [Depth]"
         self.plot.setTitle(t)
 
     # ------------------------------------------------------------ RGT views (Wheeler, stratal slices)
@@ -363,6 +369,50 @@ class SectionPanel(QtWidgets.QWidget):
 
     def wheeler_on(self):
         return self.domain == "Wheeler" and (self.source[0] == "2D" or self.mode in ("Inline", "Crossline"))
+
+    def depth_on(self):
+        return self.domain == "Depth" and (self.source[0] == "2D" or self.mode in ("Inline", "Crossline"))
+
+    def velocity_model(self):
+        """The project's velocity model (Interpret > Velocity model), cached; None if not defined."""
+        d = self.project.display.get("velocity_model") if self.project else None
+        if not d:
+            return None
+        key = repr(d)
+        cache = self.__dict__.setdefault("_vm_cache", {})
+        if key not in cache:
+            from ..velocity import VelocityModel
+            cache.clear()
+            cache[key] = VelocityModel.from_dict(self.project, d).build()
+        return cache[key]
+
+    def section_xy(self):
+        """Map positions (x, y) of the traces of the section shown."""
+        kind, name = self.source
+        if kind == "2D":
+            l = self.project.line(name)
+            return l.x, l.y
+        v = self.project.volume(name)
+        if self.mode == "Inline":
+            return v.xy(np.full(v.nxl, self.number), v.xlines)
+        return v.xy(v.inlines, np.full(v.nil, self.number))
+
+    def _to_depth(self, arr):
+        vm = self.velocity_model()
+        if vm is None:
+            raise RuntimeError("no velocity model - Interpret > Velocity model")
+        kind, name = self.source
+        times = self.project.volume(name).times if kind == "3D" else self.project.line(name).times
+        x, y = self.section_xy()
+        zt = vm.depth_of_time(x, y, times)
+        dz = max(1.0, float(np.nanmedian(np.diff(zt, axis=1))))
+        z = np.arange(0.0, float(np.nanmax(zt)) + dz / 2, dz)
+        out = np.full((len(z), arr.shape[1]), np.nan, np.float32)
+        for j in range(arr.shape[1]):
+            if np.all(np.isfinite(zt[j])):
+                out[:, j] = np.interp(z, zt[j], arr[:, j], left=np.nan, right=np.nan)
+        self._ymap = (zt, times)
+        return out, z, "Depth TVDSS (m)"
 
     def _rgt_folder(self, kind, name):
         return os.path.join(self.project.volume(name).store, "rgt") if kind == "3D" else \
@@ -411,6 +461,7 @@ class SectionPanel(QtWidgets.QWidget):
         levels = self.wheeler_levels(tau)
         amp, _ = wheeler(np.asarray(arr, np.float32).T, tau, levels, times)
         self._wheeler = (tau, times, levels)
+        self._ymap = (tau, times)
         return amp, levels, "RGT (relative geologic time)"
 
     def _stratal(self):
@@ -561,7 +612,7 @@ class SectionPanel(QtWidgets.QWidget):
     def trace_at(self, xval):
         """(i, j) grid indices of the trace nearest to section x value, or None (time/stratal slice, Wheeler)."""
         kind, name = self.source
-        if self.wheeler_on() or self.mode == "Stratal slice":
+        if self.wheeler_on() or self.depth_on() or self.mode == "Stratal slice":
             return None
         if kind == "2D":
             cdp = self.project.line(name).cdp
@@ -722,9 +773,16 @@ class SectionPanel(QtWidgets.QWidget):
             try:
                 td = ws.td_for(wn)
                 w = ws.well(wn)
-                tops = [(fm, t, ws.formation_color(fm)) for fm, t in ws.tops_twt(wn).items()]
-                z_td = w.md_to_tvdss(w.td) if w.td else td.z[-1]
-                out.append({"name": wn, "x": xv, "dist": dist, "t_top": 0.0, "t_bottom": float(td.twt(z_td)),
+                z_td = float(w.md_to_tvdss(w.td)) if w.td else float(td.z[-1])
+                if self.depth_on():  # depth display: tops at their TVDSS
+                    md_tops = (ws.wcp.tops or {}).get(wn, {})
+                    tops = [(fm, float(w.md_to_tvdss(md)), ws.formation_color(fm)) for fm, md in md_tops.items()
+                            if md is not None]
+                    bottom = z_td
+                else:
+                    tops = [(fm, t, ws.formation_color(fm)) for fm, t in ws.tops_twt(wn).items()]
+                    bottom = float(td.twt(z_td))
+                out.append({"name": wn, "x": xv, "dist": dist, "t_top": 0.0, "t_bottom": bottom,
                             "tops": sorted(tops, key=lambda a: a[1]), "td_source": td.source})
             except Exception:
                 continue
@@ -815,7 +873,7 @@ class SectionPanel(QtWidgets.QWidget):
     def rgt_contours(self):
         """[(x values, times)] of the horizon-stack levels on the current time-domain section."""
         from ..rgt.stack import load_stack_2d
-        if not self.source or self.wheeler_on() or self.mode in ("Time slice", "Stratal slice"):
+        if not self.source or self.wheeler_on() or self.depth_on() or self.mode in ("Time slice", "Stratal slice"):
             return []
         kind, name = self.source
         try:
@@ -976,7 +1034,8 @@ class SectionPanel(QtWidgets.QWidget):
         'cut' (pairs of points, surface intersection), 'stick' (polyline) or 'new' (stick being drawn)."""
         fs = self.fset()
         out = []
-        if fs is None or not self.source or self._data is None or self.wheeler_on() or self.mode == "Stratal slice":
+        if fs is None or not self.source or self._data is None or self.wheeler_on() or self.depth_on() or \
+                self.mode == "Stratal slice":
             return out
         kind, name = self.source
         for f in fs.items:
@@ -1048,7 +1107,7 @@ class SectionPanel(QtWidgets.QWidget):
             return
         if kind == "3D" and self.mode == "Stratal slice":
             return
-        wh = self.wheeler_on() and self._wheeler is not None
+        wh = (self.wheeler_on() or self.depth_on()) and self._ymap is not None
         for h in hs.items:
             if not h.visible:
                 continue
@@ -1062,8 +1121,8 @@ class SectionPanel(QtWidgets.QWidget):
                 c = hz.section_curve(h, key, surv, self.mode, self.number)
                 if c is None or not np.isfinite(c[1]).any():
                     continue
-                if wh:  # horizon time -> RGT on each trace
-                    tau, times, _ = self._wheeler
+                if wh:  # horizon time -> RGT (Wheeler) or depth on each trace
+                    tau, times = self._ymap
                     tk = (np.asarray(c[1], float) - times[0]) / (times[1] - times[0])
                     ok = np.isfinite(tk)
                     tk = np.clip(np.where(ok, tk, 0), 0, len(times) - 1.000001)
