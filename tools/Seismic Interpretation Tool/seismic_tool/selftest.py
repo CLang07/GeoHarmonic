@@ -234,6 +234,9 @@ def run_gui():
         from . import test_basin
         os.makedirs(os.path.join(tmp, "basingui"))
         test_basin.run_gui(check, os.path.join(tmp, "basingui"))
+        from . import test_inversion
+        os.makedirs(os.path.join(tmp, "invgui"))
+        test_inversion.run_gui(check, os.path.join(tmp, "invgui"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

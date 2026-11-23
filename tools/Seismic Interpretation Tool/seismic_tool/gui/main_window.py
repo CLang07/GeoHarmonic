@@ -242,6 +242,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
         self._act(m, "Well &prognosis / geosteering...", self.prognosis)
         self._act(m, "&Basin model (burial, thermal, maturity, Wheeler)...", self.basin_model)
+        self._act(m, "Seismic &inversion (LFM, post-stack, pre-stack)...", self.inversion)
         self._act(m, "&Analytics (attribute table, models, SHAP)...", self.analytics)
         self._act(m, "&Dashboard (wells, laterals coloured by attribute)...", self.dashboard)
         m.addSeparator()
@@ -787,6 +788,20 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg = VelocityDialog(self.project, self.basemap, self, changed)
         dlg.show()
         self._velocity_dialog = dlg
+        return dlg
+
+    def inversion(self):
+        from .inversion_dialog import InversionDialog
+        src = self.section.source
+        vol = src[1] if src and src[0] == "3D" else None
+
+        def new_volumes(names):
+            if self.project.path:
+                self.project.save()
+            self._refresh()
+        dlg = InversionDialog(self.project, self, self.run_job, new_volumes, vol)
+        dlg.show()
+        self._inversion_dialog = dlg
         return dlg
 
     def basin_model(self):

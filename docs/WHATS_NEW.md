@@ -52,6 +52,16 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
     d. Maps tab: Run map at a deep surface (every 10 nodes) -> %Ro / temperature / oil-window entry on the basemap,
        Export CPS-3; Colour Wheeler (age) by %Ro; Event chart (source surface + trap ages).
 
+12. **Seismic inversion (item 19, v0.32-v0.35)** - Maui 3D (or a subset) + NZ wells with ties saved:
+    a. Interpret > Seismic inversion: Low-frequency model tab - select the framework horizons, "Pick from seismic
+       spectrum", tick ai (and vs, rho for pre-stack), Build LFM; look at "<vol> [LFM AI]" on an inline.
+    b. Post-stack tab: Set wavelet (Ricker or your Well-tie library wavelet, scaled at the wells), Run inversion
+       (model-based, then blocky), QC at well, Blind-well test; Coloured inversion for a quick relative AI.
+       Start with a small subset - the model-based run costs ~5-10 ms per trace (about 2 h per million traces).
+    c. Pre-stack tab only if you have partial angle stacks (none in the public Maui data): add each stack with
+       its mean angle, Run simultaneous inversion -> Zp, Zs, density, Vp/Vs, lambda-rho, mu-rho.
+    d. Cross-plot / export tab: Zp vs Vp/Vs coloured by "log: GR"; Export SEG-Y and load it in Kingdom/Petrel.
+
 ## Known limits (all items)
 - Long jobs (RGT, stacks, attributes, import) have a Cancel button (new in v0.17 - test it);
   autotracking of a whole 3D runs in the GUI thread (wait cursor).
@@ -59,6 +69,10 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
   pinch to zero; 2D RGT edits do not propagate through ties.
 - Wells drawn vertical at the surface location; tie = one shift + one stretch.
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
+- Inversion (item 19): tested on synthetics only (no real-data inversion in the repo - the Maui 3D is not imported
+  and there are no partial stacks); 3D volumes only (2D lines not yet); model-based ~5-10 ms per trace (CG on the
+  CPU), pre-stack ~3x that; one wavelet for the whole volume (no time-variant wavelet); no anisotropy / NMO stretch
+  corrections for the angle stacks; the LFM uses the wells' tied time-depth (save your ties first).
 - Basin model (item 18): ages in the Taranaki template are approximate; conductivity is not temperature-dependent;
   no isostasy / tectonic subsidence back-calculation; one lithology mix per zone (no vertical variation inside a
   zone); map pseudo-wells use the regional heat-flow history (no heat-flow map yet unless typed in code); kinetics
@@ -69,6 +83,25 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
   V0/k); depth-to-time of a grid samples the model on a 1 ms TWT grid.
 
 ## Change log (newest first)
+
+## Seismic v0.32.0-v0.35.0 - Seismic inversion package (PLAN item 19)
+- **Low-frequency model** (v0.32): Vp, Vs, density and AI of every tied well blocked onto the seismic time axis
+  (despiked; Gardner density / Castagna Vs where missing), interpolated through the structural framework -
+  proportional / parallel-to-top / parallel-to-base between horizons, or along RGT stack levels - laterally by IDW or
+  simple kriging (or scaled to a velocity-volume trend), in ln(value) so the model stays positive; zero-phase
+  Butterworth low-pass with the cut picked from the seismic spectrum; stored as a volume "<vol> [LFM AI]".
+- **Post-stack** (v0.33): coloured inversion (operator = well AI spectrum trend / smoothed seismic spectrum, -90
+  degrees, scaled at the wells) and model-based inversion in ln AI (conjugate gradients with FFT convolutions,
+  Tikhonov to the LFM or blocky L1 / TV by IRLS, optional lateral smoothing), wavelet scaled at the wells,
+  residual NRMS, leave-one-well-out blind test.
+- **Pre-stack simultaneous** (v0.34): partial angle stacks with their mean angles, Fatti linearisation with the
+  wells' ln Zs / ln rho vs ln Zp background trends; Zp, Zs, density, Vp/Vs, lambda-rho, mu-rho volumes in one pass.
+- **Interpret > Seismic inversion** window (v0.35): LFM, wavelet, post-stack, pre-stack, QC at a well (log / LFM /
+  inversion, seismic / synthetic), blind-well table, cross-plots coloured by a volume or a well log, SEG-Y export.
+  Inversion volumes (AI, Zp, ...) are shown with a positive rainbow colour range.
+- Synthetic checks: blind-trace AI within 2.2 % in the seismic band (LFM alone 6.5 %), 2.7 % with 15 % noise, blocky
+  earth 0.7 % (Tikhonov 1.0 %), coloured inversion r = 0.93 with the band-limited truth, simultaneous inversion Zp
+  2.3 %, Zs 3.9 %, Vp/Vs 2.2 %, density 0.9 %.
 
 ## Seismic v0.27.0-v0.31.0 - Basin model integrated with the Wheeler diagram (PLAN item 18)
 - **Age table** (v0.27): one row per dated surface (age of the surface, hiatus "gap" below it, eroded metres,

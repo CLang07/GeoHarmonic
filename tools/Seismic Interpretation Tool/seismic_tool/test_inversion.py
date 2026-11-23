@@ -40,7 +40,7 @@ def seismic_of(ai, wavelet):
     return out.reshape(r.shape).astype(np.float32)
 
 
-def inversion_project(tmp, name="inv"):
+def inversion_project(tmp, name="inv", x0=500000.0, y0=6000000.0):
     """Seismic project with volume 'S' = convolutional synthetic of the earth (Ricker 25 Hz), horizons H1 / H2."""
     from .project import SeisProject
     from .synth import write_3d
@@ -51,7 +51,7 @@ def inversion_project(tmp, name="inv"):
     os.makedirs(d, exist_ok=True)
     wav = ricker(25.0, DT)
     cube = seismic_of(E["ai"], wav)
-    write_3d(os.path.join(d, "s.sgy"), cube)
+    write_3d(os.path.join(d, "s.sgy"), cube, x0=x0, y0=y0)
     store = os.path.join(d, "s_seismic", "S")
     import_3d(os.path.join(d, "s.sgy"), store)
     sp = SeisProject()
@@ -230,7 +230,7 @@ def run_poststack(check, tmp, sp=None, E=None):
 ANGLES = [("Near", 8.0), ("Mid", 18.0), ("Far", 28.0)]
 
 
-def add_angle_stacks(sp, E, tmp):
+def add_angle_stacks(sp, E, tmp, x0=500000.0, y0=6000000.0):
     """Angle stacks (Aki-Richards, Ricker 25 Hz) of the earth as volumes Near / Mid / Far."""
     from .synth import write_3d
     from .tie import angle_synthetics
@@ -244,7 +244,7 @@ def add_angle_stacks(sp, E, tmp):
             g, _ = angle_synthetics(E["vp"][i, j], E["vs"][i, j], E["rho"][i, j], angs, E["wavelet"])
             cubes[:, i, j] = g.T
     for k, (name, _) in enumerate(ANGLES):
-        write_3d(os.path.join(d, f"{name}.sgy"), cubes[k])
+        write_3d(os.path.join(d, f"{name}.sgy"), cubes[k], x0=x0, y0=y0)
         store = os.path.join(d, "s_seismic", name)
         import_3d(os.path.join(d, f"{name}.sgy"), store)
         sp.volumes.append({"name": name, "store": store, "segy": ""})
@@ -305,6 +305,126 @@ def run_prestack(check, tmp, sp=None, E=None):
     check(np.allclose(lrb, zpb ** 2 - 2 * zsb ** 2, rtol=5e-3, atol=1e-3 * np.abs(lrb).max()),
           "lambda-rho = Zp^2 - 2 Zs^2")
     return sp, E
+
+
+def well_project_for(sp, E, tmp, x0, y0):
+    """Well Correlation project with 4 wells at WELL_IJ: DT / DTS / RHOB / GR logs in depth from the earth at the
+    well's trace, checkshot = the true time-depth; linked to the seismic project."""
+    from .test_welltie import LAT, LON
+    from .welltie import wc
+    wc()
+    from well_correlation.geo import tm_forward
+    from well_correlation.selftest import _write_las
+    d = os.path.join(os.path.dirname(sp.path), "wells_data")
+    hdr = ["Well,UWI,Latitude,Longitude,Elevation_m,Elev_Ref,TD_m"]
+    lon_m = 1.0 / (111320.0 * np.cos(np.radians(LAT)))
+    t = E["t"]
+    for k, (i, j) in enumerate(WELL_IJ):
+        lat, lon = LAT + 25.0 * i / 110950.0, LON + 25.0 * j * lon_m
+        x, y = tm_forward(lat, lon)
+        ii, jj = int(round((y - y0) / 25.0)), int(round((x - x0) / 25.0))
+        vp, vs, rho = E["vp"][ii, jj], E["vs"][ii, jj], E["rho"][ii, jj]
+        z = np.r_[0.0, np.cumsum(0.5 * (vp[1:] + vp[:-1]) * DT / 2000.0)]
+        md = np.arange(z[np.searchsorted(t, 250.0)], z[np.searchsorted(t, 1450.0)], 0.1524) + 25.0
+        zz = md - 25.0
+        tt = np.interp(zz, z, t)
+        logs = {"DT": 304800.0 / np.interp(tt, t, vp), "DTS": 304800.0 / np.interp(tt, t, vs),
+                "RHOB": np.interp(tt, t, rho), "GR": 60 + 40 * (np.interp(tt, t, E["zone"][ii, jj]) == 1) +
+                np.random.default_rng(k).normal(0, 3, len(tt))}
+        name = f"W-{k}"
+        wd = os.path.join(d, "wells", name, "las")
+        os.makedirs(wd)
+        _write_las(os.path.join(wd, f"{name}.las"), name, md, logs,
+                   {"DT": "US/F", "DTS": "US/F", "RHOB": "G/C3", "GR": "GAPI"})
+        cs = os.path.join(d, "wells", name, "checkshot")
+        os.makedirs(cs)
+        with open(os.path.join(cs, "cs.csv"), "w") as fh:
+            fh.write("TVD_SRD_m,TWT_ms\n" + "\n".join(f"{a:.2f},{b:.3f}" for a, b in zip(z[::10], t[::10])))
+        hdr.append(f"{name},{k},{lat},{lon},25.0,KB,3000")
+    with open(os.path.join(d, "wells_header.csv"), "w") as fh:
+        fh.write("\n".join(hdr) + "\n")
+    P = wc().project.Project
+    p = P.from_folder(d)
+    wpath = os.path.join(d, "inv.wcproj.json")
+    p.save(wpath)
+    sp.well_project = wpath
+    sp.save()
+    return wpath
+
+
+def run_gui(check, tmp):
+    """19d: Interpret > Seismic inversion window on a synthetic earth with LAS wells + checkshots."""
+    from .gui.main_window import MainWindow
+    from .segy import SegyFile
+    from .test_welltie import LAT, LON
+    from .welltie import wc
+    wc()
+    from well_correlation.geo import tm_forward
+    x0, y0 = (round(v) for v in tm_forward(LAT, LON))
+    sp, E = inversion_project(tmp, "invgui", x0, y0)
+    well_project_for(sp, E, tmp, x0, y0)
+    add_angle_stacks(sp, E, tmp, x0, y0)
+    sp.save()
+    w = MainWindow(sp.path)
+    w.section.source = ("3D", "S")
+    dlg = w.inversion()
+    dlg.run_job_fn = None  # the Qt mock has no event loop: run jobs inline
+    check(dlg.vol_name == "S", "19d: Seismic inversion window opens on the shown volume")
+    curves = dlg.load_curves()
+    vol = w.project.volume("S")
+    errs = []
+    for c in curves:
+        il, xl = vol.ilxl_at(c.x, c.y)
+        i, j = vol.il_index(il), vol.xl_index(xl)
+        m = np.isfinite(c.values["ai"]) & (vol.times > 320) & (vol.times < 1400)
+        errs.append(np.percentile(np.abs(c.values["ai"][m] / E["ai"][i, j][m] - 1), 95))
+    check(len(curves) == 4 and max(errs) < 0.03, f"19d: 4 wells' AI in time from LAS + checkshot (P95 "
+          f"{100 * max(errs):.1f} % from the earth; blocking at the zone steps)")
+    fc = dlg.auto_fc()
+    names = dlg.build_lfm(("ai", "vs", "rho"), ["H1", "H2"], fc=8.0)
+    check(names == ["S [LFM AI]", "S [LFM VS]", "S [LFM RHO]"] and set(dlg.lfm_names) == {"ai", "vs", "rho"},
+          f"19d: LFM volumes for AI, Vs, density (auto cut {fc:.1f} Hz offered)")
+    dlg.set_wavelet("Ricker", 25.0, scale=True)
+    check(abs(dlg.wavelet_k - 1.0) < 0.1, f"19d: Ricker wavelet scaled at the wells (k = {dlg.wavelet_k:.3f})")
+    out = dlg.run_poststack("model-based", None, lam=0.02)
+    check(out == ["S [AI model-based]"], "19d: model-based inversion volume")
+    qc = dlg.qc_at_well("W-1")
+    check(qc["error_pct"] < 4.0 and qc["nrms"] < 30.0, f"19d: QC at W-1: {qc['error_pct']:.1f} % AI error, residual "
+          f"NRMS {qc['nrms']:.0f} %")
+    rows = dlg.blind_test(0.02, ["H1", "H2"], 8.0)
+    check(len(rows) == 4 and np.median([r["error_pct"] for r in rows]) < 4.0,
+          "19d: blind-well test table (" + ", ".join(f"{r['error_pct']:.1f} %" for r in rows) + ")")
+    out_b = dlg.run_poststack("blocky (L1)", None, lam=0.002, mu=0.005)
+    out_c = dlg.run_poststack("coloured")
+    check(out_b == ["S [AI blocky]"] and out_c == ["S [Relative AI (coloured)]"], "19d: blocky and coloured runs")
+    try:
+        dlg.run_prestack()
+        ok = False
+    except RuntimeError as e:
+        ok = "angle stacks" in str(e)
+    check(ok, "19d: pre-stack needs two or more stacks")
+    for n, a in ANGLES:
+        dlg.add_stack(n, a)
+    out_p = dlg.run_prestack()
+    check(len(out_p) == 6 and "Near [SI VpVs]" in out_p, "19d: simultaneous inversion -> 6 volumes")
+    cp = dlg.crossplot("Near [SI Zp]", "Near [SI VpVs]", "log: GR")
+    hi = cp["c"] > 80
+    check(len(cp["x"]) > 100 and cp["c"] is not None and np.median(cp["y"][hi]) < np.median(cp["y"][~hi]),
+          "19d: Zp vs Vp/Vs cross-plot coloured by GR (high-GR zone has the lower Vp/Vs here)")
+    cp2 = dlg.crossplot("S [AI model-based]", "S [LFM AI]", "Near [SI Density]")
+    check(len(cp2["x"]) > 1000 and len(cp2["c"]) == len(cp2["x"]), "19d: cross-plot coloured by a volume")
+    path = dlg.export_segy("S [AI model-based]", os.path.join(tmp, "ai.sgy"))
+    sf = SegyFile(path)
+    tr = sf.traces(0, 1)[0]
+    v = w.project.volume("S [AI model-based]")
+    check(np.allclose(tr, np.asarray(v.ilxl[0, 0], np.float32) * v.inv, rtol=1e-6),
+          "19d: SEG-Y export of the AI volume reads back")
+    sec = w.section
+    sec.source, sec.mode, sec.number, sec.domain = ("3D", "S [AI model-based]"), "Inline", int(vol.inlines[15]), "Time"
+    sec.redraw()
+    lo, hi_ = w.section.color_levels()
+    check(lo > 1000 and hi_ > lo, f"19d: AI volume displayed with a positive colour range ({lo:.0f}-{hi_:.0f})")
+    return True
 
 
 def run(check, tmp):

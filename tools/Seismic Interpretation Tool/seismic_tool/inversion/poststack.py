@@ -62,11 +62,18 @@ def synthetic_ln(z, w):
 
 def scale_wavelet(w, seismic, ai):
     """Scale factor k with seismic ~ k * (w * r(ai)) at a well (least squares on finite samples) -> k w."""
-    ok = np.isfinite(ai) & (ai > 0) & np.isfinite(seismic)
-    z = np.log(np.where(ok, ai, 1.0))
+    ai = np.asarray(ai, float)
+    good = np.isfinite(ai) & (ai > 0)
+    if good.sum() < len(w):
+        raise ValueError("log too short to scale the wavelet")
+    idx = np.arange(len(ai))
+    z = np.interp(idx, idx[good], np.log(ai[good]))  # constant outside the log: no edge reflection
     syn = synthetic_ln(z[None, :], w)[0]
-    m = ok.copy()
-    m[1:] &= ok[:-1]
+    h = len(w) // 2
+    i0, i1 = np.nonzero(good)[0][[0, -1]]
+    m = np.zeros(len(ai), bool)
+    m[i0 + h:i1 - h + 1] = True
+    m &= np.isfinite(seismic)
     k = float(np.sum(syn[m] * seismic[m]) / max(1e-12, np.sum(syn[m] ** 2)))
     return np.asarray(w, float) * k, k
 

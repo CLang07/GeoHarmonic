@@ -178,3 +178,56 @@ def well_elastic(well, td, dt_ms, t_axis=None, despike=True, gardner=(0.31, 0.25
         out[key] = np.where(inside, v, np.nan)
     out["ai"] = out["vp"] * out["rho"]
     return out
+
+
+def export_segy(vol, path, progress=None, cancel=None, note=""):
+    """Write a 3D volume (physical values, IEEE float) as SEG-Y: inline 189 / 9, crossline 193 / 21, X / Y 181 / 185
+    (scalar -100), sample interval from the volume. Written to <path>.part first (Cancel leaves nothing)."""
+    from ..scenarios import _text_header
+    ns = vol.ns
+    dt_us = int(round(vol.dt * 1e6))
+    tmp = path + ".part"
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(_text_header([f"GEO TOOL KIT SEISMIC INTERPRETATION TOOL - {note}",
+                                   f"TIME DOMAIN: {ns} SAMPLES, {dt_us} US, START {vol.t0 * 1000:g} MS",
+                                   "INLINE BYTES 189 + 9, CROSSLINE 193 + 21, CDP X/Y 181/185 SCALAR -100 (BYTE 71)",
+                                   "FORMAT 5 IEEE FLOAT, BIG ENDIAN"]))
+            b = bytearray(400)
+            b[16:18] = dt_us.to_bytes(2, "big")
+            b[20:22] = ns.to_bytes(2, "big")
+            b[24:26] = (5).to_bytes(2, "big")
+            b[28:30] = (1).to_bytes(2, "big")
+            b[54:56] = (1).to_bytes(2, "big")
+            fh.write(bytes(b))
+            for n, il in enumerate(vol.inlines):
+                if cancel is not None and cancel():
+                    raise RuntimeError("cancelled")
+                data = np.nan_to_num(vol.inline(il)).astype(">f4")
+                xls = vol.xlines
+                x, y = vol.xy(np.full(vol.nxl, il), xls)
+                th = np.zeros((vol.nxl, 240), np.uint8)
+
+                def put(byte, vals, size=4):
+                    th[:, byte - 1:byte - 1 + size] = np.asarray(vals, f">i{size}").view(np.uint8).reshape(vol.nxl,
+                                                                                                         size)
+                put(1, n * vol.nxl + np.arange(1, vol.nxl + 1))
+                put(9, np.full(vol.nxl, int(il)))
+                put(21, np.asarray(xls, np.int64))
+                put(189, np.full(vol.nxl, int(il)))
+                put(193, np.asarray(xls, np.int64))
+                put(181, np.rint(np.asarray(x) * 100).astype(np.int64))
+                put(185, np.rint(np.asarray(y) * 100).astype(np.int64))
+                put(71, np.full(vol.nxl, -100), 2)
+                put(115, np.full(vol.nxl, ns), 2)
+                put(117, np.full(vol.nxl, dt_us), 2)
+                fh.write(np.concatenate([th, data.view(np.uint8).reshape(vol.nxl, -1)], axis=1).tobytes())
+                if progress:
+                    progress((n + 1) / vol.nil, f"SEG-Y inline {il}")
+        if os.path.exists(path):
+            os.remove(path)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return path

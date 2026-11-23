@@ -203,6 +203,22 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   {prop, t_eval}). `gui/basin_dialog.BasinDialog` (set_entry, use_template, lithology_from_wells, save, run_well,
   calibrate(well, obs), run_map(surface, stride, threaded), show_map, export_cps3, depth_changed (MainWindow.ddc_tick),
   colour_wheeler, event_chart). Tests: `test_basin.py` (run_chrono/burial/thermal/maps, run_gui_chrono/basin).
+- `inversion/` (item 19, v0.32-0.35): `common.py` (`butterworth_response` / `butter_filter` (FFT, zero phase, mirror
+  pad), `amplitude_spectrum`, `pick_lowcut`, `write_volume` / `write_volumes` (several stores from one pass, scaled
+  float16 like attribute volumes, registered '<vol> [<name>]', cancel removes them), `well_elastic` (vp/vs/rho/ai on
+  the seismic axis with td.twt = tied time), `export_segy`); `lfm.py` (WellCurve, `fill_grid`, `strat_coords` (zone +
+  u per sample), `lateral_weights` (IDW / simple kriging, linear in the values), `LFM` (ln-domain, per-zone interp of
+  each well along u, global ln-trend fallback, optional trend ratio), `lowpass`, `well_curves`, `horizon_grids`,
+  `VolumeLFM` (horizons or RGT coordinates, traces / compute / write)); `poststack.py` (`ConvOp` 'same' FFT
+  convolution + adjoint, D / DT (r = half ln difference, lower sample), `synthetic_ln`, `scale_wavelet`,
+  `invert_traces` (CG over a trace block, IRLS for L1, lateral smoothing), `residual_nrms`, coloured inversion
+  (`well_spectrum_slope`, `coloured_operator` smoothed over 10 Hz, `ci_scale`), `band_error`, `PostStack`,
+  `Coloured`, `blind_well_test`); `prestack.py` (`fatti_coeffs`, `fit_background`, `invert_prestack`, `derived`,
+  `PreStack` -> 6 volumes). Panel: module `_positive_volume` -> rainbow percentile levels for meta["inversion"]
+  kinds lfm / model-based / simultaneous. `gui/inversion_dialog.InversionDialog` (load_curves, auto_fc, build_lfm,
+  set_wavelet, run_poststack, blind_test, qc_at_well, add_stack / run_prestack, crossplot (volume or 'log: GR'),
+  export_segy; `run_job_fn=None` runs inline). Tests: `test_inversion.py` (earth(): known elastic earth on a time grid,
+  run_lfm / run_poststack / run_prestack, run_gui with LAS wells + checkshots + angle stacks).
 - `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
   (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
   Correlation zones)), `engineering` (13a+: ALIASES/PRESETS column mapping + prefix fallback, unit detection

@@ -221,6 +221,50 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - No code changed.
 - Next: PLAN item 18a.
 
-## 2026-11-23 - run 4 (scheduled, started 22:18 UTC) - IN PROGRESS
-- PLAN item 18 (basin model + Wheeler) DONE, v0.27.0-v0.31.0 (18a age table + age Wheeler, 18b burial, 18c thermal +
-  maturity, 18d pseudo-well maps / Wheeler colouring / event chart, 18e Basin model window). Item 19: 19a low-frequency model (v0.32.0), 19b post-stack coloured + model-based inversion (v0.33.0), 19c pre-stack simultaneous inversion (v0.34.0) done; working on 19d.
+## 2026-11-23 - run 4 (scheduled, 22:18-23:12 UTC) - PLAN items 18 and 19 finished (last open items)
+- Item 18 Basin model integrated with the Wheeler diagram (v0.27.0-v0.31.0), new package seismic_tool/basin:
+  - 18a age table (Taranaki template for the Maui formations - approximate ages, editable), RGT stack levels dated by
+    interpolation between dated horizons, section domain "Wheeler (age)" with labelled hiatus gaps, zone lithology from
+    the well logs.
+  - 18b burial history: Athy decompaction per lithology mix, irreversible compaction, erosion events, paleo water depth.
+  - 18c thermal: transient conduction on the moving burial grid (constant / piecewise / McKenzie heat flow), BHTs from
+    LAS and DLIS headers (Horner / single-BHT correction, implausible gradients flagged), heat-flow calibration;
+    maturity: EASY%Ro, Lopatin TTI, kerogen TR (Pepper & Corvi kinetics), oil / gas window timing.
+  - 18d batched pseudo-wells (~5,000 columns in ~3 s): maps of T / %Ro / TR / oil-window entry at a surface, Wheeler
+    coloured by T / %Ro / TR / porosity today or at a past age, restored sections, petroleum-system event chart.
+  - 18e Interpret > Basin model window; the map re-runs when the dynamic depth model (item 17) changes.
+- Item 19 Seismic inversion (v0.32.0-v0.35.0), new package seismic_tool/inversion:
+  - 19a LFM from the tied wells through the horizon / RGT framework (IDW, kriging, trend-guided), Butterworth low-pass
+    with the cut picked from the seismic spectrum, stored as a volume.
+  - 19b coloured inversion; model-based ln-AI inversion (CG, Tikhonov or blocky IRLS, lateral smoothing), wavelet scaled
+    at the wells, residual NRMS, blind-well test.
+  - 19c pre-stack simultaneous inversion of partial angle stacks (Fatti + well background trends) -> Zp, Zs, density,
+    Vp/Vs, lambda-rho, mu-rho.
+  - 19d Interpret > Seismic inversion window (LFM, wavelet, post / pre-stack, QC plots, blind-well table, cross-plots
+    coloured by a volume or a well log, SEG-Y export); inversion volumes get a positive rainbow colour range.
+- Files: seismic_tool/basin/{__init__,chrono,burial,thermal,maturity,pseudowells,model}.py, seismic_tool/inversion/
+  {__init__,common,lfm,poststack,prestack}.py, gui/basin_dialog.py, gui/inversion_dialog.py (new); gui/section_panel.py
+  (Wheeler (age) domain, basin colouring, inversion colours), gui/main_window.py (2 menu items, ddc_tick hook),
+  selftest.py, test_basin.py, test_inversion.py (new), __init__.py; docs PLAN, HANDOFF, WHATS_NEW, RUNLOG.
+- Tests: seismic_tool --selftest PASS (498 checks, ~90 new), --guitest under the Qt mock PASS (216, ~30 new),
+  well_correlation --selftest PASS, mistie_tool --selftest PASS. Key results: steady-state geotherm = analytic
+  (< 0.001 degC), heat-flow fit recovers 65.00 mW/m2, EASY%Ro = independent quadrature, grain thickness conserved,
+  batched pseudo-wells = single-column model; inversion blind-trace AI error 2.2 % in band (LFM alone 6.5 %), 2.7 %
+  with 15 % noise, simultaneous Zp 2.3 % / Zs 3.9 % / Vp/Vs 2.2 %. Real data: BHTs read from 8 NZ wells (Tui-1 DLIS
+  116 degC at 3911 m); Maui-5 / 7 and Tui-1 burial + %Ro runs (present %Ro ~0.5-0.65 at Kapuni level).
+- Known limitations: no real Qt window opened; Taranaki ages approximate; calibrated Maui heat flow ~35-38 mW/m2 with
+  the default (Sclater-Christie) shale conductivity - lower than published ~55-65, so the default shale matrix k is
+  probably too low for these mudstones (edit LITHOLOGY or the age-table lithology); no temperature-dependent
+  conductivity, isostasy or heat-flow maps; inversion tested on synthetics only, 3D only (no 2D lines), ~5-10 ms per
+  trace (pre-stack ~3x), one stationary wavelet, no partial stacks in the public data.
+- What Chris should test first:
+  1. Pull dev; `python -m seismic_tool --selftest` and `--guitest` with real PySide6.
+  2. Interpret > Basin model on the NZ project: check / edit the age table, set horizon names, Save; Wells tab: Maui-5
+     Run well, Calibrate heat flow to BHT.
+  3. An inline in "Wheeler (age)" (needs RGT + two dated horizons), then Maps tab: Colour Wheeler by %Ro; Run map at a
+     deep surface (needs the item-17 depth model) and Export CPS-3.
+  4. Interpret > Seismic inversion on a small Maui subset with tied wells: Build LFM (AI), Set wavelet (library),
+     Run model-based, QC at well, Blind-well test.
+  5. Export the AI volume as SEG-Y and load it in Kingdom/Petrel.
+- Next: PLAN has no todo/partial items left. "Later (Chris back)" items remain (PC benchmark, Maui 3D subset, mistie
+  with the 2D lines, Tui-1/Amokura-1 wells).

@@ -694,6 +694,10 @@ class SectionPanel(QtWidgets.QWidget):
             return (float(a.min()), float(max(a.max(), a.min() + 1e-6))) if a.size else (0.0, 1.0)
         if self.attr == "Inst. phase":
             return -180.0, 180.0
+        if self.attr == "Seismic" and _positive_volume(self):
+            a = self._level_sample()
+            a = a[np.isfinite(a)] if a.size else a
+            return (float(np.percentile(a, 1)), float(np.percentile(a, 99))) if a.size else (0.0, 1.0)
         if self.attr in ("Envelope", "Inst. frequency", "RMS amplitude") or self.attr.startswith("Spectral"):
             a = self._level_sample()
             return (float(np.percentile(a, 1)), float(np.percentile(a, 99))) if a.size else (0.0, 1.0)
@@ -710,7 +714,7 @@ class SectionPanel(QtWidgets.QWidget):
             return
         cmap = self.cmap_combo.currentText()
         age = getattr(self, "_age", None)
-        if age and age.get("prop") and self.age_on():
+        if (age and age.get("prop") and self.age_on()) or (self.attr == "Seismic" and _positive_volume(self)):
             cmap = "Rainbow (attributes)"
         elif self.attr != "Seismic":
             cmap = "Grey" if (self.attr == "Planarity" or self.attr.startswith("Coherence")) else \
@@ -1331,3 +1335,15 @@ class _One:
     def __init__(self, f, stick):
         self.sticks = [stick]
         self.name = f.name
+
+
+def _positive_volume(panel):
+    """True for a 3D inversion result with positive values (LFM, AI, Zp ... not relative AI)."""
+    src = getattr(panel, "source", None)
+    if not src or src[0] != "3D" or getattr(panel, "project", None) is None:
+        return False
+    try:
+        inv = panel.project.volume(src[1]).meta.get("inversion") or {}
+    except Exception:
+        return False
+    return inv.get("kind") in ("lfm", "model-based", "simultaneous") and "LambdaRho" not in src[1]
