@@ -43,6 +43,15 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
     f. Depth-convert the Maui volume to SEG-Y (Cancel works) and load it in Kingdom/Petrel as depth (dz in the
        header is in mm = 1 "ms" per m); a depth CPS-3 grid -> time.
 
+11. **Basin model (item 18, v0.27-v0.31)** - NZ well project + Maui horizons with RGT, depth model from item 17:
+    a. Interpret > Basin model: the Taranaki age template appears (approximate ages - check them); type your seismic
+       horizon names in the "horizon" column; Lithology from wells; Save to project.
+    b. Section domain box "Wheeler (age)" on an inline with two dated horizons: vertical axis in Ma, hiatus labels.
+    c. Wells tab: Maui-5 > Run well (burial / temperature / %Ro curves), Calibrate heat flow to BHT (BHTs come from
+       the LAS / DLIS headers, Horner where two runs exist), compare with your own maturity data.
+    d. Maps tab: Run map at a deep surface (every 10 nodes) -> %Ro / temperature / oil-window entry on the basemap,
+       Export CPS-3; Colour Wheeler (age) by %Ro; Event chart (source surface + trap ages).
+
 ## Known limits (all items)
 - Long jobs (RGT, stacks, attributes, import) have a Cancel button (new in v0.17 - test it);
   autotracking of a whole 3D runs in the GUI thread (wait cursor).
@@ -50,11 +59,43 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
   pinch to zero; 2D RGT edits do not propagate through ties.
 - Wells drawn vertical at the surface location; tie = one shift + one stretch.
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
+- Basin model (item 18): ages in the Taranaki template are approximate; conductivity is not temperature-dependent;
+  no isostasy / tectonic subsidence back-calculation; one lithology mix per zone (no vertical variation inside a
+  zone); map pseudo-wells use the regional heat-flow history (no heat-flow map yet unless typed in code); kinetics
+  parameters are approximate published values; maturity of a growing unit follows each sediment particle (Wheeler)
+  but the surface maps use the top of the unit.
 - Depth model (item 17): the what-if / drilled-top pseudo wells carry the model's own interval velocity below
   their top; T-D-function layers ignore what-if wells; P10/P90 come from the blind-test spread (no Monte-Carlo on
   V0/k); depth-to-time of a grid samples the model on a 1 ms TWT grid.
 
 ## Change log (newest first)
+
+## Seismic v0.27.0-v0.31.0 - Basin model integrated with the Wheeler diagram (PLAN item 18)
+- **Age table** (v0.27): one row per dated surface (age of the surface, hiatus "gap" below it, eroded metres,
+  lithology fractions of the zone below, role). Taranaki template for the Maui formations (approximate published
+  ages - edit them). Lithology per zone from the well logs (Vsh lithology of the Well Correlation Tool).
+- **Wheeler (age)** domain: RGT stack levels get ages by interpolation between dated horizons (jump at an
+  unconformity); hiatus / pinch-out gaps are blank and labelled "hiatus 22.0-30.0 Ma (8.0 My)".
+- **Burial history** (v0.28): backstripping with Athy porosity (Sclater & Christie per lithology, mixed by fractions),
+  compaction never undone on uplift, erosion events (eroded section deposited in the first half of the hiatus, removed
+  in the second), paleo water depth; burial curves CSV.
+- **Thermal + maturity** (v0.29): transient 1D conduction on the moving burial grid (basement slab, heat flow at its
+  base: constant, piecewise or McKenzie rift), bulk conductivity from lithology + porosity, radiogenic heat.
+  Heat-flow calibration to BHTs read from LAS (~P BHT/MRT, BLI, TCS/TLAB, temperature curves) and DLIS parameters
+  (Tui-1), Horner when two logging runs share a depth, rule-of-thumb correction otherwise, implausible gradients
+  flagged. EASY%Ro, Lopatin TTI, kerogen transformation ratio (Pepper & Corvi organofacies kinetics), oil / gas
+  window timing.
+- **Pseudo-wells** (v0.30): the 1D model on many columns at once (all columns of a map run as one numpy batch:
+  ~5,000 pseudo-wells in ~3 s) - maps of present temperature, %Ro, TR and oil-window entry at any surface;
+  Wheeler coloured by temperature / %Ro / TR / porosity of the sediment of each age, today or at any past age;
+  restored burial section at an age; petroleum-system event chart (PNG).
+- **Interpret > Basin model** window (v0.31): age table, heat flow + calibration plot, per-well burial / temperature /
+  %Ro plots, map runs (threaded, Cancel) with CPS-3 export, "Re-run when the depth model changes" (with View >
+  Auto-update depth model), Wheeler colouring, event chart.
+- Real-data check: BHTs read from Maui-5/6/7, Rahi-1, Kiwi-1 (annular temperature curve), Maui-4 (TEMP curve) and
+  Tui-1 DLIS (116 degC at 3911 m); calibrated Maui present heat flow ~35-38 mW/m2 with the default (Sclater & Christie)
+  shale properties - lower than published Taranaki values (~55-65), i.e. the default shale conductivity is probably
+  too low for these silty mudstones; present %Ro 0.5-0.65 at the Kapuni level.
 
 ## Seismic v0.26.0 - Dynamic depth conversion, part 5: scenarios + uncertainty (PLAN item 17e; item 17 done)
 - Velocity model dialog, new rows: **Save scenario** (name) keeps the current model settings in the project

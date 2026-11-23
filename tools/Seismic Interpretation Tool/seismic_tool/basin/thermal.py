@@ -53,6 +53,8 @@ def heat_flow_history(ages, spec):
     if np.ndim(spec) == 0:
         return np.full(ages.shape, float(spec))
     arr = np.asarray(spec, float)
+    if arr.ndim == 1 and arr.shape == ages.shape:  # already a series on these ages
+        return arr.copy()
     o = np.argsort(arr[:, 0])
     return np.interp(ages, arr[o, 0], arr[o, 1])
 

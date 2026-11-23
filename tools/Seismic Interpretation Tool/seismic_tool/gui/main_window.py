@@ -173,6 +173,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._job = None
         self._velocity_dialog = None
         self._prognosis_dialog = None
+        self._basin_dialog = None
         # dynamic depth conversion (View > Auto-update depth model): file watcher + 1 s debounce + 2 s poll
         self.ddc_auto = False
         self._ddc_debounce = QtCore.QTimer(self)
@@ -240,6 +241,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "M&istie analysis (2D-3D, 2D-2D)...", self.mistie_analysis)
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
         self._act(m, "Well &prognosis / geosteering...", self.prognosis)
+        self._act(m, "&Basin model (burial, thermal, maturity, Wheeler)...", self.basin_model)
         self._act(m, "&Analytics (attribute table, models, SHAP)...", self.analytics)
         self._act(m, "&Dashboard (wells, laterals coloured by attribute)...", self.dashboard)
         m.addSeparator()
@@ -313,6 +315,12 @@ class MainWindow(QtWidgets.QMainWindow):
                     dlg.model_refreshed(dlg.ddm.last)
             if self._prognosis_dialog is not None:
                 self._prognosis_dialog.update(rep)
+            if self._basin_dialog is not None:
+                try:
+                    if self._basin_dialog.depth_changed():
+                        self.statusBar().showMessage(rep["message"] + " - basin map re-run", 15000)
+                except Exception as e:
+                    self.statusBar().showMessage(f"Basin map update failed: {e}", 10000)
         return rep
 
     def _act(self, menu, text, fn, key=None):
@@ -779,6 +787,13 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg = VelocityDialog(self.project, self.basemap, self, changed)
         dlg.show()
         self._velocity_dialog = dlg
+        return dlg
+
+    def basin_model(self):
+        from .basin_dialog import BasinDialog
+        dlg = BasinDialog(self.project, self.basemap, self, self.section, self.run_job)
+        dlg.show()
+        self._basin_dialog = dlg
         return dlg
 
     def prognosis(self):

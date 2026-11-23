@@ -117,7 +117,8 @@ class SectionPanel(QtWidgets.QWidget):
         self._ctr_items = []
         self._well_items = []
         self._wheeler = None
-        self._age = None  # age-axis Wheeler: {"model", "axis", "labels", "blank"}
+        self._age = None  # age-axis Wheeler: {"model", "axis", "labels", "blank", "prop"}
+        self.basin_colour = None  # {"prop": temperature|ro|tr|porosity, "t_eval": Ma} colours the age Wheeler
         self._ymap = None
         self._stratal_surface = None
         self.modeChanged = []  # callbacks(mode) when pick/fault/rgt mode switches
@@ -389,6 +390,8 @@ class SectionPanel(QtWidgets.QWidget):
             t += f"  [{self.attr}{' ms/trace' if 'dip' in self.attr else ''}]"
         if self.wheeler_on():
             t += "  [Wheeler, age]" if self.age_on() else "  [Wheeler]"
+            if self.age_on() and self.basin_colour:
+                t += f"  [{self.basin_colour['prop']} at {float(self.basin_colour.get('t_eval', 0)):g} Ma]"
         if self.depth_on():
             t += "  [Depth]"
         self.plot.setTitle(t)
@@ -562,7 +565,19 @@ class SectionPanel(QtWidgets.QWidget):
         axis = C.age_axis(la)
         W, blank = C.wheeler_age(amp, hiatus, la, axis, model.gaps())
         x = self._section_x()
-        self._age = {"model": model, "axis": axis, "blank": blank, "rgts": rgts,
+        prop = None
+        if self.basin_colour:
+            from ..basin import model as BM
+            vm = self.velocity_model()
+            if vm is None:
+                raise RuntimeError("Wheeler colouring needs a depth model (Interpret > Velocity model, Use)")
+            bc = self.basin_colour
+            sx, sy = self.section_xy()
+            P = BM.section_property(vm, table, sx, sy, axis, bc["prop"], float(bc.get("t_eval", 0.0)),
+                                    BM.settings(self.project))
+            W = np.where(blank, np.nan, P).astype(np.float32)
+            prop = bc["prop"]
+        self._age = {"model": model, "axis": axis, "blank": blank, "rgts": rgts, "prop": prop,
                      "labels": C.gap_labels(blank, axis, x, min_my=2.0 * (axis[1] - axis[0]) if len(axis) > 1 else 0)}
         self._ymap = (model(tau), times)
         return W, axis, "Age (Ma)"
@@ -673,6 +688,10 @@ class SectionPanel(QtWidgets.QWidget):
         """(lo, hi) display levels: symmetric percentile clip, or 0..1 for planarity."""
         if self.attr == "Planarity" or self.attr.startswith("Coherence"):
             return 0.0, 1.0
+        age = getattr(self, "_age", None)  # stand-in objects in tests may lack it
+        if age and age.get("prop") and self.age_on():
+            a = self._data[np.isfinite(self._data)]
+            return (float(a.min()), float(max(a.max(), a.min() + 1e-6))) if a.size else (0.0, 1.0)
         if self.attr == "Inst. phase":
             return -180.0, 180.0
         if self.attr in ("Envelope", "Inst. frequency", "RMS amplitude") or self.attr.startswith("Spectral"):
@@ -690,7 +709,10 @@ class SectionPanel(QtWidgets.QWidget):
         if self._img is None or self._data is None:
             return
         cmap = self.cmap_combo.currentText()
-        if self.attr != "Seismic":
+        age = getattr(self, "_age", None)
+        if age and age.get("prop") and self.age_on():
+            cmap = "Rainbow (attributes)"
+        elif self.attr != "Seismic":
             cmap = "Grey" if (self.attr == "Planarity" or self.attr.startswith("Coherence")) else \
                 self.cmap_combo.currentText() if self.attr == "Cosine of phase" else "Rainbow (attributes)"
         self._img.setLookupTable(colormaps.lut(cmap, self.rev_chk.isChecked()))

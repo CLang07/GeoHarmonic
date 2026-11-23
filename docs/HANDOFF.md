@@ -184,6 +184,25 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   depth_to_time_grid. display["ddc_blind"] {survey, sigma, summary} -> PrognosisDialog sigma column. Dialog:
   save_scenario, difference, run_blind_test, probability_map, depth_convert, depth_grid_to_time.
   Tests: `run_scenarios`, `run_gui_scenarios`.
+- `basin/` (item 18, v0.27-0.31): `chrono.py` (AgeTable in display["basin"]["ages"]: entries {name, horizon, age,
+  gap, eroded, role, lith{sand,silt,shale,carbonate,coal}} youngest first, TARANAKI_TEMPLATE, `horizon_rgt`,
+  `anchors_from`, `AgeModel` (piecewise-linear age(tau), duplicated abscissa = jump at unconformities), `level_ages`,
+  `wheeler_age` (levels -> age axis, blank = hiatus / gaps), `gap_labels`, `section_age_model`, `zone_lithology` /
+  `apply_lithology`); `burial.py` (LITHOLOGY table, `mix`, Athy `solid_thickness` / `base_for` (Newton),
+  `column_units` (Overburden unit always present when the top surface is older than 0 Ma; ghost units for erosion),
+  `backstrip` (batched over columns, irreversible compaction via zmax, offset below erosion), `BurialHistory` (one
+  column), `BurialBatch` (B columns, same units), `well_depths`, `velocity_model_depths`); `thermal.py` (Lagrangian
+  nodes n_sub per unit + basement slab, implicit FV, batched `thomas`, `solve(hists|BurialBatch)` -> T, z, phi;
+  `ThermalHistory`, `fit_heat_flow` by superposition, McKenzie, Horner, `las_temperatures` / `dlis_temperatures` /
+  `well_temperatures` / `screen_temperatures`); `maturity.py` (EASY%Ro, TTI, TR kinetics, `crossing_age`,
+  `window_timing`); `pseudowells.py` (`run_columns` chunked batch, `map_run` (stride + bilinear upsample,
+  fingerprint for live update), `material_history` (sediment particle inside a growing unit), `wheeler_property`,
+  `to_traces`, `burial_section`, `event_chart` / `plot_event_chart`); `model.py` (settings in
+  display["basin"]["settings"], well model / calibration, `section_property` for the panel).
+  Panel: domain "Wheeler (age)" (`age_on`, `_to_age`, `section_horizon_times`, `age_labels`, `basin_colour`
+  {prop, t_eval}). `gui/basin_dialog.BasinDialog` (set_entry, use_template, lithology_from_wells, save, run_well,
+  calibrate(well, obs), run_map(surface, stride, threaded), show_map, export_cps3, depth_changed (MainWindow.ddc_tick),
+  colour_wheeler, event_chart). Tests: `test_basin.py` (run_chrono/burial/thermal/maps, run_gui_chrono/basin).
 - `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
   (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
   Correlation zones)), `engineering` (13a+: ALIASES/PRESETS column mapping + prefix fallback, unit detection

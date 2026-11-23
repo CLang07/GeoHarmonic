@@ -450,5 +450,97 @@ def run_gui_chrono(check, tmp):
     return True
 
 
+def run_gui_basin(check, tmp):
+    """18e: Interpret > Basin model window on the item-17 synthetic survey (2 horizons, 6 wells, depth model)."""
+    from .basin import chrono as C
+    from .gui.main_window import MainWindow
+    from .rgt import solve as S
+    from .rgt import stack as K
+    from .test_ddc import LAYERS, _edit_tops, ddc_case, kz_earth
+    sp, G = ddc_case(tmp, "basin18e", kz_earth)
+    w = MainWindow(sp.path)
+    dlg = w.basin_model()
+    check(dlg.table.entries[0]["name"] == "Seabed" and len(dlg.table.entries) == 10 and dlg.grid.rowCount() == 10
+          if isinstance(dlg.grid.rowCount(), int) else dlg.table.entries[0]["name"] == "Seabed",
+          "18e: Basin model window opens with the Taranaki age template")
+    dlg.table = C.AgeTable([{"name": "Seabed", "age": 0.0, "lith": {"shale": 0.8, "sand": 0.2}},
+                            {"name": "Top A", "horizon": "H1", "age": 12.0, "lith": {"sand": 0.6, "shale": 0.4}},
+                            {"name": "Top B", "horizon": "H2", "age": 35.0, "lith": {"shale": 1.0}}])
+    dlg.refresh_table()
+    dlg.set_entry("Top A", gap=2.0)
+    dlg.set_settings(heat_flow={"kind": "constant", "q": 70.0}, surface_t=12.0, water_depth=100.0, step=1.0)
+    dlg.save()
+    check(w.project.display["basin"]["ages"][1]["gap"] == 2.0 and
+          w.project.display["basin"]["settings"]["heat_flow"]["q"] == 70.0, "18e: age table + settings saved in the project")
+    r = dlg.run_well("W-3")
+    names = [row[0] for row in r["rows"]]
+    check(names == ["Seabed", "Top A", "Top B"] and len(dlg.plot_data["burial"]) == 3 and "W-3" in dlg._last_text,
+          "18e: Run well -> burial / temperature / %Ro curves per surface")
+    dlg._safe(lambda: dlg.calibrate("W-3"))
+    check("no usable temperatures" in dlg._last_text, "18e: calibration without BHTs explains why")
+    z = r["burial"].present()[1][-1] + 100.0
+    fit = dlg.calibrate("W-3", obs=[(0.5 * z, 12.0 + 0.5 * z * 0.04), (z, 12.0 + z * 0.04)])
+    q_cal = fit["present_q"]
+    r2 = dlg.run_well("W-3")
+    check(abs(r2["thermal"].q[-1] - q_cal) < 1e-6 and "calibrated" in dlg._last_text and
+          dlg.plot_data["calibration"]["obs"].shape == (2, 2), f"18e: heat flow calibrated to {q_cal:.1f} mW/m2 and "
+          "used for the well")
+    p = dlg.write_burial_csv(os.path.join(tmp, "b.csv"))
+    check(os.path.exists(p), "18e: burial CSV export")
+    # maps need the depth model
+    try:
+        dlg.run_map("Top B", 8, threaded=False)
+        ok = False
+    except RuntimeError as e:
+        ok = "depth model" in str(e)
+    check(ok, "18e: map run without a depth model explains why")
+    vd = w.velocity_model()
+    vd.build("3D:V", LAYERS, False)
+    vd.use()
+    m = dlg.run_map("Top B", 8, threaded=False)
+    g = m["ro"]
+    check(g.z.shape == G["z2"].shape and np.isfinite(g.z).mean() > 0.95 and m["_info"]["valid"] > 0,
+          f"18e: %Ro map at Top B from {m['_info']['columns']} pseudo-wells")
+    deep = np.unravel_index(np.nanargmax(G["z2"]), G["z2"].shape)
+    shallow = np.unravel_index(np.nanargmin(G["z2"]), G["z2"].shape)
+    check(m["temperature"].z[deep] > m["temperature"].z[shallow], "18e: map temperature follows the depth model")
+    check(os.path.exists(dlg.export_cps3(os.path.join(tmp, "ro.cps3"), "ro")), "18e: map CPS-3 export")
+    # live update: a top moves -> depth model rebuilds -> map re-runs
+    dlg.auto_update = True
+    fp0 = dlg.map_result["_info"]["fingerprint"]
+    w.set_ddc(True)
+    _edit_tops(w.project.well_project, lambda t: t["W-3"].__setitem__("Top B", t["W-3"]["Top B"] + 60.0))
+    rep = w.ddc_tick()
+    check(rep is not None and dlg.map_result["_info"]["fingerprint"] != fp0,
+          "18e: basin map re-runs when the dynamic depth model changes")
+    w.set_ddc(False)
+    # Wheeler coloured by %Ro (needs RGT on the volume)
+    vol = w.project.volume("V")
+    rv, _ = S.compute_rgt_3d(vol)
+    K.build_stack_3d(vol, rv, 40)
+    sec = w.section
+    sec.source = ("3D", "V")
+    sec.mode = "Inline"
+    sec.number = int(vol.inlines[20])
+    data = dlg.colour_wheeler("ro", 0.0)
+    fin = data[np.isfinite(data)]
+    check(data is not None and fin.size > 0 and 0.15 < fin.min() and fin.max() < 3.0 and sec._age["prop"] == "ro" and
+          sec.color_levels()[0] >= 0.15, f"18e: Wheeler (age) coloured by %Ro ({fin.min():.2f}-{fin.max():.2f})"
+          if fin.size else "18e: Wheeler coloured by %Ro")
+    dt = dlg.colour_wheeler("temperature", 20.0)
+    ax = sec._age["axis"]
+    check(np.isnan(dt[ax < 19.0]).all() and np.isfinite(dt[ax > 21.0]).any(),
+          "18e: Wheeler temperature at 20 Ma - younger sediment blank")
+    dlg.colour_wheeler("(seismic)")
+    check(sec.basin_colour is None and sec._age is not None and sec._age["prop"] is None,
+          "18e: back to seismic amplitude on the age axis")
+    ch = dlg.event_chart("Top A", (8.0, 4.0), os.path.join(tmp, "ev.png"), well="W-3")
+    check(os.path.exists(os.path.join(tmp, "ev.png")) and any(d["element"] == "trap" for d in ch["events"]) and
+          dlg.table.get("Top A")["role"] == "source", "18e: event chart PNG (source role, trap)")
+    sec.domain = "Time"
+    return True
+
+
 def run_gui(check, tmp):
     run_gui_chrono(check, tmp)
+    run_gui_basin(check, tmp)
