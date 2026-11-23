@@ -202,7 +202,10 @@ Kingdom-like interaction; large data.
    - Test data: synthetic horizontal wells (build section + 2-3 km lateral) through the synthetic 3D
      volume, with synthetic logs and stage CSV; the NZ deviated wells (Maui-5/6/7 surveys) for real
      trajectories. Tests: trajectory colours match the sampled attribute at MD; per-lateral stats correct.
-15. **Scale + hardening** - status: todo
+15. **Scale + hardening** - status: partial (run 1: 15a Cancel button for every threaded job incl. 3D import
+   (partial store removed), `wellindex.py` SQLite well index with grid-bucket spatial queries (10k wells: box query
+   ~1 ms). LEFT: dev/bench.py + docs/BENCHMARKS.md, overview volume for zoomed-out views, wire the well index
+   into basemap/dashboard for >2,000 wells, parallel import, code review pass)
    - Scale targets (Chris wants big datasets): 3D volume 20-50 GB SEG-Y, 1,000+ 2D lines, 10,000 wells,
      1,000 laterals on the dashboard, all responsive on a 16-32 GB RAM PC.
    - Seismic: import in parallel (threads over trace chunks; numpy releases the GIL in I/O/copy), bricked

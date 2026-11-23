@@ -177,6 +177,11 @@ def run_gui(check, tmp):
     check(len(trajs) == 3 and abs(tb.z[-1] - 1000.0) < 1.0 and tb.x[-1] > b.x + 600 and ta.lateral_length() == 0.0
           and abs(ta.z[0] + float(ws.well("A-1").elev or 0)) < 1e-6,
           "wells from the project: deviated (survey, min. curvature) + vertical")
+    from .wellindex import WellIndex
+    ix = WellIndex.from_wellset(ws)
+    hit = ix.in_box(b.x - 1, b.x + 1, b.y - 1, b.y + 1)
+    check(len(ix) == 3 and [h[0] for h in hit] == ["B-1"] and ix.nearest(b.x + 10, b.y, 1)[0][0] == "B-1",
+          "well index from the linked well project")
     win = DashboardWindow(sp)
     win._ws = ws
     from .analytics.table import AttributeTable

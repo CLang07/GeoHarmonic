@@ -33,7 +33,7 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
    orientation (top row first).
 
 ## Known limits (all items)
-- Long jobs (tracking a big 3D, RGT, stacks) run with a progress bar but cancel only by closing the app;
+- Long jobs (RGT, stacks, attributes, import) have a Cancel button (new in v0.17 - test it);
   autotracking of a whole 3D runs in the GUI thread (wait cursor).
 - RGT between node columns is interpolated (fine detail at the node spacing); thin layers below tuning do not
   pinch to zero; 2D RGT edits do not propagate through ties.
@@ -41,6 +41,12 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
 
 ## Change log (newest first)
+
+## Seismic v0.17.0 - Cancel button, well index (PLAN item 15, first part)
+- Every long job (3D import, dip, RGT, attributes, stacks) now has a **Cancel** button next to the progress bar;
+  a cancelled 3D import removes its half-written store.
+- `seismic_tool/wellindex.py`: SQLite index of well headers / tops / log list with spatial buckets (10,000 wells:
+  box query about 1 ms) - groundwork for very large well projects on the map and dashboard.
 
 ## Seismic v0.16.1 - well strip / geosteering view
 - Dashboard > Well strip: log vs MD, TVDSS vs MD with zone top/base, seismic along the wellbore + time path.

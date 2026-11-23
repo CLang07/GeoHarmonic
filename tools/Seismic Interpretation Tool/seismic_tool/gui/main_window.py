@@ -134,6 +134,11 @@ class RGTDialog(QtWidgets.QDialog):
                          max_throw_ms=float(self.throw.value()) or 80.0)
 
 
+def job_cancelled(state):
+    """True when a job ended because the user pressed Cancel."""
+    return bool(state.get("cancel")) and "cancelled" in (state.get("error") or "")
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, path=None):
         super().__init__()
@@ -160,6 +165,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progress.setMaximumWidth(260)
         self.progress.hide()
         self.statusBar().addPermanentWidget(self.progress)
+        self.b_cancel = QtWidgets.QPushButton("Cancel")
+        self.b_cancel.setToolTip("Stop the running job (import, RGT, attributes...) at the next block")
+        self.b_cancel.hide()
+        self.b_cancel.clicked.connect(self.cancel_job)
+        self.statusBar().addPermanentWidget(self.b_cancel)
         self._job = None
 
         self.section.cursorInfo.connect(lambda s: self.statusBar().showMessage(s))
@@ -396,11 +406,12 @@ class MainWindow(QtWidgets.QMainWindow):
         store = os.path.join(self.project.base(), os.path.basename(self.project.path)[:-len(EXT)] + "_seismic",
                              "".join(c if c.isalnum() or c in "-_ " else "_" for c in name))
         args = dict(il_byte=dlg.il.value(), xl_byte=dlg.xl.value(), x_byte=dlg.xb.value(), y_byte=dlg.yb.value())
-        state = {"frac": 0.0, "text": "Starting...", "done": False, "error": None}
+        state = {"frac": 0.0, "text": "Starting...", "done": False, "error": None, "cancel": False}
 
         def work():
             try:
-                import_3d(path, store, progress=lambda f, t: state.update(frac=f, text=t), **args)
+                import_3d(path, store, progress=lambda f, t: state.update(frac=f, text=t),
+                          cancel=lambda: state["cancel"], **args)
             except Exception:
                 state["error"] = traceback.format_exc()
             state["done"] = True
@@ -410,6 +421,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._job = (th, timer, state)
         self.progress.setRange(0, 1000)
         self.progress.show()
+        self.b_cancel.show()
 
         def poll():
             self.progress.setValue(int(state["frac"] * 1000))
@@ -418,7 +430,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 return
             timer.stop()
             self.progress.hide()
+            self.b_cancel.hide()
             self._job = None
+            if state["error"] and job_cancelled(state):
+                self.statusBar().showMessage("Job cancelled", 8000)
+                return
             if state["error"]:
                 QtWidgets.QMessageBox.critical(self, "Import failed", state["error"][-2000:])
                 return
@@ -433,6 +449,14 @@ class MainWindow(QtWidgets.QMainWindow):
         timer.timeout.connect(poll)
         timer.start(250)
         th.start()
+
+    def cancel_job(self):
+        """Ask the running job to stop (it checks between blocks and cleans up its partial output)."""
+        if self._job:
+            self._job[2]["cancel"] = True
+            self.statusBar().showMessage("Cancelling...")
+            return True
+        return False
 
     def run_job(self, label, fn, done=None):
         """Run fn(progress, cancel) in a thread with the status-bar progress bar; done() on success."""
@@ -453,6 +477,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._job = (th, timer, state)
         self.progress.setRange(0, 1000)
         self.progress.show()
+        self.b_cancel.show()
 
         def poll():
             self.progress.setValue(int(state["frac"] * 1000))
@@ -461,7 +486,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 return
             timer.stop()
             self.progress.hide()
+            self.b_cancel.hide()
             self._job = None
+            if state["error"] and job_cancelled(state):
+                self.statusBar().showMessage("Job cancelled", 8000)
+                return
             if state["error"]:
                 QtWidgets.QMessageBox.critical(self, f"{label} failed", state["error"][-2000:])
                 return

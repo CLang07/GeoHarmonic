@@ -28,8 +28,27 @@ def _affine(il, xl, x, y):
 
 
 def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_byte=185, scalar_byte=71,
-              chunk=20000, progress=None):
-    """Scan headers, then write the two float16 stores. progress(fraction, text) is optional."""
+              chunk=20000, progress=None, cancel=None):
+    """Scan headers, then write the two float16 stores. progress(fraction, text) and cancel() -> bool are
+    optional; a cancelled import removes its partial store and raises RuntimeError('cancelled')."""
+    try:
+        return _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel)
+    except RuntimeError as e:
+        if str(e) == "cancelled":
+            for fn in ("data_ilxl.npy", "data_t.npy", "filled.npy", "meta.json"):
+                try:
+                    os.remove(os.path.join(store_dir, fn))
+                except OSError:
+                    pass
+        raise
+
+
+def _check_cancel(cancel):
+    if cancel and cancel():
+        raise RuntimeError("cancelled")
+
+
+def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel):
     f = SegyFile(segy_path)
     if il_byte is None or xl_byte is None:
         g = f.guess_il_xl()
@@ -43,6 +62,7 @@ def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_by
         e = min(n, s + chunk)
         il[s:e] = f.header(il_byte, 4, s, e)
         xl[s:e] = f.header(xl_byte, 4, s, e)
+        _check_cancel(cancel)
         if progress:
             progress(0.1 * e / n, f"Reading headers {e:,}/{n:,}")
     ui, ux = np.unique(il), np.unique(xl)
@@ -69,6 +89,9 @@ def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_by
         np.clip(tr, -60000, 60000, out=tr)
         ilxl[ii[s:e], jj[s:e], :] = tr.astype(np.float16)
         filled[ii[s:e], jj[s:e]] = True
+        if cancel and cancel():
+            del ilxl
+            raise RuntimeError("cancelled")
         if progress:
             progress(0.1 + 0.6 * e / n, f"Writing traces {e:,}/{n:,}")
     ilxl.flush()
@@ -79,6 +102,9 @@ def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_by
     for a in range(0, nil, blk):
         b = min(nil, a + blk)
         tm[:, a:b, :] = np.transpose(np.asarray(ilxl[a:b]), (2, 0, 1))
+        if cancel and cancel():
+            del tm, ilxl
+            raise RuntimeError("cancelled")
         if progress:
             progress(0.7 + 0.3 * b / nil, f"Building time slices {b}/{nil}")
     tm.flush()

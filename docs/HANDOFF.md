@@ -179,6 +179,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `laterals.wellbore_section`, `strip_data`; `gui/well_strip.WellStrip.show_data`; dashboard `well_logs`,
   `log_names` (<= 300 wells), `strip_for`, `open_strip`.
   Tests: `test_laterals.py` (run + run_gui).
+- `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
+  logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
+  exactness bound), by_api, tops_of, wells_with_curve, headers, xy. Not yet used by the GUI.
+- Jobs: `MainWindow.run_job` + 3D import poll show a status-bar Cancel button (`cancel_job`); long functions
+  raise RuntimeError('cancelled') between blocks; `job_cancelled(state)` turns that into a status message;
+  `import_3d(cancel=)` deletes the partial store. Tests: `test_hardening.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +
