@@ -200,6 +200,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&End fault stick (Enter)", lambda: self.section.end_stick())
         m.addSeparator()
         self._act(m, "Compute &dip field (current 3D volume)...", self.compute_dip)
+        self._act(m, "Compute attri&bute volume (current 3D volume)...", self.compute_attribute_volume)
         self._act(m, "Compute &RGT (current 3D volume)...", self.compute_rgt_3d)
         self._act(m, "Compute RGT (all &2D lines)...", self.compute_rgt_2d)
         self._act(m, "Build horizon &stack (3D)...", self.build_stack_3d)
@@ -493,6 +494,30 @@ class MainWindow(QtWidgets.QMainWindow):
             self.section.set_attr("Inline dip")
 
         self.run_job(f"Dip field {src[1]}", fn, done)
+
+    def compute_attribute_volume(self, name=None):
+        src = self.section.source
+        if not src or src[0] != "3D":
+            QtWidgets.QMessageBox.information(self, "Attribute volume", "Show a 3D volume first (2D lines: use the "
+                                              "display box - attributes are computed on the fly).")
+            return
+        from ..attributes import ATTRIBUTES, compute_volume
+        if name is None:
+            name, ok = QtWidgets.QInputDialog.getItem(self, "Attribute volume", "Attribute:", list(ATTRIBUTES), 0, False)
+            if not ok:
+                return
+        result = {}
+
+        def fn(progress, cancel):
+            result["name"] = compute_volume(self.project, src[1], str(name), None, 16, progress, cancel)
+
+        def done():
+            if self.project.path:
+                self.project.save()
+            self._refresh()
+            self.section.show("3D", result["name"], self.section.mode, self.section.number)
+
+        self.run_job(f"Attribute {name}", fn, done)
 
     def _rgt_inputs(self, dlg):
         hz = [h for h in self.project.horizons.items if h.visible] if dlg.use_hz.isChecked() else []

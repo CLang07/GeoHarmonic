@@ -129,6 +129,9 @@ def run():
         # ---- 2D-3D / 2D-2D mistie
         from . import test_mistie
         test_mistie.run(check, tmp)
+        # ---- seismic attributes
+        from . import test_attributes
+        test_attributes.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -168,6 +171,8 @@ def run_gui():
         test_maps.run_gui(check, tmp)
         from . import test_mistie
         test_mistie.run_gui(check, tmp)
+        from . import test_attributes
+        test_attributes.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

@@ -7,7 +7,8 @@ import numpy as np  # noqa: E402
 
 from .. import maps as M  # noqa: E402
 
-PRODUCTS = ["Time structure", "Isochron", "Amplitude", "Depth (well velocities)"]
+PRODUCTS = ["Time structure", "Isochron", "Amplitude", "Depth (well velocities)", "Curvature / dip"]
+CURVS = ["mean", "gaussian", "max", "min", "dip", "azimuth"]
 AMPS = ["rms", "max_abs", "max", "min", "mean", "at"]
 
 
@@ -45,6 +46,12 @@ class MapDialog(QtWidgets.QDialog):
         ws = project.wellset() if project.well_project else None
         if ws is not None and ws.wcp is not None:
             self.fm.addItems([f["name"] for f in ws.wcp.formations])
+        self.curv = QtWidgets.QComboBox()
+        self.curv.addItems(CURVS)
+        self.vel = QtWidgets.QDoubleSpinBox()
+        self.vel.setRange(1000, 8000)
+        self.vel.setValue(2500)
+        self.vel.setSuffix(" m/s")
         self.cint = QtWidgets.QDoubleSpinBox()
         self.cint.setRange(0, 10000)
         self.cint.setSpecialValueText("auto")
@@ -60,6 +67,8 @@ class MapDialog(QtWidgets.QDialog):
         form.addRow("Window above", self.above)
         form.addRow("Window below", self.below)
         form.addRow("Calibrate depth to top", self.fm)
+        form.addRow("Curvature", self.curv)
+        form.addRow("Velocity (curvature)", self.vel)
         form.addRow("Contour interval", self.cint)
         form.addRow("2D grid cell", self.cell)
         row = QtWidgets.QHBoxLayout()
@@ -84,7 +93,8 @@ class MapDialog(QtWidgets.QDialog):
                 "h1": self.h1.currentText(), "h2": self.h2.currentText(), "amp": self.amp.currentText() or "rms",
                 "above": float(self.above.value()), "below": float(self.below.value()),
                 "formation": None if self.fm.currentIndex() <= 0 else self.fm.currentText(),
-                "cell": float(self.cell.value()) or 100.0}
+                "cell": float(self.cell.value()) or 100.0, "curv": self.curv.currentText() or "mean",
+                "velocity": float(self.vel.value()) or 2500.0}
 
     def compute(self, **over):
         s = self.settings()
@@ -108,6 +118,9 @@ class MapDialog(QtWidgets.QDialog):
             z = M.extract_amplitude(vol, g.z, s["above"], s["below"], s["amp"])
             g = M.MapGrid(z, "ilxl", "amp", f"{s['amp'].upper()} amplitude {h.name} "
                           f"(-{s['above']:g}/+{s['below']:g} ms)", vol)
+        elif prod.startswith("Curvature"):
+            from ..attributes import horizon_curvature
+            g = horizon_curvature(g, s["curv"], s["velocity"])
         elif prod.startswith("Depth"):
             ws = p.wellset()
             pts = M.well_velocity_points(ws, g, s["formation"])

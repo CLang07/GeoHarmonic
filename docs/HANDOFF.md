@@ -122,6 +122,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `Line2D.time_variant`; `Basemap.show_ties`.
   `Line2D.raw_data()` vs `data()` (corrected), `Line2D.set_correction`; `SeisProject.line()` applies stored
   corrections. `gui/mistie_dialog.MistieDialog`. `test_mistie.py`.
+- `attributes.py` (v0.12): `ATTRIBUTES` {name: (needs neighbours, params)}, `envelope`, `inst_phase`,
+  `cos_phase`, `inst_freq` (phase advance of z[n+1] conj z[n-1], unbiased), `running_mean`, `rms`, `spectral`
+  (Gaussian-windowed complex exponential, constant Q), `semblance` (3x3, optional dip steering by linear
+  interpolation), `section_attribute(vol, name, mode, number)` (reads +/-1 inline/xline or a +/-48-sample
+  time slab), `line_attribute`, `compute_volume` (inline blocks with halo -> new store + project volume
+  "<vol> [<attr>]"), `horizon_curvature(MapGrid, kind, velocity)`. Panel ATTRS includes them. `test_attributes.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

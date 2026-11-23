@@ -34,6 +34,15 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.12.0 - Seismic attributes (PLAN item 11)
+- On-the-fly attributes in the display box (complex trace, RMS, coherence, dip-steered coherence, spectral
+  bands) for any section; Interpret > Compute attribute volume (new project volume); horizon curvature/dip maps.
+- Tests: envelope/phase exact, inst. frequency 25.00 Hz on a 25 Hz tone, spectral decomposition separates 20/50 Hz,
+  dip-steered coherence 0.99 vs 0.30 unsteered on 6 ms/trace dips, coherence 0.37 at a fault vs 0.98 away,
+  block-computed volumes equal on-the-fly sections, paraboloid curvature exact (0.500 1/km).
+- Known limits: attribute volumes double the storage (two float16 copies); time-slice coherence reads a whole
+  time slab of the dip field (slow on very large surveys).
+
 ## Seismic v0.10.0 - 2D-3D / 2D-2D mistie analysis (PLAN item 10, first part)
 - Interpret > Mistie analysis: simultaneous shift + phase + gain per tie, network solve with 3D fixed,
   robust weights, loop closures, apply/reset corrections on the fly (display, tracking, RGT, picks).

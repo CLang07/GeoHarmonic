@@ -89,7 +89,7 @@ Kingdom-like interaction; large data.
      don't average to 180, collinear/overlapping lines (reprocessed vintages, overlapping segments) tied
      along the whole overlap with a "preferred version" flag and duplicate hiding, and corrections applied on the fly to BOTH seismic display
      and interpretation (horizons) without rewriting SEG-Y (optional export of corrected SEG-Y).
-11. **Seismic attributes** - status: todo
+11. **Seismic attributes** - status: done (run 1, 2026-11-23; v0.12.0)
    - Volume attributes computed in chunks to new float16 stores, viewable like any volume: envelope,
      instantaneous phase/frequency (Hilbert via numpy FFT), RMS amplitude, coherence/semblance, dip-steered
      variance, curvature on horizons, spectral decomposition (short-window FFT bands). Attribute picker in

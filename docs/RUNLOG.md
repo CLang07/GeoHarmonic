@@ -42,4 +42,6 @@
   test_mistie.py. Tests PASS. v0.10.1 adds along-line flex mode (ramp recovered within 0.14 ms).
   v0.11.0 completes item 10: horizon misties, groups/key lines, time-variant shift, overlapping vintages,
   residual map, tie table CSV, corrected SEG-Y export. Item 10 DONE. Tests PASS.
-- Working on PLAN item 11 next.
+- Item 11 DONE - seismic attributes (v0.12.0): attributes.py, panel on-the-fly attributes, attribute volumes,
+  curvature maps, test_attributes.py. Tests PASS; NPRA R-2 coherence/envelope/frequency look sensible (2.6 s).
+- Working on PLAN item 12 next.

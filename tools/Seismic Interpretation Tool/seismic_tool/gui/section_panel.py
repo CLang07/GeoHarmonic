@@ -12,7 +12,10 @@ from .. import horizons as hz  # noqa: E402
 
 MODES = ["Inline", "Crossline", "Time slice", "Stratal slice"]
 DOMAINS = ["Time", "Wheeler"]
-ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity", "RGT"]  # 2D lines: either dip = dip along the line
+from ..attributes import ATTRIBUTES as _SEIS_ATTRS  # noqa: E402
+
+ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity", "RGT"] + list(_SEIS_ATTRS)
+# 2D lines: either dip = dip along the line; seismic attributes are computed on the fly for the section shown
 
 
 class PickViewBox(pg.ViewBox):
@@ -429,7 +432,25 @@ class SectionPanel(QtWidgets.QWidget):
         """(array, x, y, xlabel, ylabel) of the selected attribute on the current section."""
         from ..rgt.dip import DipField, line_dip
         from ..rgt.solve import RGTVolume, load_rgt_line
+        from .. import attributes as A
         kind, name = self.source
+        if self.attr in A.ATTRIBUTES:
+            if kind == "2D":
+                l = self.project.line(name)
+                key = (name, self.attr, id(l))
+                cache = self.__dict__.setdefault("_line_attr_cache", {})
+                if key not in cache:
+                    cache.clear()
+                    folder = os.path.join(self.project.seismic_dir(), "rgt") if self.project.path else None
+                    cache[key] = A.line_attribute(l, self.attr, None, folder)
+                return cache[key].T, l.cdp, l.times, "CDP", "TWT (ms)"
+            v = self.project.volume(name)
+            arr = A.section_attribute(v, self.attr, self.mode, self.number)
+            if self.mode == "Inline":
+                return arr, v.xlines, v.times, "Crossline", "TWT (ms)"
+            if self.mode == "Crossline":
+                return arr, v.inlines, v.times, "Inline", "TWT (ms)"
+            return arr, v.xlines, v.inlines, "Crossline", "Inline"
         if self.attr == "RGT":
             if kind == "2D":
                 l = self.project.line(name)
@@ -467,8 +488,13 @@ class SectionPanel(QtWidgets.QWidget):
 
     def color_levels(self):
         """(lo, hi) display levels: symmetric percentile clip, or 0..1 for planarity."""
-        if self.attr == "Planarity":
+        if self.attr == "Planarity" or self.attr.startswith("Coherence"):
             return 0.0, 1.0
+        if self.attr == "Inst. phase":
+            return -180.0, 180.0
+        if self.attr in ("Envelope", "Inst. frequency", "RMS amplitude") or self.attr.startswith("Spectral"):
+            a = self._data[np.isfinite(self._data)]
+            return (float(np.percentile(a, 1)), float(np.percentile(a, 99))) if a.size else (0.0, 1.0)
         if self.attr == "RGT":
             a = self._data[np.isfinite(self._data)]
             return (float(a.min()), float(a.max())) if a.size else (0.0, 1.0)
@@ -482,7 +508,8 @@ class SectionPanel(QtWidgets.QWidget):
             return
         cmap = self.cmap_combo.currentText()
         if self.attr != "Seismic":
-            cmap = "Grey" if self.attr == "Planarity" else "Rainbow (attributes)"
+            cmap = "Grey" if (self.attr == "Planarity" or self.attr.startswith("Coherence")) else \
+                self.cmap_combo.currentText() if self.attr == "Cosine of phase" else "Rainbow (attributes)"
         self._img.setLookupTable(colormaps.lut(cmap, self.rev_chk.isChecked()))
         self._img.setLevels(self.color_levels())
         if self.project:

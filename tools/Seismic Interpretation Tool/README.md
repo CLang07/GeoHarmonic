@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.11: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.12: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties, attributes
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -146,6 +146,14 @@ Starter projects:
   Mistie Tool), **Export corrected SEG-Y** (IEEE float, original headers).
 - **Apply corrections**: applied on the fly to the 2D display, tracking and RGT (SEG-Y untouched); existing
   2D horizon picks move with the shift. **Reset corrections** undoes it.
+
+## Seismic attributes
+- Display box: **Envelope, Inst. phase, Inst. frequency, Cosine of phase, RMS amplitude, Coherence,
+  Coherence (dip-steered), Spectral 10/20/30/40/60 Hz** - computed on the fly for the section shown
+  (inline, crossline, time slice, 2D line). Dip-steered coherence uses the dip field when it exists.
+- **Interpret > Compute attribute volume**: writes a full volume (background job) added to the project as
+  `<volume> [<attribute>]` - view it, pick on it, map it, extract it on horizons like any volume.
+- Horizon maps: **Curvature / dip** (mean, Gaussian, most +/-, dip, azimuth) with a velocity for time -> depth.
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.
