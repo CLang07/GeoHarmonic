@@ -115,7 +115,11 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   intersections), `all_ties`, `solve_network` (3D fixed, corr^2 weights, Huber IRLS, complex unit-vector phase,
   log gain), `loop_closures`, `solve_flex` (along-line knots, smoothness lam, prior to the constant), `flex_shift_per_trace`,
   `apply_solution` (project.display["mistie"][line] incl. optional "flex" {cdp, shift}; 2D picks shifted by the
-  per-trace change). `apply_correction` accepts one shift per row.
+  per-trace change). `apply_correction` accepts one shift per row. v0.11: `horizon_ties`, `solve_grouped`
+  (groups / fixed key lines by renaming tie ends), `measure_windows` (energy-centroid times), `time_variant_line`
+  (iterative, quadratic-in-time model - plain knots oscillate), `apply_time_variant`, `overlap_ties`,
+  `set_preferred` (display hidden_lines), `tie_positions`, `write_tie_table`, `export_corrected_segy`;
+  `Line2D.time_variant`; `Basemap.show_ties`.
   `Line2D.raw_data()` vs `data()` (corrected), `Line2D.set_correction`; `SeisProject.line()` applies stored
   corrections. `gui/mistie_dialog.MistieDialog`. `test_mistie.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),

@@ -583,7 +583,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.section.redraw()
             self._horizons_changed()
 
-        dlg = MistieDialog(self.project, self, refreshed)
+        dlg = MistieDialog(self.project, self, refreshed, self.basemap)
         dlg.show()
         self._mistie_dialog = dlg
         return dlg

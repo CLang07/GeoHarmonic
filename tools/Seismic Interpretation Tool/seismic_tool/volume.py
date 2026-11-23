@@ -206,6 +206,7 @@ class Line2D:
         self._data = None
         self._raw = None
         self.correction = None  # (shift_ms, phase_deg, gain) from the mistie solution, applied in data()
+        self.time_variant = None  # {"t": [...], "shift": [...]} extra time-variant shift
 
     @property
     def times(self):
@@ -227,6 +228,10 @@ class Line2D:
                 self._data = apply_correction(raw, self.dt * 1000.0, c[0], c[1], c[2]).astype(np.float32)
             else:
                 self._data = raw
+            tv = getattr(self, "time_variant", None)
+            if tv:
+                from .mistie import apply_time_variant
+                self._data = apply_time_variant(self._data, self.times, tv).astype(np.float32)
         return self._data
 
     def set_correction(self, c):

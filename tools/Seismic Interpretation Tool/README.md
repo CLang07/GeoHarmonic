@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.10: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.11: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -137,6 +137,13 @@ Starter projects:
 - **Flex mode** (tick box): after the constant solve, the shift may vary along each line (knots every N
   traces, piecewise linear) from local 2D-3D measurements and the 2D-2D ties, with a smoothness setting
   (large = constant per line). Lines needing > 10 ms of local flex are flagged (cycle skip / navigation?).
+- **Ties from** a horizon instead of waveforms (horizon misfit at 2D-3D overlaps and 2D-2D intersections).
+- **Overlapping / duplicate lines** (reprocessed vintages, overlapping segments) are found automatically and
+  tied along the whole overlap; `set_preferred` hides duplicates on the basemap.
+- **Groups** (`line=survey, ...`: lines of one vintage share a correction) and **key lines** held fixed.
+- **Time-variant** (lines crossing a 3D): a smooth (quadratic in TWT) shift from windowed correlations.
+- **Residuals on basemap** (diamonds: green < 2 ms, orange < 5, red), **Export tie table** (CSV, also for the
+  Mistie Tool), **Export corrected SEG-Y** (IEEE float, original headers).
 - **Apply corrections**: applied on the fly to the 2D display, tracking and RGT (SEG-Y untouched); existing
   2D horizon picks move with the shift. **Reset corrections** undoes it.
 

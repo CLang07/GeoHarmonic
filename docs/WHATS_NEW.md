@@ -43,8 +43,11 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 - v0.10.1: Flex mode (along-line shift with smoothness, knots every N traces): a 0-12 ms ramp is recovered
   within 0.14 ms; very smooth = constant per line; per-trace corrections applied to display and picks;
   warning when a line needs > 10 ms local flex.
-- Still to do (next run): time-variant flex, survey/key-line groups, horizon-based misties, overlapping-line
-  handling, corrected SEG-Y export, Mistie Tool integration, before/after residual map.
+- v0.11.0: horizon-based misties, survey groups + key lines, time-variant shift (smooth in TWT; ramp 4-12 ms
+  recovered within 0.6 ms), overlapping vintages tied along the overlap (5 ms offset found as 5.05),
+  duplicate hiding, residual map, tie table CSV, corrected SEG-Y export (round trip exact).
+- Known limits: time-variant only for lines crossing a 3D; the Mistie Tool (tkinter) is linked via the
+  CSV tie table, not live; no 2D-2D time-variant ties yet.
 
 ## Seismic v0.9.0 - Horizon maps (PLAN item 8)
 - Interpret > Horizon maps (Ctrl+M): time structure, isochron, amplitude (RMS/max/min/mean/at horizon),

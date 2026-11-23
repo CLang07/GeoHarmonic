@@ -110,6 +110,81 @@ def run(check, tmp):
     p.lines = [l for l in p.lines if l["name"] != "F"]
     p._line_cache.clear()
 
+    # ---- horizon-based misties
+    hz = G["horizons"]
+    s_h = 25
+    hh = Horizon("Hz")
+    hh.data["3D:G"] = hz[s_h].astype(np.float32)
+    from .maps import MapGrid
+    g3 = MapGrid(hz[s_h], "ilxl", "ms", "", vol)
+    for name in ("P", "Q", "R"):
+        ln = p.line(name)
+        hh.data[f"2D:{name}"] = (g3.sample(ln.x, ln.y) - truth[name][0]).astype(np.float32)
+    ht = MI.horizon_ties(p, hh)
+    h3 = {t["b"]: t["shift_ms"] for t in ht if t["kind"] == "horizon 2D-3D"}
+    check(set(h3) == {"P", "Q", "R"} and all(abs(h3[n] - truth[n][0]) < 0.5 for n in h3) and
+          any(t["kind"] == "horizon 2D-2D" for t in ht), "horizon-based misties (2D-3D and 2D-2D)")
+    # ---- survey groups and key lines
+    solg, _ = MI.solve_grouped(["P", "Q", "R"], [dict(t) for t in ties], groups={"P": "S1", "Q": "S1"})
+    check(abs(solg["P"]["shift_ms"] - solg["Q"]["shift_ms"]) < 1e-9 and solg["P"]["group"] == "S1" and
+          min(truth["P"][0], truth["Q"][0]) - 1 < solg["P"]["shift_ms"] < max(truth["P"][0], truth["Q"][0]) + 1,
+          f"survey group: P and Q share one correction ({solg['P']['shift_ms']:.1f} ms)")
+    solk, _ = MI.solve_grouped(["P", "Q", "R"], [dict(t) for t in ties if t["kind"] == "2D-2D"], fixed_lines=["R"])
+    check(solk["R"]["shift_ms"] == 0.0 and abs((solk["P"]["shift_ms"] - solk["Q"]["shift_ms"]) -
+                                               (truth["P"][0] - truth["Q"][0])) < 1.5,
+          "key line held fixed; others solved relative to it (2D-2D ties only)")
+    # ---- time-variant mistie
+    tv_true = {"t": [200.0, 1100.0], "shift": [4.0, 12.0]}
+    ln = p.line("P")
+    tr3, ins = MI.extract_3d_along(vol, ln.x, ln.y)
+    trt = MI.apply_time_variant(tr3, vol.times, {"t": tv_true["t"], "shift": [-4.0, -12.0]}).astype(np.float32)
+    ptv = os.path.join(d, "T.sgy")
+    write_segy(ptv, trt, {21: np.arange(1, len(trt) + 1), 181: np.round(ln.x).astype(np.int64),
+                          185: np.round(ln.y).astype(np.int64)})
+    p.lines.append({"name": "T", "segy": ptv, "cdp_byte": 21})
+    p._line_cache.clear()
+    tv = MI.time_variant_line(p, "G", "T", 100.0, 1150.0, 300.0, 150.0)
+    want = np.interp(tv["t"], tv_true["t"], tv_true["shift"])
+    check(tv is not None and len(tv["t"]) >= 4 and np.max(np.abs(np.array(tv["shift"]) - want)) < 1.0,
+          f"time-variant mistie: {', '.join(f'{a:.0f} ms: {b:.1f}' for a, b in zip(tv['t'], tv['shift']))}")
+    MI.apply_solution(p, {"T": {"shift_ms": 0.0, "phase_deg": 0.0, "gain": 1.0, "tv": tv}})
+    lt = p.line("T")
+    m = (vol.times > 300) & (vol.times < 1000)
+    cct = np.corrcoef(lt.data()[:, m].ravel(), tr3[:, m].ravel())[0, 1]
+    check(cct > 0.97, f"time-variant correction applied (corr with 3D {cct:.2f})")
+    MI.apply_solution(p, {})
+    p.lines = [l for l in p.lines if l["name"] != "T"]
+    # ---- overlapping duplicate line (reprocessed vintage of P, 5 ms later)
+    lp = p.line("P")
+    po = os.path.join(d, "P_reproc.sgy")
+    write_segy(po, MI.apply_correction(lp.raw_data(), 4.0, 5.0, 0.0, 1.0).astype(np.float32),
+               {21: np.arange(1, len(lp.cdp) + 1), 181: np.round(lp.x).astype(np.int64),
+                185: np.round(lp.y).astype(np.int64)})
+    p.lines.append({"name": "P-reproc", "segy": po, "cdp_byte": 21})
+    p._line_cache.clear()
+    ov = MI.overlap_ties(p)
+    o = [t for t in ov if {t["a"], t["b"]} == {"P", "P-reproc"}]
+    check(len(o) == 1 and abs(o[0]["shift_ms"] - (-5.0 if o[0]["b"] == "P-reproc" else 5.0)) < 0.5 and
+          len(ov) == 1, f"overlapping vintage detected and tied along the overlap ({o[0]['shift_ms'] if o else '-'} ms)")
+    MI.set_preferred(p, "P", ["P-reproc"])
+    check("P-reproc" in p.display["hidden_lines"], "duplicate hidden (preferred version kept)")
+    p.lines = [l for l in p.lines if l["name"] != "P-reproc"]
+    p.display.pop("hidden_lines", None)
+    p.display.pop("preferred_lines", None)
+    p._line_cache.clear()
+    # ---- exports: corrected SEG-Y, tie table, residual positions
+    MI.apply_solution(p, sol)
+    from .volume import Line2D
+    out_sgy = MI.export_corrected_segy(p.line("P"), os.path.join(d, "P_corrected.sgy"))
+    back = Line2D("Pc", out_sgy)
+    check(np.allclose(back.raw_data(), p.line("P").data(), atol=1e-4) and np.allclose(back.x, p.line("P").x),
+          "corrected SEG-Y export (IEEE, headers copied)")
+    MI.apply_solution(p, {})
+    MI.tie_positions(p, ties)
+    tab = MI.write_tie_table(ties, sol, os.path.join(d, "ties.csv"))
+    check(all(t.get("xy") for t in ties) and sum(1 for _ in open(tab)) == len(ties) + len(sol) + 5,
+          "tie positions for the residual map; tie table CSV")
+
     # apply: corrected lines match the 3D; picks follow
     h = Horizon("H")
     h.data["2D:P"] = np.full(90, 500.0, np.float32)
@@ -155,5 +230,14 @@ def run_gui(check, tmp):
     dlg.apply()
     check("flex" in p.display["mistie"]["P"] and np.ndim(p.line("P").correction[0]) == 1,
           "flex corrections applied per trace on the line")
+    n = dlg.export_segy(d)
+    check(n == 3 and os.path.exists(os.path.join(d, "P_mistie_corrected.sgy")), "dialog: corrected SEG-Y export")
     dlg.reset()
+    dlg.flex = False
+    dlg.groups, dlg.key_lines, dlg.time_variant = {"P": "S1", "Q": "S1"}, [], True
+    ties, sol = dlg.compute()
+    check(sol["P"]["group"] == "S1" and "tv" in sol["R"], "dialog: groups + time-variant")
+    dlg.horizon = None
+    pos = dlg.show_residuals()
+    check(len(pos) == len(ties), "dialog: residual map positions")
     return True

@@ -307,26 +307,34 @@ def apply_solution(project, sol):
         new[name] = {"shift_ms": c["shift_ms"], "phase_deg": c["phase_deg"], "gain": c["gain"]}
         if c.get("flex"):
             new[name]["flex"] = c["flex"]
+        if c.get("tv"):
+            new[name]["tv"] = c["tv"]
 
-    def shifts(entry, line):
+    def shifts(entry, line, t=None):
         if not entry:
             return 0.0
-        if entry.get("flex"):
-            return flex_shift_per_trace(line, entry["flex"])
-        return entry.get("shift_ms", 0.0)
+        base = flex_shift_per_trace(line, entry["flex"]) if entry.get("flex") else entry.get("shift_ms", 0.0)
+        if entry.get("tv") and t is not None:  # time-variant: the shift at each pick's time
+            base = base + np.interp(t, entry["tv"]["t"], entry["tv"]["shift"])
+        return base
 
     for name in set(old) | set(new):
         try:
             line = project.line(name)
         except Exception:
             continue
-        d = np.asarray(shifts(new.get(name), line) - shifts(old.get(name), line), float)
-        if np.any(np.abs(d) > 1e-9):
-            for h in project.horizons.items:
-                a = h.data.get(f"2D:{name}")
-                if a is not None:
-                    h.data[f"2D:{name}"] = (a + d).astype(np.float32)
-                    project.horizons.dirty = True
+        for h in project.horizons.items:
+            a = h.data.get(f"2D:{name}")
+            if a is None:
+                continue
+            # picks are in the old corrected time; undo the old shift at the uncorrected time, apply the new
+            t_raw = a - np.asarray(shifts(old.get(name), line, a), float)
+            if old.get(name, {}).get("tv"):  # iterate once more for the time-variant part
+                t_raw = a - np.asarray(shifts(old.get(name), line, t_raw), float)
+            d = np.asarray(shifts(new.get(name), line, t_raw), float) + t_raw - a
+            if np.any(np.abs(d[np.isfinite(d)]) > 1e-9):
+                h.data[f"2D:{name}"] = (a + d).astype(np.float32)
+                project.horizons.dirty = True
     project.display["mistie"] = new
     project._line_cache.clear()
     return new
@@ -410,3 +418,256 @@ def solve_flex(project, lines, ties, constant, lam=1.0, knot_traces=40, window_m
 
 def flex_shift_per_trace(line, flex):
     return np.interp(line.cdp, flex["cdp"], flex["shift"])
+
+
+# ====================================================================== horizon-based misties
+def horizon_ties(project, h, volumes=None):
+    """Ties from an interpreted horizon instead of waveforms: 2D-3D = median(t_3D - t_2D) along the overlap,
+    2D-2D = t_a - t_b at intersections (correction of b relative to a).  corr = consistency (1 - spread/10 ms)."""
+    from .horizons import line_intersections
+    from .maps import MapGrid
+    ties = []
+    vols = volumes if volumes is not None else [v["name"] for v in project.volumes]
+    lines = [k[3:] for k in h.data if k.startswith("2D:")]
+    for v in vols:
+        g3 = h.get(f"3D:{v}")
+        if g3 is None:
+            continue
+        vol = project.volume(v)
+        grid = MapGrid(g3, "ilxl", "ms", "", vol)
+        for L in lines:
+            ln = project.line(L)
+            if not ln.has_coords:
+                continue
+            t2 = h.get(f"2D:{L}")
+            t3 = grid.sample(ln.x, ln.y)
+            ok = np.isfinite(t2) & np.isfinite(t3)
+            if ok.sum() < 3:
+                continue
+            d = t3[ok] - t2[ok]
+            med = float(np.median(d))
+            spread = float(np.median(np.abs(d - med)))
+            k = np.nonzero(ok)[0]
+            mid = k[len(k) // 2]
+            ties.append({"a": f"3D:{v}", "b": L, "kind": "horizon 2D-3D", "shift_ms": med, "phase_deg": 0.0,
+                         "gain": 1.0, "corr": float(np.clip(1 - spread / 10.0, 0.3, 1.0)), "n": int(ok.sum()),
+                         "xy": (float(ln.x[mid]), float(ln.y[mid]))})
+    geo = {L: (project.line(L).x, project.line(L).y) for L in lines if project.line(L).has_coords}
+    for a, ia, b, ib in line_intersections(geo):
+        ta, tb = h.get(f"2D:{a}")[ia], h.get(f"2D:{b}")[ib]
+        if np.isfinite(ta) and np.isfinite(tb):
+            la = project.line(a)
+            ties.append({"a": a, "b": b, "kind": "horizon 2D-2D", "shift_ms": float(ta - tb), "phase_deg": 0.0,
+                         "gain": 1.0, "corr": 1.0, "n": 1, "at": (int(ia), int(ib)),
+                         "xy": (float(la.x[ia]), float(la.y[ia]))})
+    return ties
+
+
+# ====================================================================== groups / fixed lines
+def solve_grouped(lines, ties, groups=None, fixed_lines=(), **kw):
+    """Network solve where lines of one group (survey / vintage) share one correction and fixed_lines (key /
+    reference lines) are held at zero.  Implemented by renaming the tie ends to their group."""
+    groups = groups or {}
+    gname = lambda n: n if n.startswith("3D:") else ("FIXED:" + n if n in fixed_lines else groups.get(n, n))  # noqa
+    renamed = []
+    for t in ties:
+        a, b = gname(t["a"]), gname(t["b"])
+        if a == b:
+            continue
+        r = dict(t)
+        r["a"], r["b"] = a, b
+        r["_orig"] = t
+        renamed.append(r)
+    nodes = sorted({gname(L) for L in lines})
+    refs = [n for n in nodes if n.startswith("FIXED:")]
+    sol_g, rt = solve_network(nodes, renamed, references=refs, **kw)
+    for r in rt:
+        o = r["_orig"]
+        for k in ("res_shift_ms", "res_phase_deg", "weight", "used"):
+            if k in r:
+                o[k] = r[k]
+    zero = {"shift_ms": 0.0, "phase_deg": 0.0, "gain": 1.0, "n_ties": 0, "fixed": True}
+    sol = {L: dict(sol_g.get(gname(L), zero), group=gname(L)) for L in lines}
+    return sol, ties
+
+
+# ====================================================================== time-variant corrections
+def measure_windows(A, B, dt_ms, t0_ms, windows, max_lag_ms=40.0):
+    """Shift (and corr) of B relative to A in several time windows: [(t_centre, shift_ms, corr)].
+    t_centre is the reflection-energy centroid of A in the window (where the measurement really applies)."""
+    out = []
+    A = np.atleast_2d(np.asarray(A, float))
+    tt = t0_ms + dt_ms * np.arange(A.shape[1])
+    env2 = (np.abs(analytic(A, 1)) ** 2).sum(0)
+    for w0, w1 in windows:
+        try:
+            r = measure(A, B, dt_ms, (w0, w1), max_lag_ms, t0_ms)
+        except ValueError:
+            continue
+        m = (tt >= w0) & (tt <= w1)
+        tc = float((tt[m] * env2[m]).sum() / env2[m].sum()) if env2[m].sum() > 0 else 0.5 * (w0 + w1)
+        out.append((tc, r["shift_ms"], r["corr"]))
+    return out
+
+
+def time_variant_line(project, vol_name, line_name, t0, t1, win_ms=300.0, step_ms=150.0, max_lag_ms=40.0,
+                      min_corr=0.5):
+    """Time-variant shift of a 2D line vs a 3D: smooth (quadratic in TWT) shift function from windowed
+    stacked correlations, refined iteratively; returned as knots (t, shift) at the windows' energy centroids."""
+    vol = project.volume(vol_name)
+    line = project.line(line_name)
+    raw = line.raw_data()
+    tr3, inside = extract_3d_along(vol, line.x, line.y)
+    if inside.sum() < 5:
+        return None
+    t = vol.times
+    tr2 = resample(raw[inside], line.times, t)
+    wins = [(a, a + win_ms) for a in np.arange(t0, t1 - win_ms + 1e-6, step_ms)]
+    A = tr3[inside]
+    tc = np.array([0.5 * (a + b) for a, b in wins])
+    shift = np.zeros(len(wins))
+    corr = np.zeros(len(wins))
+    for _ in range(4):  # iterate: correct, re-measure the residual (removes the window-edge bias)
+        Bc = apply_time_variant(tr2, t, {"t": tc, "shift": shift}) if np.any(shift) else tr2
+        res = measure_windows(A, Bc, vol.dt * 1000.0, t[0], wins, max_lag_ms)
+        if len(res) != len(wins):
+            break
+        d = np.array([r[1] for r in res])
+        corr = np.array([r[2] for r in res])
+        if not np.any(shift):
+            tc = np.array([r[0] for r in res])  # energy centroids (first pass)
+        shift = shift + d
+        # windowed measurements are averages over overlapping windows: keep the model smooth (low-order
+        # polynomial in time, weights corr^2) or the iteration can settle on an oscillating solution
+        deg = 2 if len(tc) >= 5 else 1 if len(tc) >= 2 else 0
+        if deg:
+            cw = np.clip(corr, 0, 1) ** 2 + 1e-6
+            coef = np.polyfit(tc, shift, deg, w=np.sqrt(cw))
+            shift = np.polyval(coef, tc)
+        if np.max(np.abs(d)) < 0.05:
+            break
+    keep = corr >= min_corr
+    if not keep.any():
+        return None
+    return {"t": tc[keep].tolist(), "shift": shift[keep].tolist(), "corr": corr[keep].tolist()}
+
+
+def apply_time_variant(x, times, tv):
+    """Delay every trace by s(t) (piecewise linear in time, constant beyond the knots): y(t) = x(t - s(t))."""
+    x = np.atleast_2d(np.asarray(x, float))
+    s = np.interp(times, tv["t"], tv["shift"])
+    src = (times - s - times[0]) / (times[1] - times[0])
+    k = np.clip(np.floor(src).astype(int), 0, len(times) - 2)
+    w = np.clip(src - k, 0, 1)
+    y = x[:, k] * (1 - w) + x[:, k + 1] * w
+    y[:, (src < 0) | (src > len(times) - 1)] = 0.0
+    return np.ascontiguousarray(y)
+
+
+# ====================================================================== overlapping / duplicate lines
+def overlap_ties(project, tol_m=15.0, min_traces=20, window_ms=None, max_lag_ms=40.0):
+    """Collinear overlaps (reprocessed vintages, overlapping segments): line pairs with >= min_traces traces
+    within tol_m of each other are tied along the whole overlap (stacked measurement)."""
+    names = [l["name"] for l in project.lines]
+    lines = {n: project.line(n) for n in names}
+    out = []
+    for i, a in enumerate(names):
+        la = lines[a]
+        if not la.has_coords:
+            continue
+        for b in names[i + 1:]:
+            lb = lines[b]
+            if not lb.has_coords:
+                continue
+            if la.x.max() < lb.x.min() - tol_m or lb.x.max() < la.x.min() - tol_m or \
+                    la.y.max() < lb.y.min() - tol_m or lb.y.max() < la.y.min() - tol_m:
+                continue
+            pa, pb = [], []
+            step = max(1, len(la.x) // 2000)
+            for k in range(0, len(la.x), step):
+                d = np.hypot(lb.x - la.x[k], lb.y - la.y[k])
+                j = int(np.argmin(d))
+                if d[j] <= tol_m:
+                    pa.append(k)
+                    pb.append(j)
+            if len(pa) * step < min_traces:
+                continue
+            A = la.raw_data()[pa]
+            B = resample(lb.raw_data()[pb], lb.times, la.times)
+            r = measure(A, B, la.dt * 1000.0, window_ms, max_lag_ms, la.times[0])
+            mid = pa[len(pa) // 2]
+            r.update({"a": a, "b": b, "kind": "overlap", "traces": len(pa) * step,
+                      "xy": (float(la.x[mid]), float(la.y[mid]))})
+            out.append(r)
+    return out
+
+
+def set_preferred(project, keep, hide):
+    """Mark `hide` lines as duplicates of `keep` (hidden on the basemap; still tied)."""
+    d = project.display.setdefault("hidden_lines", [])
+    for h in hide:
+        if h not in d:
+            d.append(h)
+    if keep in d:
+        d.remove(keep)
+    project.display.setdefault("preferred_lines", {})[keep] = list(hide)
+
+
+# ====================================================================== exports
+def tie_positions(project, ties):
+    """Add 'xy' (map position) to ties that lack it (for the residual map)."""
+    for t in ties:
+        if "xy" in t:
+            continue
+        try:
+            if "at" in t:
+                la = project.line(t["a"])
+                t["xy"] = (float(la.x[t["at"][0]]), float(la.y[t["at"][0]])) if la.has_coords else None
+            else:
+                ln = project.line(t["b"])
+                vol = project.volume(t["a"][3:])
+                _, inside = extract_3d_along(vol, ln.x[::5], ln.y[::5])
+                k = np.nonzero(inside)[0]
+                t["xy"] = (float(ln.x[::5][k[len(k) // 2]]), float(ln.y[::5][k[len(k) // 2]])) if len(k) else None
+        except Exception:
+            t["xy"] = None
+    return ties
+
+
+def write_tie_table(ties, sol, path):
+    """CSV of ties (measured, residual, weight) and per-line solution - for QC or the Mistie Tool."""
+    import csv
+    with open(path, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["# ties: correction of B relative to A"])
+        w.writerow(["A", "B", "kind", "shift_ms", "phase_deg", "gain", "corr", "residual_ms", "residual_deg", "weight"])
+        for t in ties:
+            w.writerow([t["a"], t["b"], t["kind"], f"{t['shift_ms']:.2f}", f"{t['phase_deg']:.1f}", f"{t['gain']:.3f}",
+                        f"{t['corr']:.3f}", f"{t.get('res_shift_ms', float('nan')):.2f}",
+                        f"{t.get('res_phase_deg', float('nan')):.1f}", f"{t.get('weight', 0):.3f}"])
+        w.writerow([])
+        w.writerow(["# corrections per line"])
+        w.writerow(["line", "shift_ms", "phase_deg", "gain", "n_ties", "group"])
+        for L, c in sol.items():
+            w.writerow([L, f"{c['shift_ms']:.2f}", f"{c['phase_deg']:.1f}", f"{c['gain']:.3f}", c.get("n_ties", 0),
+                        c.get("group", L)])
+    return path
+
+
+def export_corrected_segy(line, out_path):
+    """Write the line's corrected traces (data()) as a new IEEE-float SEG-Y, headers copied from the input."""
+    f = line.f
+    data = np.asarray(line.data(), np.float32)
+    mm = f.mm
+    with open(out_path, "wb") as fh:
+        hdr = bytearray(mm[:3600].tobytes())
+        bo = "big" if f.endian == ">" else "little"
+        hdr[3224:3226] = (5).to_bytes(2, bo)  # format code 5 = IEEE float
+        fh.write(bytes(hdr))
+        if f.data_offset > 3600:
+            fh.write(mm[3600:f.data_offset].tobytes())
+        dt = ">f4" if f.endian == ">" else "<f4"
+        for k in range(f.ntraces):
+            fh.write(f._tr[k, :240].tobytes())
+            fh.write(data[k].astype(dt).tobytes())
+    return out_path

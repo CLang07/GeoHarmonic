@@ -41,6 +41,7 @@ class Basemap(QtWidgets.QWidget):
         self._flt_items = []
         self._grid = (None, None)
         self._grid_items = []
+        self._tie_items = []
         self.hz_range = None  # (vmin, vmax) of the last map, for the legend text
         self.plot.scene().sigMouseClicked.connect(self._clicked)
 
@@ -67,7 +68,10 @@ class Basemap(QtWidgets.QWidget):
             t = pg.TextItem(f"{v['name']} (3D)", color=c, anchor=(0, 1))
             t.setPos(xs[0], ys[0])
             self.plot.addItem(t, ignoreBounds=True)
+        hidden = set(p.display.get("hidden_lines", []) or [])
         for l in p.lines:
+            if l["name"] in hidden:
+                continue
             try:
                 line = p.line(l["name"])
             except Exception:
@@ -192,6 +196,24 @@ class Basemap(QtWidgets.QWidget):
             self._grid_items.append(c)
         self.legend.setText(f"{grid.label}: {lo:.1f} - {hi:.1f} {grid.unit}"
                             + (f", contours every {levels[1] - levels[0]:g}" if len(levels) > 1 else ""))
+
+    def show_ties(self, ties):
+        """Mistie residual map: tie positions coloured by |residual shift| (green < 2 ms, orange < 5, red)."""
+        for it in getattr(self, "_tie_items", []) or []:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._tie_items = []
+        pts = [(t["xy"][0], t["xy"][1], abs(t.get("res_shift_ms", 0.0))) for t in ties or [] if t.get("xy")]
+        if not pts:
+            return []
+        cols = [(0, 170, 0) if r < 2 else (240, 150, 0) if r < 5 else (220, 0, 0) for _, _, r in pts]
+        it = pg.ScatterPlotItem([p_[0] for p_ in pts], [p_[1] for p_ in pts], size=11, symbol="d",
+                                brush=[pg.mkBrush(*c) for c in cols], pen=pg.mkPen((0, 0, 0)))
+        self.plot.addItem(it)
+        self._tie_items.append(it)
+        return pts
 
     def fault_map_lines(self):
         """[(name, colour, xs, ys)] - each stick projected on the map plus a line joining the stick tops."""

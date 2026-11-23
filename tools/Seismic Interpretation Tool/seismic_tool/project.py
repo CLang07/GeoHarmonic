@@ -121,6 +121,7 @@ class SeisProject:
                 if c.get("flex"):
                     sh = np.interp(ln.cdp, c["flex"]["cdp"], c["flex"]["shift"])
                 ln.set_correction((sh, c.get("phase_deg", 0.0), c.get("gain", 1.0)))
+                ln.time_variant = c.get("tv")
             self._line_cache[name] = ln
         return self._line_cache[name]
 

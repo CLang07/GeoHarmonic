@@ -26,6 +26,7 @@ def _ieee2ibm(x):
 
 def write_segy(path, traces, headers, dt_us=4000, fmt=5):
     """traces (n, ns) float32; headers: {byte: int array} (4-byte words)."""
+    traces = np.ascontiguousarray(traces)
     n, ns = traces.shape
     with open(path, "wb") as f:
         f.write(("C01 synthetic test" + " " * 62).encode("cp500") + b"\x40" * (3200 - 80))
