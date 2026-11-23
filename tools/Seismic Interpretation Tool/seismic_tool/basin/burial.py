@@ -145,6 +145,7 @@ class BurialHistory:
         self.top = np.full((nt, nu), np.nan)
         self.base = np.full((nt, nu), np.nan)
         self.solid = np.zeros((nt, nu))
+        self.top_eff = np.full((nt, nu), np.nan)  # compaction depth of each unit top (>= top: max burial)
         zmax = np.zeros(nu)
         for it, t in enumerate(self.ages):
             z = 0.0
@@ -159,6 +160,7 @@ class BurialHistory:
                 zb = float(base_for(ze, s, self.phi0[i], self.c[i]))
                 h = zb - ze
                 self.top[it, i], self.base[it, i] = z, z + h
+                self.top_eff[it, i] = ze
                 self.solid[it, i] = s
                 z += h
         wd = water_depth

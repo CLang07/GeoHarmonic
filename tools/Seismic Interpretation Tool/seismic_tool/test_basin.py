@@ -193,9 +193,126 @@ def run_burial(check, tmp):
     check(open(os.path.join(tmp, "burial.csv")).readline().startswith("age_Ma,"), "burial curves CSV")
 
 
+def run_thermal(check, tmp):
+    from .basin import burial as B
+    from .basin import chrono as C
+    from .basin import maturity as M
+    from .basin import thermal as TH
+    # steady state = analytic layered geotherm (no porosity, deposited long ago)
+    L0 = {k: dict(v, phi0=0.0, A=0.0) for k, v in B.LITHOLOGY.items()}
+    T0 = C.AgeTable([{"name": "Sea floor", "age": 0.0, "gap": 149.0, "lith": {"sand": 1}},
+                     {"name": "X", "age": 150.0, "lith": {"shale": 1}},
+                     {"name": "Base", "age": 151.0}])
+    u = B.column_units(T0, {"Sea floor": 0.0, "X": 1000.0, "Base": 3000.0}, 0.0, props=L0)
+    bh = B.BurialHistory(u, step=5.0)
+    th = TH.ThermalHistory(bh, heat_flow=70.0, surface_t=10.0, basement={"A": 0.0})
+    z, T = th.present_profile()
+    q = 0.070
+    ana = np.where(z <= 1000, 10 + q * z / 3.2, 10 + q * 1000 / 3.2 + q * (z - 1000) / 1.9)
+    sed = z <= 3000
+    err = np.max(np.abs(T[sed] - ana[sed]))
+    check(err < 0.01, f"steady state == analytic two-layer geotherm (max error {err:.4f} degC)")
+    LA = {k: dict(v, phi0=0.0) for k, v in B.LITHOLOGY.items()}
+    LA["shale"]["A"] = 2.0
+    u = B.column_units(C.AgeTable([{"name": "S", "age": 0.0, "gap": 149.0, "lith": {"shale": 1}},
+                                    {"name": "Base", "age": 150.0}]),
+                       {"S": 0.0, "Base": 4000.0}, 0.0, props=LA)
+    th = TH.ThermalHistory(B.BurialHistory(u, step=5.0), heat_flow=60.0, surface_t=5.0, basement={"A": 0.0})
+    z, T = th.present_profile()
+    A = 2.0e-6
+    qs = 0.060 + A * 4000.0
+    ana = 5 + (qs * z - A * z * z / 2) / 1.9
+    err = np.max(np.abs(T[z <= 4000] - ana[z <= 4000]))
+    check(err < 0.01, f"steady state with radiogenic heat == analytic T = Ts + (qs z - A z^2/2)/k ({err:.4f} degC)")
+    # transient: fast burial is cooler than its steady state (sedimentation blanketing)
+    Tf = C.AgeTable([{"name": "S", "age": 0.0, "lith": {"shale": 1}}, {"name": "Base", "age": 2.0}])
+    bf = B.BurialHistory(B.column_units(Tf, {"S": 0.0, "Base": 4000.0}, 0.0), step=0.1)
+    tf = TH.ThermalHistory(bf, heat_flow=60.0, surface_t=10.0)
+    Ts = C.AgeTable([{"name": "S", "age": 0.0, "lith": {"shale": 1}}, {"name": "Base", "age": 200.0}])
+    bs = B.BurialHistory(B.column_units(Ts, {"S": 0.0, "Base": 4000.0}, 0.0), step=2.0)
+    ts = TH.ThermalHistory(bs, heat_flow=60.0, surface_t=10.0)
+    check(tf.temperature_at(3900.0) < ts.temperature_at(3900.0) - 10,
+          f"transient: 4 km deposited in 2 My is cooler at 3.9 km ({float(tf.temperature_at(3900.0)):.0f} vs "
+          f"{float(ts.temperature_at(3900.0)):.0f} degC steady)")
+    # heat-flow calibration recovers a synthetic value
+    T1 = burial_table()
+    bh = B.BurialHistory(B.column_units(T1, {"Seabed": 100.0, "A": 900.0, "B": 2000.0, "C": 3200.0, "Base": 4000.0},
+                                        100.0), water_depth=100.0)
+    truth = TH.ThermalHistory(bh, heat_flow=65.0, surface_t=12.0)
+    zs = np.array([1200.0, 2100.0, 2900.0, 3700.0])
+    obs = np.c_[zs, truth.temperature_at(zs)]
+    fit = TH.fit_heat_flow(bh, obs, heat_flow=50.0, surface_t=12.0)
+    check(abs(fit["present_q"] - 65.0) < 0.05 and fit["rms"] < 0.05,
+          f"heat-flow fit recovers 65 mW/m2 ({fit['present_q']:.2f}, rms {fit['rms']:.3f} degC)")
+    noisy = obs.copy()
+    noisy[:, 1] += np.array([1.5, -1.0, 0.8, -1.2])
+    f2 = TH.fit_heat_flow(bh, noisy, heat_flow={"kind": "mckenzie", "rift_age": 80.0, "beta": 1.8, "present": 50.0},
+                          surface_t=12.0)
+    check(abs(f2["present_q"] - 65.0) < 3.0 and 0.5 < f2["rms"] < 2.0,
+          f"fit with a McKenzie history shape and noisy data ({f2['present_q']:.1f} mW/m2, rms {f2['rms']:.2f})")
+    ages = np.linspace(120, 0, 121)
+    qm = TH.mckenzie_heat_flow(ages, 80.0, 2.0)
+    q1 = TH.mckenzie_heat_flow(ages, 80.0, 1.0)
+    after = ages <= 80
+    check(np.all(np.diff(qm[after]) <= 1e-9) and qm[after][0] > 1.5 * qm[-1] and np.allclose(q1, q1[0]) and
+          abs(TH.mckenzie_heat_flow([0.0], 80.0, 2.0, present=60.0)[0] - 60.0) < 1e-9,
+          f"McKenzie rift heat flow: {qm[after][0]:.0f} -> {qm[-1]:.0f} mW/m2 (beta 2), constant for beta 1")
+    # maturity
+    tA = np.linspace(100.0, 0.0, 2001)
+    tT = 10 + 2.0 * (tA[0] - tA)
+    ro = M.easy_ro(tA, tT)
+    r = lambda temp: float(np.interp(temp, tT, ro))  # noqa
+    check(abs(ro[0] - np.exp(-1.6)) < 1e-12 and np.all(np.diff(ro) >= 0) and 0.5 < r(100) < 0.7 and
+          0.9 < r(150) < 1.3 and 1.8 < r(200) < 2.6,
+          f"EASY%Ro at 2 degC/My: {r(100):.2f} @100, {r(150):.2f} @150, {r(200):.2f} @200 degC (published curve)")
+    # independent check: constant heating -> integral in temperature with fine quadrature
+    H = 2.0 / M.SEC_MY
+    Tk = np.linspace(283.15, 473.15, 200001)
+    I = np.array([np.trapezoid(M.EASY_A * np.exp(-E / M.R_KCAL / Tk), Tk) / H for E in M.EASY_E]) \
+        if hasattr(np, "trapezoid") else np.array([np.trapz(M.EASY_A * np.exp(-E / M.R_KCAL / Tk), Tk) / H
+                                                    for E in M.EASY_E])
+    ref = np.exp(-1.6 + 3.7 * np.sum(M.EASY_F * (1 - np.exp(-I))))
+    check(abs(r(200) - ref) < 0.01, f"EASY%Ro == independent quadrature at 200 degC ({r(200):.3f} vs {ref:.3f})")
+    check(abs(M.tti(np.linspace(15, 0, 151), np.full(151, 105.0))[-1] - 15.0) < 1e-9 and
+          abs(M.tti(np.linspace(10, 0, 101), np.full(101, 125.0))[-1] - 40.0) < 1e-9,
+          "Lopatin TTI: 15 My at 105 degC = 15, 10 My at 125 degC = 40")
+    tr = {k: M.transformation_ratio(tA, tT, k) for k in M.KINETICS}
+    t50 = {k: float(np.interp(0.5, v, tT)) for k, v in tr.items()}
+    ks = list(M.KINETICS)
+    check(all(np.all(np.diff(v) >= -1e-12) and v[0] == 0 and v[-1] > 0.99 for v in tr.values()) and
+          t50[ks[2]] < t50[ks[1]] < t50[ks[3]] < t50[ks[4]] and 115 < t50[ks[1]] < 140,
+          "transformation ratio 0 -> 1; TR50 order II-S < II < III < III-gas; type II at " + f"{t50[ks[1]]:.0f} degC")
+    w = M.window_timing(tA, ro)
+    check(w["oil_start"] is not None and w["oil_start"] > w["oil_end"] > 0 and M.window_name(0.8) == "oil window",
+          f"oil window entry {w['oil_start']:.1f} Ma, exit {w['oil_end']:.1f} Ma")
+    # maturity of every surface of a burial + thermal history: deeper = more mature today
+    st = truth.surface_temperatures()
+    ros = [float(M.easy_ro(truth.ages, Tt)[-1]) for _, _, Tt in st]
+    check(np.all(np.diff(ros) > 0) and ros[0] < 0.3, "present %Ro increases with depth over the dated surfaces "
+          + ", ".join(f"{n} {v:.2f}" for (n, _, _), v in zip(st, ros)))
+    # BHT: Horner + LAS header parsing
+    tc = 4.0
+    tt = np.array([6.0, 12.0, 18.0])
+    bht = 120 - 15 * np.log10((tc + tt) / tt)
+    check(abs(TH.horner(tt, bht, tc) - 120.0) < 1e-9, "Horner extrapolation recovers the static temperature")
+    las = os.path.join(tmp, "bht.las")
+    with open(las, "w") as f:
+        f.write("~Version\nVERS. 2.0 :\n~Well\nSTRT.M 100 :\n~Parameter\nBLI .F 9842.5 :Bottom log interval\n"
+                "TCS . 0830 15JUN :Time circ. stopped\nTLAB. 0200 16JUN :Time logger at btm\n"
+                "BHT .DEGF 212.0 :Bottom hole temp\nMRT .DEGF 0.0 :Max recorded temp\n~Curve\nDEPT.M :\n~A\n100\n")
+    recs = TH.las_temperatures(las)
+    check(len(recs) == 1 and abs(recs[0]["T"] - 100.0) < 1e-9 and abs(recs[0]["md"] - 3000.0) < 0.1 and
+          abs(recs[0]["tsc_h"] - 17.5) < 1e-9, "LAS header BHT: degF -> degC, ft -> m, 17.5 h since circulation")
+    wt = TH.well_temperatures([las], surface_t=10.0)
+    check(len(wt) == 1 and abs(wt[0]["T"] - (100 + 0.05 * 90)) < 1e-9, "single-BHT correction (> 12 h: +5 %)")
+    sc = TH.screen_temperatures([{"md": 500.0, "T": 95.0}, {"md": 3000.0, "T": 100.0}], lambda md: md - 25.0, 10.0, 100.0)
+    check([r_["ok"] for r_ in sc] == [False, True], "implausible BHT (190 degC/km) flagged")
+
+
 def run(check, tmp):
     run_chrono(check, tmp)
     run_burial(check, tmp)
+    run_thermal(check, tmp)
 
 
 def run_gui_chrono(check, tmp):
