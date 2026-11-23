@@ -2,6 +2,17 @@
 
 Newest first. Each section: what it does, how to use it, what to test.
 
+## v0.7.0 - RGT editing (PLAN item 6)
+- RGT contours on sections; RGT edit mode (E): click a level, click where it belongs -> local re-solve
+  (~0.15 s on the synthetic), stack updated, Ctrl+Z; active horizon as RGT constraint; re-link RGT around a
+  fault. Edits saved at once.
+- Tests: a moved level lands exactly where clicked (12.0 ms move), uint16 RGT outside the edited inlines /
+  window is bit-identical, undo restores RGT + stack exactly; fault re-link fixes a model computed without
+  the fault (p95 error 29 -> 0.6 ms); horizon constraint makes one iso-surface follow the picks; 2D edit
+  local to the line window.
+- Known limits: 2D edits do not propagate through ties (tie columns stay fixed); edits keep the RGT
+  range of the original model (values beyond +/-5% head room are clipped).
+
 ## v0.6.0 - Horizon stack, Wheeler view, stratal slices (PLAN item 5)
 - Interpret > Build horizon stack (3D / 2D); mode "Stratal slice" with slider through the stack; domain box
   Time / Wheeler (flattened RGT view with hiatus gaps); Interpret > Convert stack level to horizon.

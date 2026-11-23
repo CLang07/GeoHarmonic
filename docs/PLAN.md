@@ -36,7 +36,7 @@ Kingdom-like interaction; large data.
    - Extract N horizons (iso-RGT) as a horizon stack; Wheeler view (seismic resampled to RGT axis,
      hiatuses shown as gaps); stratal-slice viewer (amplitude on any iso-RGT surface, slider through the
      stack) in the section panel as a new mode; convert any stack surface to an editable horizon.
-6. **RGT step D - interactive editing** - status: todo
+6. **RGT step D - interactive editing** - status: done (run 1, 2026-11-23; v0.7.0)
    - User adds/moves control points or horizons as constraints, local re-solve in a window around the edit
      (fast), fault re-linking; undo. Tests: constraint changes the model only locally.
 6b. **DLIS reader (numpy, RP66 v1)** - status: todo

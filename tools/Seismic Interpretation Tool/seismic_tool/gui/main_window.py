@@ -3,6 +3,8 @@ import os
 import threading
 import traceback
 
+import numpy as np
+
 os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
 from PySide6 import QtCore, QtGui, QtWidgets  # noqa: E402
 
@@ -203,6 +205,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Build horizon &stack (3D)...", self.build_stack_3d)
         self._act(m, "Build horizon stack (2D lines)...", self.build_stack_2d)
         self._act(m, "Convert stack &level to horizon...", self.stack_level_to_horizon)
+        self._act(m, "RGT &edit mode on/off (click a level, click where it belongs)", self.toggle_rgt_mode, "E")
+        self._act(m, "Use active horizon as RGT constraint", self.rgt_horizon_constraint)
+        self._act(m, "Re-link RGT around active fault", self.rgt_relink_fault)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -468,6 +473,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                               "'Inline dip' or 'Planarity' in the display box - computed on the fly.)")
             return
         from ..rgt.dip import compute_dip_volume
+        self.section.reset_rgt_editors()  # editors keep the dip files open (Windows cannot replace them)
         vol = self.project.volume(src[1])
         gb = vol.nil * vol.nxl * vol.ns * 2 * 3 / 1e9
         if QtWidgets.QMessageBox.question(self, "Dip field", f"Compute inline/crossline dip and planarity for "
@@ -499,6 +505,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if dlg.exec() != QtWidgets.QDialog.Accepted:
             return
         from ..rgt.solve import compute_rgt_3d
+        self.section.reset_rgt_editors()
         vol = self.project.volume(src[1])
         params = dlg.params()
         hz, fl = self._rgt_inputs(dlg)
@@ -508,6 +515,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._rgt_stats = sysm.stats
 
         def done():
+            self.section.reset_rgt_editors()
             self.section.attr_combo.setCurrentText("RGT")
             self.section.set_attr("RGT")
             self.statusBar().showMessage(f"RGT done: {getattr(self, '_rgt_stats', {})}", 15000)
@@ -535,12 +543,54 @@ class MainWindow(QtWidgets.QMainWindow):
             self._rgt_stats = sysm.stats
 
         def done():
+            self.section.reset_rgt_editors()
             if self.section.source and self.section.source[0] == "2D":
                 self.section.attr_combo.setCurrentText("RGT")
                 self.section.set_attr("RGT")
             self.statusBar().showMessage(f"RGT done ({len(names)} lines): {getattr(self, '_rgt_stats', {})}", 15000)
 
         self.run_job("RGT 2D lines", fn, done)
+
+    def toggle_rgt_mode(self):
+        on = not self.section.rgt_mode
+        self.section.set_mode("rgt" if on else None)
+        self.statusBar().showMessage("RGT edit mode: click an iso-RGT level, then click where it belongs (Ctrl+Z "
+                                     "undoes)" if on else "RGT edit mode off", 8000)
+
+    def rgt_horizon_constraint(self):
+        sp = self.section
+        h = self.project.horizons.get(sp.active_horizon) if sp.active_horizon else None
+        if h is None or not sp.source or h.get(sp.section_key()) is None:
+            QtWidgets.QMessageBox.information(self, "RGT constraint", "Select a horizon with picks on the survey shown.")
+            return
+        ed = sp.rgt_editor()
+        if ed is None:
+            return
+        fl = self.project.faults.visible_faults() or None
+        if sp.source[0] == "3D":
+            ed.add_horizon(h.name, h.get(sp.section_key()), fl)
+        else:
+            g = h.get(sp.section_key())
+            j = np.nonzero(np.isfinite(g))[0]
+            v = float(np.nanmean([ed.value_at(k, g[k]) for k in j]))
+            for k in j[::max(1, len(j) // 50)]:
+                ed.add_point(int(k), float(g[k]), v, fl)
+        sp.redraw()
+        self.statusBar().showMessage(f"RGT re-solved with {h.name} as a constraint", 8000)
+
+    def rgt_relink_fault(self):
+        sp = self.section
+        f = self.project.faults.get(sp.active_fault) if sp.active_fault else None
+        if f is None or not len(f.triangles()) or not sp.source or sp.source[0] != "3D":
+            QtWidgets.QMessageBox.information(self, "RGT re-link", "Select a fault with at least two sticks and show "
+                                              "the 3D volume.")
+            return
+        ed = sp.rgt_editor()
+        if ed is None:
+            return
+        ed.relink_fault(f, self.project.faults.visible_faults())
+        sp.redraw()
+        self.statusBar().showMessage(f"RGT re-solved around {f.name}", 8000)
 
     def build_stack_3d(self, n_levels=None):
         src = self.section.source

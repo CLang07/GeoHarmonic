@@ -27,4 +27,6 @@
 - Item 5 DONE - horizon stack / Wheeler / stratal slices (v0.6.0): rgt/stack.py, test_stack.py, panel mode
   "Stratal slice" + Time/Wheeler domain, Interpret menu (build stack 3D/2D, stack level -> horizon).
   Tests PASS (selftest + guitest); NPRA R-2 Wheeler flat.
-- Working on PLAN item 6 next.
+- Item 6 DONE - RGT editing (v0.7.0): rgt/edit.py, test_edit.py, panel RGT edit mode + contours, Interpret
+  menu (edit mode E, horizon constraint, fault re-link). Tests PASS (locality bit-exact, undo exact).
+- Working on PLAN item 6b next.

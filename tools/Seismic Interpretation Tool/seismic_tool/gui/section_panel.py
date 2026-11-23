@@ -28,6 +28,11 @@ class PickViewBox(pg.ViewBox):
         return self.panel.pick_mode and ev.button() == QtCore.Qt.LeftButton
 
     def mouseClickEvent(self, ev):
+        if self.panel.rgt_mode and ev.button() == QtCore.Qt.LeftButton:
+            pt = self.mapToView(ev.pos())
+            self.panel.rgt_click(pt.x(), pt.y())
+            ev.accept()
+            return
         if self.panel.fault_mode and ev.button() == QtCore.Qt.LeftButton:
             pt = self.mapToView(ev.pos())
             self.panel.fault_click(pt.x(), pt.y(), erase=bool(ev.modifiers() & QtCore.Qt.ShiftModifier))
@@ -89,7 +94,12 @@ class SectionPanel(QtWidgets.QWidget):
         self.stick = []  # points (x, y, t) of the stick being drawn
         self.stick_key = None  # (source, mode, number) the stick is drawn on
         self.faultsEdited = None
-        self.modeChanged = []  # callbacks(mode) when pick/fault mode switches
+        self.rgt_mode = False  # RGT edit: click grabs an iso-RGT level, second click puts it there
+        self._rgt_grab = None
+        self._rgt_editors = {}
+        self.show_contours = True
+        self._ctr_items = []
+        self.modeChanged = []  # callbacks(mode) when pick/fault/rgt mode switches
         self._flt_items = []
 
         lay = QtWidgets.QVBoxLayout(self)
@@ -128,6 +138,9 @@ class SectionPanel(QtWidgets.QWidget):
         self.dom_combo.addItems(DOMAINS)
         self.dom_combo.setToolTip("Wheeler: vertical axis = relative geologic time (needs RGT); gaps = hiatus")
         self.domain = "Time"
+        self.ctr_chk = QtWidgets.QCheckBox("RGT contours")
+        self.ctr_chk.setChecked(True)
+        self.ctr_chk.setToolTip("Draw the horizon-stack levels (iso-RGT) on sections")
         for w in (self.src_combo, self.mode_combo, self.num_spin, self.slider, self.step_spin, self.dom_combo,
                   self.attr_combo,
                   self.cmap_combo, self.clip_spin, self.rev_chk):
@@ -151,6 +164,7 @@ class SectionPanel(QtWidgets.QWidget):
         self.rev_chk.toggled.connect(lambda *_: self._apply_colors())
         self.attr_combo.currentTextChanged.connect(self.set_attr)
         self.dom_combo.currentTextChanged.connect(self.set_domain)
+        self.ctr_chk.toggled.connect(self._contours_toggled)
         from PySide6 import QtGui
         for key, d in (("PgUp", -1), ("PgDown", 1), ("Shift+PgUp", -10), ("Shift+PgDown", 10)):
             s = QtGui.QShortcut(QtGui.QKeySequence(key), self)
@@ -307,6 +321,8 @@ class SectionPanel(QtWidgets.QWidget):
         self._apply_colors()
         self._hz_items = []
         self._flt_items = []
+        self._ctr_items = []
+        self.draw_contours()
         self.draw_horizons()
         self.draw_faults()
         if view and not reset_view:
@@ -622,8 +638,15 @@ class SectionPanel(QtWidgets.QWidget):
         hs, fs = self.hset(), self.fset()
         hseq = hs.last_seq() if hs is not None else 0
         fseq = fs.last_seq() if fs is not None else 0
-        if not hseq and not fseq:
+        ed = max(self._rgt_editors.values(), key=lambda e: e.last_seq(), default=None)
+        rseq = ed.last_seq() if ed is not None else 0
+        if not hseq and not fseq and not rseq:
             self.cursorInfo.emit("Nothing to undo")
+            return
+        if rseq > max(hseq, fseq):
+            ed.undo()
+            self.cursorInfo.emit("Undo RGT edit")
+            self.redraw()
             return
         if fseq > hseq:
             name = fs.undo()
@@ -643,8 +666,99 @@ class SectionPanel(QtWidgets.QWidget):
             self.end_stick()
         self.pick_mode = mode == "horizon"
         self.fault_mode = mode == "fault"
+        self.rgt_mode = mode == "rgt"
+        self._rgt_grab = None
         for cb in self.modeChanged:
             cb(mode)
+
+    # ------------------------------------------------------------ RGT editing + contours
+    def rgt_editor(self):
+        """Editor for the RGT model of the survey shown (cached), or None."""
+        from ..rgt.edit import RGTEditor2D, RGTEditor3D
+        key = self.section_key()
+        if key in self._rgt_editors:
+            return self._rgt_editors[key]
+        kind, name = self.source
+        try:
+            ed = RGTEditor3D(self.project.volume(name)) if kind == "3D" else RGTEditor2D(self.project, name)
+        except Exception as e:
+            self.cursorInfo.emit(f"No RGT model to edit here ({e})")
+            return None
+        self._rgt_editors[key] = ed
+        return ed
+
+    def _contours_toggled(self, on):
+        self.show_contours = bool(on)
+        self.draw_contours()
+
+    def reset_rgt_editors(self):
+        self._rgt_editors = {}
+
+    def rgt_click(self, x, t):
+        """RGT edit mode: 1st click grabs the iso-RGT level at the cursor, 2nd click moves it there."""
+        ij = self.trace_at(x)
+        if ij is None:
+            self.cursorInfo.emit("RGT edits work on inlines, crosslines and 2D lines in the Time domain.")
+            return None
+        ed = self.rgt_editor()
+        if ed is None:
+            return None
+        key = self.section_key()
+        if self._rgt_grab is None or self._rgt_grab[0] != key:
+            v = ed.value_at(ij[0], ij[1], t) if key.startswith("3D:") else ed.value_at(ij[1], t)
+            self._rgt_grab = (key, ij, float(t), v)
+            self.cursorInfo.emit(f"Grabbed RGT level {v:.1f} at {t:.0f} ms - click where it should be")
+            return None
+        _, (i0, j0), t0, v = self._rgt_grab
+        self._rgt_grab = None
+        fl = self.fset().visible_faults() if self.fset() is not None else None
+        if key.startswith("3D:"):
+            ed.move_level(i0, j0, t0, t, faults=fl or None, i_to=ij[0], j_to=ij[1])
+        else:
+            ed.move_level(j0, t0, t, faults=fl or None, j_to=ij[1])
+        self.cursorInfo.emit(f"RGT level {v:.1f} moved to {t:.0f} ms (local re-solve) - Ctrl+Z undoes")
+        self.redraw()
+        return float(t)
+
+    def rgt_contours(self):
+        """[(x values, times)] of the horizon-stack levels on the current time-domain section."""
+        from ..rgt.stack import load_stack_2d
+        if not self.source or self.wheeler_on() or self.mode in ("Time slice", "Stratal slice"):
+            return []
+        kind, name = self.source
+        try:
+            if kind == "3D":
+                st = self._stack3d()
+                if st is None:
+                    return []
+                v = self.project.volume(name)
+                sec = st.section(v, self.mode, self.number)  # (N, n)
+                x = v.xlines if self.mode == "Inline" else v.inlines
+            else:
+                st = load_stack_2d(self._rgt_folder(kind, name)) if self.project.path else None
+                if st is None or name not in st["lines"]:
+                    return []
+                sec = st["lines"][name]
+                x = self.project.line(name).cdp
+        except Exception:
+            return []
+        step = max(1, len(sec) // 60)
+        return [(np.asarray(x, float), np.asarray(sec[k], float)) for k in range(0, len(sec), step)]
+
+    def draw_contours(self):
+        for it in self._ctr_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._ctr_items = []
+        if not self.show_contours or self._data is None:
+            return
+        pen = pg.mkPen((90, 90, 90, 140), width=1)
+        for x, t in self.rgt_contours():
+            it = pg.PlotCurveItem(x, t, connect="finite", pen=pen)
+            self.plot.addItem(it)
+            self._ctr_items.append(it)
 
     # ------------------------------------------------------------ faults
     def fset(self):

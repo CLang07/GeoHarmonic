@@ -170,8 +170,8 @@ def load_stack_2d(folder):
     p = os.path.join(folder, "stack_2d.npz")
     if not os.path.exists(p):
         return None
-    z = np.load(p)
-    return {"levels": z["levels"], "lines": {k[2:]: z[k] for k in z.files if k.startswith("L_")}}
+    with np.load(p) as z:
+        return {"levels": z["levels"], "lines": {k[2:]: z[k] for k in z.files if k.startswith("L_")}}
 
 
 def stack_to_horizon(hset, name, level_index, stack3d=None, vol_name=None, stack2d=None):

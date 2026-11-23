@@ -87,6 +87,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   < gap_frac x its median thickness), `build_stack_2d` / `load_stack_2d` (`stack_2d.npz`), `stack_to_horizon`.
   Panel: mode "Stratal slice" (number = stack level), `domain` Time/Wheeler (`wheeler_on()`, `_to_wheeler`,
   horizons converted to RGT), picking disabled there. `test_stack.py`.
+- `rgt/edit.py` (v0.7): `RGTEditor3D(vol)` (loads rgt_nodes.npz; `_resolve(window, points, horizons, faults)`
+  = `build_3d` with sub-window Ipos/Jpos, border columns fixed (weight 100), datum off, point constraints
+  bilinear x linear (weight 1e4), CGLS dx_tol 1e-5; `_write_back` re-quantizes only affected inlines in
+  place (r+ memmap) + stack rows; `move_level` (segment +/-24 ms shifted, avoids folding), `add_point`,
+  `add_horizon`, `relink_fault`, `undo` (window snapshots, shared seq)), `RGTEditor2D` (window on one line).
+  `NodeInterp` in solve.py = shared full-res interpolation; write_rgt_3d rounds tau to float32 first so
+  edits reproduce untouched traces bit-exactly. Panel: `set_mode('rgt')`, `rgt_click`, `rgt_contours()`,
+  `draw_contours`, editors cached in `_rgt_editors` (reset before recomputing dip/RGT). `test_edit.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +
@@ -137,4 +145,7 @@ key results with matplotlib to PNG and look at them.
   lateral chain stiffness falls as 1/n links) - it flattened structure by several ms; one global datum row
   fixed it (median error 2.7 -> 0.15 ms). Correlation windows that straddle a fault lock onto the wrong
   reflector (errors = throw); always tie across faults away from the fault plane.
+- Windows: close npz files (`with np.load(...)`) and drop memmaps before rewriting/replacing a file.
+- RGT point edits: a single tau(t)=v constraint folds the model (non-monotonic) when the level moves more
+  than a node interval; constrain a +/-24 ms segment instead (`move_level`).
 - Chris wants Kingdom/GeoGraphix-style behaviour and speed with big datasets; avoid per-trace Python loops.

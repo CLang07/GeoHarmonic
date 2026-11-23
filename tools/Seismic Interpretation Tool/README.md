@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.6: loading, viewing, horizons, faults, dip field, RGT model, horizon stack / Wheeler / stratal slices
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.7: loading, viewing, horizons, faults, dip field, RGT model (stack, Wheeler, stratal slices, editing)
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -94,6 +94,16 @@ Starter projects:
   current stratal slice by default; 2D: on every line).
 - Files: 3D `<volume store>\rgt\rgt.npy` (uint16, ~0.1 ms resolution) + `rgt.json` + `rgt_nodes.npz`;
   2D `<project>_seismic\rgt\<line>_rgt.npz`.
+
+## Editing the RGT model (step D)
+- **RGT contours** (toolbar tick box): the horizon-stack levels drawn as thin grey lines on sections.
+- **Interpret > RGT edit mode (E)**: click on a level (grabs its geologic age), then click where it belongs
+  (same or another trace of the section). The model is re-solved in a window around the edit (a fraction
+  of a second); the rest of the model is untouched. The stack is updated too. Ctrl+Z undoes.
+- **Use active horizon as RGT constraint**: one geologic age for all its picks, re-solved over the horizon's
+  area. **Re-link RGT around active fault**: after drawing or editing a fault, re-solves around it so the
+  model honours it (no need to recompute everything).
+- Edits are saved immediately (`rgt_nodes.npz`, `edits.json` in the RGT folder).
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.

@@ -37,6 +37,7 @@ class RGTParams:
         self.max_iter, self.tol = max_iter, tol
         self.refine = refine  # refine the dip-predicted shift by cross-correlation
         self.max_iter_fine = max_iter_fine  # iteration cap when starting from a coarser solution
+        self.dx_tol = 0.02  # CGLS stops when no node moved more than this (ms) for 10 iterations
 
     def to_dict(self):
         return dict(self.__dict__)
@@ -320,6 +321,8 @@ class NodeSystem:
             base = (sv["offset"][:, None] + np.arange(K - 1)[None, :]).ravel()
             m = len(base)
             self.eq.add([base + 1, base], [np.ones(m), -np.ones(m)], np.full(m, p.node_ms), p.w_vertical)
+            if not getattr(self, "datum", True):
+                continue
             # datum: the mean of tau equals the mean node time (one dense row; a per-node 'tau = t' damping
             # would flatten the structure more the finer the node grid is)
             allk = (sv["offset"][:, None] + np.arange(K)[None, :]).ravel()
@@ -353,7 +356,8 @@ class NodeSystem:
         x0 = x_init
         t = time.time()
         max_iter = self.p.max_iter if not self.coarse_start else min(self.p.max_iter, self.p.max_iter_fine)
-        x, it = cgls(rows, cols, vals, b, x0, self.n, max_iter, self.p.tol, progress, cancel)
+        x, it = cgls(rows, cols, vals, b, x0, self.n, max_iter, self.p.tol, progress, cancel,
+                     dx_tol=getattr(self.p, "dx_tol", 0.02))
         self.stats = {"unknowns": int(self.n), "equations": int(len(b)), "iterations": int(it),
                       "seconds": round(time.time() - t, 2)}
         self.x = x
@@ -380,14 +384,16 @@ def node_positions(n, step, extra=()):
 
 
 # ====================================================================== 3D
-def build_3d(vol, dipfield, params, faults=None, horizons=None, progress=None, vol_name=None):
-    """NodeSystem for a 3D volume (dipfield: rgt.dip.DipField of the volume)."""
+def build_3d(vol, dipfield, params, faults=None, horizons=None, progress=None, vol_name=None, Ipos=None,
+             Jpos=None):
+    """NodeSystem for a 3D volume (dipfield: rgt.dip.DipField of the volume).  Ipos/Jpos: optional node
+    inline/crossline indices (a sub-window for local re-solves); default = the full regular node grid."""
     from ..faults import barrier_3d
     dt_ms, t0_ms = vol.dt * 1000.0, vol.t0 * 1000.0
     ntm = node_times(vol.ns, dt_ms, t0_ms, params.node_ms)
     nts = (ntm - t0_ms) / dt_ms
-    Ipos = node_positions(vol.nil, params.node_traces)
-    Jpos = node_positions(vol.nxl, params.node_traces)
+    Ipos = node_positions(vol.nil, params.node_traces) if Ipos is None else np.asarray(Ipos, np.int64)
+    Jpos = node_positions(vol.nxl, params.node_traces) if Jpos is None else np.asarray(Jpos, np.int64)
     nI, nJ = len(Ipos), len(Jpos)
     sysm = NodeSystem(params)
     key = "3D"
@@ -469,6 +475,43 @@ def solve_3d_multires(vol, dipfield, params, faults=None, horizons=None, progres
     return sysm
 
 
+class NodeInterp:
+    """Full-resolution RGT from a node solution tau (nI, nJ, K): linear in time, bilinear between columns."""
+
+    def __init__(self, tau, Ipos, Jpos, node_t, node_ms, times, nil, nxl):
+        self.tau, self.Ipos, self.Jpos = tau, np.asarray(Ipos), np.asarray(Jpos)
+        K = tau.shape[2]
+        u = np.clip((times - node_t[0]) / node_ms, 0, K - 1)
+        self.m = np.minimum(np.floor(u).astype(int), K - 2)
+        self.w = (u - self.m).astype(np.float32)
+        jj = np.arange(nxl)
+        nJ = len(self.Jpos)
+        self.J1 = np.clip(np.searchsorted(self.Jpos, jj, "right"), 1, nJ - 1)
+        self.J0 = self.J1 - 1
+        self.wj = ((jj - self.Jpos[self.J0]) / np.maximum(1, self.Jpos[self.J1] - self.Jpos[self.J0]))[:, None]
+        self.wj = self.wj.astype(np.float32)
+        self.cache = {}
+
+    def full_row(self, I):  # (nJ, ns) tau of node row I at every sample
+        if I not in self.cache:
+            if len(self.cache) > 4:
+                self.cache.clear()
+            r = self.tau[I]
+            self.cache[I] = r[:, self.m] * (1 - self.w) + r[:, self.m + 1] * self.w
+        return self.cache[I]
+
+    def inline(self, i):
+        """(nxl, ns) RGT of inline index i."""
+        nI = len(self.Ipos)
+        I1 = int(np.clip(np.searchsorted(self.Ipos, i, "right"), 1, nI - 1))
+        I0 = I1 - 1
+        wi = (i - self.Ipos[I0]) / max(1, self.Ipos[I1] - self.Ipos[I0])
+        a, b = self.full_row(I0), self.full_row(I1)
+        r0 = a[self.J0] * (1 - self.wj) + a[self.J1] * self.wj
+        r1 = b[self.J0] * (1 - self.wj) + b[self.J1] * self.wj
+        return r0 * (1 - wi) + r1 * wi
+
+
 def write_rgt_3d(vol, sysm, out_dir=None, progress=None):
     """Interpolate the node solution to every sample, write uint16 rgt.npy + rgt.json + rgt_nodes.npz."""
     out_dir = out_dir or os.path.join(vol.store, "rgt")
@@ -476,40 +519,18 @@ def write_rgt_3d(vol, sysm, out_dir=None, progress=None):
     Ipos, Jpos = sysm.grid
     nI, nJ = len(Ipos), len(Jpos)
     sv = sysm.surveys["3D"]
-    tau = sysm.node_values("3D").reshape(nI, nJ, sv["K"])
+    # round to float32 first: the editor works from the float32 copy in rgt_nodes.npz and must reproduce the
+    # same uint16 values for untouched traces
+    tau = sysm.node_values("3D").reshape(nI, nJ, sv["K"]).astype(np.float32).astype(np.float64)
     lo, hi = float(tau.min()), float(tau.max())
-    pad = 0.01 * (hi - lo + 1)
+    pad = 0.05 * (hi - lo + 1)  # head room for later local edits
     lo, hi = lo - pad, hi + pad
     scale = 65535.0 / (hi - lo)
-    times = vol.times
-    u = np.clip((times - sv["node_t"][0]) / sysm.p.node_ms, 0, sv["K"] - 1)
-    m = np.minimum(np.floor(u).astype(int), sv["K"] - 2)
-    w = (u - m).astype(np.float32)
-
-    def full_row(I):  # (nJ, ns) tau of node row I at every sample
-        r = tau[I]
-        return r[:, m] * (1 - w) + r[:, m + 1] * w
-
+    ni = NodeInterp(tau, Ipos, Jpos, sv["node_t"], sysm.p.node_ms, vol.times, vol.nil, vol.nxl)
     tmp = os.path.join(out_dir, "rgt.tmp.npy")
     out = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.uint16, shape=(vol.nil, vol.nxl, vol.ns))
-    jj = np.arange(vol.nxl)
-    J1 = np.clip(np.searchsorted(Jpos, jj, "right"), 1, nJ - 1)
-    J0 = J1 - 1
-    wj = ((jj - Jpos[J0]) / np.maximum(1, Jpos[J1] - Jpos[J0]))[:, None].astype(np.float32)
-    cache = {}
     for i in range(vol.nil):
-        I1 = int(np.clip(np.searchsorted(Ipos, i, "right"), 1, nI - 1))
-        I0 = I1 - 1
-        wi = (i - Ipos[I0]) / max(1, Ipos[I1] - Ipos[I0])
-        for I in (I0, I1):
-            if I not in cache:
-                cache[I] = full_row(I)
-        for k in [k for k in cache if k not in (I0, I1)]:
-            del cache[k]
-        r0 = cache[I0][J0] * (1 - wj) + cache[I0][J1] * wj
-        r1 = cache[I1][J0] * (1 - wj) + cache[I1][J1] * wj
-        row = r0 * (1 - wi) + r1 * wi
-        out[i] = np.clip(np.round((row - lo) * scale), 0, 65535).astype(np.uint16)
+        out[i] = np.clip(np.round((ni.inline(i) - lo) * scale), 0, 65535).astype(np.uint16)
         if progress and i % 16 == 0:
             progress(0.75 + 0.25 * i / vol.nil, f"Writing RGT volume {i}/{vol.nil}")
     out.flush()
@@ -688,9 +709,9 @@ def load_rgt_line(folder, name):
     p = os.path.join(folder, safe + "_rgt.npz")
     if not os.path.exists(p):
         return None
-    z = np.load(p)
-    lo, hi = float(z["lo"]), float(z["hi"])
-    return lo + z["q"].astype(np.float32) * np.float32((hi - lo) / 65535.0)
+    with np.load(p) as z:
+        lo, hi = float(z["lo"]), float(z["hi"])
+        return lo + z["q"].astype(np.float32) * np.float32((hi - lo) / 65535.0)
 
 
 def solve_2d_multires(project, names, params, faults=None, horizons=None, folder=None, progress=None,

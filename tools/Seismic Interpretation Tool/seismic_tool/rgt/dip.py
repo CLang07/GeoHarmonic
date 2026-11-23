@@ -165,9 +165,9 @@ def line_dip(line, folder=None, sigma_grad=1.0, sigma_x=3.0, sigma_t=4.0):
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in line.name)
         path = os.path.join(folder, safe + "_dip.npz")
         if os.path.exists(path):
-            z = np.load(path)
-            if z["dip"].shape == (len(line.cdp), line.ns):
-                return z["dip"].astype(np.float32), z["planarity"].astype(np.float32)
+            with np.load(path) as z:
+                if z["dip"].shape == (len(line.cdp), line.ns):
+                    return z["dip"].astype(np.float32), z["planarity"].astype(np.float32)
     p, pl = dip_2d(line.data(), sigma_grad, sigma_x, sigma_t)
     p *= line.dt * 1000.0
     if path:
