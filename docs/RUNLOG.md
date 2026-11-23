@@ -39,4 +39,5 @@
   All tests PASS.
 - Item 9 DONE - docs/WHATS_NEW.md: risk-ordered test checklist + known limits + change log.
 - Item 10 PARTIAL - mistie analysis core (v0.10.0): mistie.py, gui/mistie_dialog.py, Line2D corrections,
-  test_mistie.py. Tests PASS. Left: flex mode and the other listed features (see PLAN).
+  test_mistie.py. Tests PASS. v0.10.1 adds along-line flex mode (ramp recovered within 0.14 ms).
+  Left: time-variant flex and the other listed features (see PLAN).

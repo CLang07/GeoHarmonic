@@ -32,10 +32,23 @@ class MistieDialog(QtWidgets.QDialog):
         self.lag.setSuffix(" ms")
         self.rob = QtWidgets.QCheckBox("Robust (down-weight ties that disagree with the network)")
         self.rob.setChecked(True)
+        self.flex_chk = QtWidgets.QCheckBox("Flex mode: shift varies along each line (after the constant solve)")
+        self.smooth = QtWidgets.QDoubleSpinBox()
+        self.smooth.setRange(0.01, 1000)
+        self.smooth.setValue(1.0)
+        self.smooth.setToolTip("Smoothness: small = follow every local tie, large = one constant per line")
+        self.knots = QtWidgets.QSpinBox()
+        self.knots.setRange(5, 2000)
+        self.knots.setValue(50)
+        self.knots.setSuffix(" traces")
+        self.flex = False
         form.addRow("Window start", self.t0)
         form.addRow("Window end", self.t1)
         form.addRow("Max shift", self.lag)
         form.addRow(self.rob)
+        form.addRow(self.flex_chk)
+        form.addRow("Flex smoothness", self.smooth)
+        form.addRow("Flex knot spacing", self.knots)
         lay.addLayout(form)
         self.tie_table = QtWidgets.QTableWidget(0, 9)
         self.tie_table.setHorizontalHeaderLabels(["A", "B", "type", "shift ms", "phase deg", "gain", "corr",
@@ -67,6 +80,9 @@ class MistieDialog(QtWidgets.QDialog):
         self.window = (t0, t1) if t1 > t0 else None
         self.max_lag = float(self.lag.value()) or 40.0
         self.robust = bool(self.rob.isChecked())
+        self.flex = bool(self.flex_chk.isChecked())
+        self.lam = float(self.smooth.value()) or 1.0
+        self.knot_traces = int(self.knots.value()) or 50
 
     def _run(self):
         self._read()
@@ -83,8 +99,20 @@ class MistieDialog(QtWidgets.QDialog):
         self.sol, self.ties = MI.solve_network(names, self.ties, robust=self.robust)
         cl = MI.loop_closures(self.ties)
         worst = max((abs(c) for _, c in cl), default=0.0)
-        self.info.setText(f"{len(self.ties)} ties, {len(cl)} loops (worst raw closure {worst:.1f} ms). "
-                          "Large residuals = cycle skip or navigation error - check those ties.")
+        msg = (f"{len(self.ties)} ties, {len(cl)} loops (worst raw closure {worst:.1f} ms). "
+               "Large residuals = cycle skip or navigation error - check those ties.")
+        if self.flex:
+            lines = [k for k in self.sol if not k.startswith("3D:")]
+            fx = MI.solve_flex(self.project, lines, self.ties, self.sol, getattr(self, "lam", 1.0),
+                               getattr(self, "knot_traces", 50), self.window, self.max_lag)
+            big = []
+            for L, f in fx.items():
+                self.sol[L]["flex"] = f
+                if f["max_flex"] > 10.0:
+                    big.append(f"{L} ({f['max_flex']:.0f} ms)")
+            if big:
+                msg += " WARNING large local flex: " + ", ".join(big) + " - likely cycle skip / navigation, not a mistie."
+        self.info.setText(msg)
         return self.ties, self.sol
 
     def _fill(self):

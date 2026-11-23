@@ -222,7 +222,7 @@ class Line2D:
         if self._data is None:
             raw = self.raw_data()
             c = self.correction
-            if c and (abs(c[0]) > 1e-9 or abs(c[1]) > 1e-9 or abs(c[2] - 1.0) > 1e-9):
+            if c and (np.any(np.abs(c[0]) > 1e-9) or abs(c[1]) > 1e-9 or abs(c[2] - 1.0) > 1e-9):
                 from .mistie import apply_correction
                 self._data = apply_correction(raw, self.dt * 1000.0, c[0], c[1], c[2]).astype(np.float32)
             else:
@@ -230,6 +230,7 @@ class Line2D:
         return self._data
 
     def set_correction(self, c):
+        """(shift_ms (scalar or one per trace), phase_deg, gain) or None."""
         self.correction = tuple(c) if c else None
         self._data = None
         self._smooth_cache = None

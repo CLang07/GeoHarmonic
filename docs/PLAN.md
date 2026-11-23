@@ -65,7 +65,7 @@ Kingdom-like interaction; large data.
 9. **Write-up** - status: done (run 1, 2026-11-23; docs/WHATS_NEW.md checklist ordered by risk; keep it updated)
    - `docs/WHATS_NEW.md` for Chris: features, how to use, test checklist ordered by risk, known limits.
 
-10. **2D-3D merge / tie** - status: partial (run 1: measurement, 2D-3D + 2D-2D ties, robust network with 3D fixed, unit-vector phase, loop closures, apply on the fly + picks, dialog. LEFT: flex mode, survey groups/key lines, horizon-based misties, time-variant windows, overlapping lines + preferred version, corrected SEG-Y export, Mistie Tool integration, before/after residual map)
+10. **2D-3D merge / tie** - status: partial (run 1: measurement, 2D-3D + 2D-2D ties, robust network with 3D fixed, unit-vector phase, loop closures, apply on the fly + picks, dialog. flex mode along-line. LEFT: time-variant flex, survey groups/key lines, horizon-based misties, time-variant windows, overlapping lines + preferred version, corrected SEG-Y export, Mistie Tool integration, before/after residual map)
    - Match 2D lines to a 3D volume: extract the 3D along each 2D line (arbitrary line), estimate per-line
      bulk time shift, phase rotation and amplitude scalar by cross-correlation in a window; apply and show
      before/after; integrate with the Mistie Tool network solve (2D-2D + 2D-3D ties). Tests: synthetic 2D

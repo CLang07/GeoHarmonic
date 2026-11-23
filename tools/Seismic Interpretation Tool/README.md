@@ -134,6 +134,9 @@ Starter projects:
 - Network solve: one correction per line with the 3D volumes fixed (reference), weights = correlation^2,
   robust option (Huber) down-weights ties that disagree (cycle skips, bad navigation), phase solved as unit
   vectors so 350 and 10 degrees average to 0. Table of ties with residuals, loop closures.
+- **Flex mode** (tick box): after the constant solve, the shift may vary along each line (knots every N
+  traces, piecewise linear) from local 2D-3D measurements and the 2D-2D ties, with a smoothness setting
+  (large = constant per line). Lines needing > 10 ms of local flex are flagged (cycle skip / navigation?).
 - **Apply corrections**: applied on the fly to the 2D display, tracking and RGT (SEG-Y untouched); existing
   2D horizon picks move with the shift. **Reset corrections** undoes it.
 

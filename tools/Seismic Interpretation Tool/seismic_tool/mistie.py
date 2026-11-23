@@ -32,12 +32,14 @@ def analytic(x, axis=-1):
 
 
 def apply_correction(x, dt_ms, shift_ms, phase_deg, gain):
-    """Constant correction of one trace or every row of a panel (fractional shift by FFT, zero padded)."""
+    """Correction of one trace or every row of a panel (fractional shift by FFT, zero padded).
+    shift_ms may be a scalar or one value per row (flex corrections)."""
     x = np.atleast_2d(np.asarray(x, float))
     n = x.shape[1]
     pad = int(2 ** np.ceil(np.log2(2 * n)))
     f = np.fft.rfftfreq(pad)
-    X = np.fft.rfft(x, pad, axis=1) * np.exp(-2j * np.pi * f * shift_ms / dt_ms)
+    sh = np.asarray(shift_ms, float).reshape(-1, 1) if np.ndim(shift_ms) else shift_ms
+    X = np.fft.rfft(x, pad, axis=1) * np.exp(-2j * np.pi * f[None, :] * sh / dt_ms)
     y = np.fft.irfft(X, pad, axis=1)[:, :n]
     if phase_deg:
         y = np.real(analytic(y, 1) * np.exp(1j * np.radians(phase_deg)))
@@ -303,9 +305,23 @@ def apply_solution(project, sol):
         if name.startswith("3D:"):
             continue
         new[name] = {"shift_ms": c["shift_ms"], "phase_deg": c["phase_deg"], "gain": c["gain"]}
+        if c.get("flex"):
+            new[name]["flex"] = c["flex"]
+
+    def shifts(entry, line):
+        if not entry:
+            return 0.0
+        if entry.get("flex"):
+            return flex_shift_per_trace(line, entry["flex"])
+        return entry.get("shift_ms", 0.0)
+
     for name in set(old) | set(new):
-        d = new.get(name, {}).get("shift_ms", 0.0) - old.get(name, {}).get("shift_ms", 0.0)
-        if abs(d) > 1e-9:
+        try:
+            line = project.line(name)
+        except Exception:
+            continue
+        d = np.asarray(shifts(new.get(name), line) - shifts(old.get(name), line), float)
+        if np.any(np.abs(d) > 1e-9):
             for h in project.horizons.items:
                 a = h.data.get(f"2D:{name}")
                 if a is not None:
@@ -314,3 +330,83 @@ def apply_solution(project, sol):
     project.display["mistie"] = new
     project._line_cache.clear()
     return new
+
+
+# ====================================================================== flex mode (along-line shifts)
+def solve_flex(project, lines, ties, constant, lam=1.0, knot_traces=40, window_ms=None, max_lag_ms=40.0,
+               profile_traces=30, volumes=None, prior=0.05):
+    """Along-line flex: shift(line, cdp) = piecewise-linear function with knots every knot_traces, solved as one
+    regularised least-squares system:
+        2D-3D local measurements (along-line profiles)   s_L(k) = m          weight corr^2
+        2D-2D ties                                         s_b(kb) - s_a(ka) = m_ab
+        smoothness                                         lam * (s_L(i+1) - s_L(i)) = 0   (high lam -> constant)
+        prior                                              prior * (s_L(i) - constant_L) = 0
+    Returns {line: {"cdp": knot cdps, "shift": knot shifts, "max_flex": max |shift - constant|}}."""
+    vols = volumes if volumes is not None else [v["name"] for v in project.volumes]
+    knots, off, n = {}, {}, 0
+    for L in lines:
+        ln = project.line(L)
+        k = np.unique(np.r_[np.arange(0, len(ln.cdp), knot_traces), len(ln.cdp) - 1])
+        knots[L] = k
+        off[L] = n
+        n += len(k)
+    rows, rhs, w = [], [], []
+
+    def interp_row(L, trace):
+        k = knots[L]
+        j = int(np.clip(np.searchsorted(k, trace, "right"), 1, len(k) - 1))
+        f = (trace - k[j - 1]) / max(1, k[j] - k[j - 1])
+        return [(off[L] + j - 1, 1 - f), (off[L] + j, f)]
+
+    for v in vols:
+        for L in lines:
+            try:
+                r = tie_line_to_volume(project, v, L, window_ms, max_lag_ms, profile_traces)
+            except Exception:
+                r = None
+            if not r or not r.get("profile"):
+                continue
+            ln = project.line(L)
+            for cdp, sh, ph, gn, cc in r["profile"]:
+                if cc < 0.3:
+                    continue
+                trace = int(np.argmin(np.abs(ln.cdp - cdp)))
+                rows.append(interp_row(L, trace))
+                rhs.append(sh)
+                w.append(cc * cc)
+    for t in ties:
+        if t.get("kind") != "2D-2D" or t["corr"] < 0.3 or t["a"] not in knots or t["b"] not in knots:
+            continue
+        ia, ib = t["at"]
+        row = [(c, -f) for c, f in interp_row(t["a"], ia)] + interp_row(t["b"], ib)
+        rows.append(row)
+        rhs.append(t["shift_ms"])
+        w.append(t.get("weight", t["corr"] ** 2))
+    for L in lines:
+        k = knots[L]
+        for i in range(len(k) - 1):
+            rows.append([(off[L] + i + 1, 1.0), (off[L] + i, -1.0)])
+            rhs.append(0.0)
+            w.append(lam * lam * (knot_traces / max(1, k[i + 1] - k[i])))
+        c = constant.get(L, {}).get("shift_ms", 0.0)
+        for i in range(len(k)):
+            rows.append([(off[L] + i, 1.0)])
+            rhs.append(c)
+            w.append(prior * prior)
+    A = np.zeros((len(rows), n))
+    for r, row in enumerate(rows):
+        for c, f in row:
+            A[r, c] += f
+    sw = np.sqrt(np.asarray(w))
+    x = np.linalg.lstsq(A * sw[:, None], np.asarray(rhs) * sw, rcond=None)[0]
+    out = {}
+    for L in lines:
+        ln = project.line(L)
+        sh = x[off[L]:off[L] + len(knots[L])]
+        c = constant.get(L, {}).get("shift_ms", 0.0)
+        out[L] = {"cdp": ln.cdp[knots[L]].tolist(), "shift": sh.tolist(), "max_flex": float(np.max(np.abs(sh - c)))}
+    return out
+
+
+def flex_shift_per_trace(line, flex):
+    return np.interp(line.cdp, flex["cdp"], flex["shift"])

@@ -113,7 +113,9 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   window, max_lag)` (stacked, envelope lag, phase from analytic inner product; correction of B to match A),
   `extract_3d_along(vol, x, y)` (bilinear), `tie_line_to_volume` (+ along-line profile), `tie_lines` (2D-2D at
   intersections), `all_ties`, `solve_network` (3D fixed, corr^2 weights, Huber IRLS, complex unit-vector phase,
-  log gain), `loop_closures`, `apply_solution` (project.display["mistie"], 2D picks shifted by the change).
+  log gain), `loop_closures`, `solve_flex` (along-line knots, smoothness lam, prior to the constant), `flex_shift_per_trace`,
+  `apply_solution` (project.display["mistie"][line] incl. optional "flex" {cdp, shift}; 2D picks shifted by the
+  per-trace change). `apply_correction` accepts one shift per row.
   `Line2D.raw_data()` vs `data()` (corrected), `Line2D.set_correction`; `SeisProject.line()` applies stored
   corrections. `gui/mistie_dialog.MistieDialog`. `test_mistie.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),

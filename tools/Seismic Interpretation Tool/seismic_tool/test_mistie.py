@@ -73,6 +73,43 @@ def run(check, tmp):
     # phase averaging across +/-180: unit vectors
     cl = MI.loop_closures(ties)
     check(len(cl) >= 1 and max(abs(c) for _, c in cl) < 2.0, f"loop closures small ({len(cl)} triangles)")
+    # ---- flex mode: a line whose mistie ramps 0 -> 12 ms along the line
+    n = 120
+    ii, jj = np.linspace(5, 34, n), np.linspace(2, 57, n)
+    x, y = vol.xy(vol.il0 + ii * vol.il_step, vol.xl0 + jj * vol.xl_step)
+    tr, inside = MI.extract_3d_along(vol, x, y)
+    ramp = np.linspace(0.0, 12.0, n)
+    trf = MI.apply_correction(tr, 4.0, -ramp, 0.0, 1.0).astype(np.float32)
+    pth = os.path.join(d, "F.sgy")
+    write_segy(pth, trf, {21: np.arange(1, n + 1), 181: np.round(x).astype(np.int64), 185: np.round(y).astype(np.int64)})
+    p.lines.append({"name": "F", "segy": pth, "cdp_byte": 21})
+    p._line_cache.clear()
+    const = {"F": MI.tie_line_to_volume(p, "G", "F", (100, 1100), 40.0)}
+    fx = MI.solve_flex(p, ["F"], [], const, lam=0.3, knot_traces=15, window_ms=(100, 1100), profile_traces=20)["F"]
+    est = MI.flex_shift_per_trace(p.line("F"), fx)
+    err = np.abs(est - ramp)[10:-10]
+    check(abs(const["F"]["shift_ms"] - 6.0) < 1.5 and err.max() < 1.5,
+          f"flex mode follows an along-line ramp (constant {const['F']['shift_ms']:.1f} ms; flex max err {err.max():.2f} ms)")
+    fx_stiff = MI.solve_flex(p, ["F"], [], const, lam=50.0, knot_traces=15, window_ms=(100, 1100), profile_traces=20)["F"]
+    check(np.ptp(fx_stiff["shift"]) < 1.0, f"high smoothness -> nearly constant per line (range {np.ptp(fx_stiff['shift']):.2f} ms)")
+    p.lines = [l for l in p.lines if l["name"] != "F"]
+    p._line_cache.clear()
+    hf = Horizon("HF")
+    hf.data["2D:F"] = np.full(n, 600.0, np.float32)
+    p.lines.append({"name": "F", "segy": pth, "cdp_byte": 21})
+    p.horizons.items.append(hf)
+    MI.apply_solution(p, {"F": dict(const["F"], flex=fx)})
+    lnF = p.line("F")
+    trc, _ = MI.extract_3d_along(vol, lnF.x, lnF.y)
+    m = (vol.times > 100) & (vol.times < 1100)
+    ccf = np.corrcoef(lnF.data()[10:-10][:, m].ravel(), trc[10:-10][:, m].ravel())[0, 1]
+    check(ccf > 0.97 and abs(hf.data["2D:F"][-1] - (600.0 + est[-1])) < 1e-3,
+          f"flex correction applied per trace (corr {ccf:.2f}); picks moved by the local shift")
+    MI.apply_solution(p, {})
+    p.horizons.items.remove(hf)
+    p.lines = [l for l in p.lines if l["name"] != "F"]
+    p._line_cache.clear()
+
     # apply: corrected lines match the 3D; picks follow
     h = Horizon("H")
     h.data["2D:P"] = np.full(90, 500.0, np.float32)
@@ -112,4 +149,11 @@ def run_gui(check, tmp):
     check(set(p.display.get("mistie", {})) == {"P", "Q", "R"}, "mistie dialog: apply stores corrections")
     dlg.reset()
     check(not p.display.get("mistie"), "mistie dialog: reset")
+    dlg.flex, dlg.lam, dlg.knot_traces = True, 1.0, 20
+    ties, sol = dlg.compute()
+    check(all("flex" in sol[k] for k in ("P", "Q", "R")), "mistie dialog: flex mode adds along-line shifts")
+    dlg.apply()
+    check("flex" in p.display["mistie"]["P"] and np.ndim(p.line("P").correction[0]) == 1,
+          "flex corrections applied per trace on the line")
+    dlg.reset()
     return True

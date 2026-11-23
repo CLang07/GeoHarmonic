@@ -6,6 +6,8 @@ import csv
 import json
 import os
 
+import numpy as np
+
 from . import __version__
 from .faults import FaultSet
 from .horizons import HorizonSet
@@ -115,7 +117,10 @@ class SeisProject:
             ln = Line2D(name, l["segy"], l.get("cdp_byte", 21), match_nav(name, self.nav()))
             c = (self.display.get("mistie") or {}).get(name)
             if c:
-                ln.set_correction((c.get("shift_ms", 0.0), c.get("phase_deg", 0.0), c.get("gain", 1.0)))
+                sh = c.get("shift_ms", 0.0)
+                if c.get("flex"):
+                    sh = np.interp(ln.cdp, c["flex"]["cdp"], c["flex"]["shift"])
+                ln.set_correction((sh, c.get("phase_deg", 0.0), c.get("gain", 1.0)))
             self._line_cache[name] = ln
         return self._line_cache[name]
 

@@ -40,8 +40,11 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 - Tests: single tie 8.9 ms / 33.7 deg / x2.00 (true 9 / 35 / 2); 2D cut from 3D with known corruption
   8.01 ms / 30.2 deg / x2.00; network of 3 lines + 3D within 0.7 ms and 3 deg with a deliberately bad tie
   (robust solve isolates it; non-robust is pulled 4 ms off); corrected line vs 3D corr 0.47 -> 0.99.
-- Still to do (next run): flex mode (along-line / time-variant corrections with smoothness), survey/key-line
-  groups, horizon-based misties, overlapping-line handling, corrected SEG-Y export, Mistie Tool integration.
+- v0.10.1: Flex mode (along-line shift with smoothness, knots every N traces): a 0-12 ms ramp is recovered
+  within 0.14 ms; very smooth = constant per line; per-trace corrections applied to display and picks;
+  warning when a line needs > 10 ms local flex.
+- Still to do (next run): time-variant flex, survey/key-line groups, horizon-based misties, overlapping-line
+  handling, corrected SEG-Y export, Mistie Tool integration, before/after residual map.
 
 ## Seismic v0.9.0 - Horizon maps (PLAN item 8)
 - Interpret > Horizon maps (Ctrl+M): time structure, isochron, amplitude (RMS/max/min/mean/at horizon),
