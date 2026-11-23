@@ -28,6 +28,9 @@ and `docs/PLAN.md` (ordered work) before changing anything.
    files touched, tests run + results, known limitations, "what Chris should test first" as a short
    numbered checklist, next item), commit with a clear message, push `dev`.
 7. Final message of the run = the RUNLOG entry text (it is emailed to Chris). Plain, concise.
+7a. Repo size: never commit generated data (volume stores, .npy, caches, test outputs, PNGs other
+   than small doc images). Test data must be generated at test time in a temp dir. No file over 5 MB
+   may be added without it being source data listed in HANDOFF. Check `git status` before every commit.
 8. If blocked (tests failing you can't fix, design question only Chris can answer), commit what works
    behind a flag or in a separate module, mark the item `blocked: <reason>` and move to the next item
    only if time allows. Never leave `dev` with failing self-tests.
