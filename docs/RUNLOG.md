@@ -37,4 +37,5 @@
   panel well overlay, Interpret > Well tie. Tests PASS (auto tie 12.1 vs 12 ms; real Tui-1/Maui-5 TD).
 - Item 8 DONE - horizon maps (v0.9.0): maps.py, gui/map_dialog.py, basemap grids + contours, test_maps.py.
   All tests PASS.
-- Working on PLAN item 9 next.
+- Item 9 DONE - docs/WHATS_NEW.md: risk-ordered test checklist + known limits + change log.
+- Working on PLAN item 10 next.

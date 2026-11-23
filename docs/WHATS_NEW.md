@@ -1,6 +1,38 @@
 # What's new (for Chris) - Geo Tool Kit
 
-Newest first. Each section: what it does, how to use it, what to test.
+Built unattended 23 Nov 2026 on branch `dev`. Everything below passed the numpy self-tests and the GUI-logic
+tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI is the riskiest part.
+
+## Start here: test checklist (highest risk first)
+1. Pull `dev`, run `Install (run once).bat` in each tool folder only if the .venv is missing, then
+   `Run self-test` / `python -m seismic_tool --selftest` and `python -m seismic_tool --guitest`
+   (the guitest now runs against real PySide6 offscreen - first real-Qt check of all new code).
+2. Seismic tool, open `NPRA 2D.seisproj.json`: Horizons panel > New, click a strong reflector on R-2
+   (left part, ~1200 ms), press T. Check the pick follows the event, Shift+click erases, Ctrl+Z undoes,
+   left-drag draws a line. Mouse wheel zoom must still work in pick mode; press P to leave pick mode.
+3. Faults: N, click 3-4 points down a fault on R-2, Enter. Draw a second stick on R-3. Check the sticks and
+   the thin cut line display, Esc / Ctrl+Z behaviour, Shift+click delete.
+4. RGT on NPRA: Interpret > Compute RGT (all 2D lines) with node spacing 8 (about 2 min). Display box "RGT",
+   then Interpret > Build horizon stack (2D), tick "RGT contours": contours should follow reflectors.
+   Domain box "Wheeler": reflectors flat. Interpret > RGT edit mode (E): click a contour, click a nearby
+   reflector, Ctrl+Z.
+5. Well Correlation Tool: open the NZ project - Tui-1 is new (from DLIS). Check its GR/RHOB/NPHI/DT tracks
+   (2379-2561 m and 3593-3729 m) and that the other wells look unchanged. Try
+   `python -m well_correlation --dlis2las <the 171 MB Tui-1 main DLIS> <folder>`.
+6. Maui 3D (when imported): link the NZ well project; wells + tops on inlines; Interpret > Well tie for
+   Maui-5/6 (time-depth = sonic anchored to Tui-1's checkshot), Auto tie, Save; Interpret > Horizon maps.
+7. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
+   orientation (top row first).
+
+## Known limits (all items)
+- Long jobs (tracking a big 3D, RGT, stacks) run with a progress bar but cancel only by closing the app;
+  autotracking of a whole 3D runs in the GUI thread (wait cursor).
+- RGT between node columns is interpolated (fine detail at the node spacing); thin layers below tuning do not
+  pinch to zero; 2D RGT edits do not propagate through ties.
+- Wells drawn vertical at the surface location; tie = one shift + one stretch.
+- The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
+
+## Change log (newest first)
 
 ## Seismic v0.9.0 - Horizon maps (PLAN item 8)
 - Interpret > Horizon maps (Ctrl+M): time structure, isochron, amplitude (RMS/max/min/mean/at horizon),

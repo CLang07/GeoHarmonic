@@ -62,7 +62,7 @@ Kingdom-like interaction; large data.
    - Time-structure, isochron, amplitude extraction (RMS / max in window), depth conversion with a
      velocity from well ties, contours (reuse marching squares from well_correlation/mapping.py), export
      grids (XYZ, CPS-3 ASCII), PNG.
-9. **Write-up** - status: todo
+9. **Write-up** - status: done (run 1, 2026-11-23; docs/WHATS_NEW.md checklist ordered by risk; keep it updated)
    - `docs/WHATS_NEW.md` for Chris: features, how to use, test checklist ordered by risk, known limits.
 
 10. **2D-3D merge / tie** - status: todo
