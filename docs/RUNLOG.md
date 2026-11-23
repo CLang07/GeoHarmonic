@@ -7,4 +7,10 @@
 - Next: PLAN item 1 (horizon picking + autotracking).
 
 ## 2026-11-23 run 1 (scheduled) - IN PROGRESS, started 07:20 UTC
-- Working on PLAN item 1 (horizon picking + autotracking).
+- Item 1 DONE - horizon picking + autotracking (v0.2.0): new horizons.py, synth.py, test_horizons.py,
+  gui/horizon_dock.py; section_panel (pick mode, overlays), basemap (time map), main_window (dock,
+  Interpret menu P/T/Ctrl+Z), project (horizons saved in <project>_seismic/horizons). Tests: --selftest 47
+  checks PASS (incl. 3D folded-reflector autotrack max err 1.45 ms / mean 0.22 ms at 4 ms sampling, 2D tie
+  propagation, gap bridging, lateral mix, save/load), --guitest under fakeqt PASS; Mistie + Well
+  Correlation self-tests PASS. Real-data check: NPRA R-2 tracks 1,000-2,600 traces with lateral mix 5-9.
+- Working on PLAN item 2 next.

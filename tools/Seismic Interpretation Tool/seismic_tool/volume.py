@@ -217,6 +217,7 @@ class Line2D:
 
     def release(self):
         self._data = None
+        self._smooth_cache = None
 
 
 def read_nav_csv(path):

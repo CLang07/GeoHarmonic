@@ -4,7 +4,7 @@ Status values: `todo`, `partial`, `done`, `blocked: <reason>`. Do the first `tod
 Chris's priorities: both 2D and 3D everywhere; PaleoScan-style relative geologic time (RGT) workflow;
 Kingdom-like interaction; large data.
 
-1. **Horizon picking + autotracking** - status: todo
+1. **Horizon picking + autotracking** - status: done (run 1, 2026-11-23; v0.2.0)
    - `horizons.py`: Horizon object per survey (3D: float32 grid (nil, nxl) of TWT ms, NaN = unpicked;
      2D: per-line arrays over CDP), save/load as .npy + entry in project JSON; colour, name.
    - Snap to peak / trough / zero crossing (+/-, - to +) with parabolic sub-sample interpolation.

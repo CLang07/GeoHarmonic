@@ -7,8 +7,46 @@ import numpy as np  # noqa: E402
 import pyqtgraph as pg  # noqa: E402
 
 from . import colormaps  # noqa: E402
+from .. import horizons as hz  # noqa: E402
 
 MODES = ["Inline", "Crossline", "Time slice"]
+
+
+class PickViewBox(pg.ViewBox):
+    """ViewBox that hands left-button clicks/drags to the panel while horizon pick mode is on.
+    Click = seed pick (snapped), drag = manual line, Shift+click/drag = erase. Right button keeps the menu."""
+
+    def __init__(self, panel, *a, **k):
+        super().__init__(*a, **k)
+        self.panel = panel
+        self._drag = []
+
+    def _picking(self, ev):
+        return self.panel.pick_mode and ev.button() == QtCore.Qt.LeftButton
+
+    def mouseClickEvent(self, ev):
+        if self._picking(ev):
+            pt = self.mapToView(ev.pos())
+            erase = bool(ev.modifiers() & QtCore.Qt.ShiftModifier)
+            self.panel.pick_at(pt.x(), pt.y(), erase=erase)
+            ev.accept()
+            return
+        super().mouseClickEvent(ev)
+
+    def mouseDragEvent(self, ev, axis=None):
+        if self._picking(ev):
+            ev.accept()
+            pt = self.mapToView(ev.pos())
+            if ev.isStart():
+                p0 = self.mapToView(ev.buttonDownPos())
+                self._drag = [(p0.x(), p0.y())]
+            self._drag.append((pt.x(), pt.y()))
+            if ev.isFinish():
+                erase = bool(ev.modifiers() & QtCore.Qt.ShiftModifier)
+                pts, self._drag = self._drag, []
+                self.panel.pick_drag(pts, erase=erase)
+            return
+        super().mouseDragEvent(ev, axis)
 
 
 class SectionPanel(QtWidgets.QWidget):
@@ -25,6 +63,17 @@ class SectionPanel(QtWidgets.QWidget):
         self._data = None  # current 2D array as displayed (rows = y)
         self._xaxis = None
         self._yaxis = None
+        # horizon interpretation state (set by the Horizons dock)
+        self.pick_mode = False
+        self.active_horizon = None  # name
+        self.snap_mode = "Peak"
+        self.snap_ms = 12.0
+        self.track_params = hz.TrackParams()
+        self.track_scope = "Whole survey"  # or "This line only"
+        self.mix_2d, self.mix_3d = 5, 1  # lateral mix used by the tracker (2D traces, 3D n x n block)
+        self.seeds = []  # [(key, i, j)]
+        self._hz_items = []
+        self.horizonsEdited = None  # optional callback after any edit (dock/basemap refresh)
 
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -59,11 +108,11 @@ class SectionPanel(QtWidgets.QWidget):
         bar.addStretch(1)
         lay.addLayout(bar)
 
-        self.plot = pg.PlotWidget()
+        self.vb = PickViewBox(self)
+        self.plot = pg.PlotWidget(viewBox=self.vb)
         self.plot.setBackground("w")
         self.plot.showGrid(x=False, y=True, alpha=0.2)
         lay.addWidget(self.plot, 1)
-        self.vb = self.plot.getPlotItem().getViewBox()
         self.plot.scene().sigMouseMoved.connect(self._mouse_moved)
 
         self.src_combo.currentIndexChanged.connect(self._source_changed)
@@ -212,6 +261,8 @@ class SectionPanel(QtWidgets.QWidget):
         self.plot.setLabel("left", yl)
         self.plot.getPlotItem().invertY(self.mode != "Time slice" or kind == "2D")
         self._apply_colors()
+        self._hz_items = []
+        self.draw_horizons()
         if view and not reset_view:
             self.vb.setRange(xRange=view[0], yRange=view[1], padding=0)
         else:
@@ -263,6 +314,173 @@ class SectionPanel(QtWidgets.QWidget):
         else:
             l = self.project.line(name)
             self.cursorInfo.emit(f"{name}  CDP {x[j]:.0f}  t {y[i]:.0f} ms  amp {amp:.4g}   X {l.x[j]:.1f}  Y {l.y[j]:.1f}")
+
+    # ------------------------------------------------------------ horizons
+    def hset(self):
+        return getattr(self.project, "horizons", None) if self.project else None
+
+    def picker(self):
+        return hz.Picker(self.project, self.hset()) if self.hset() is not None else None
+
+    def section_key(self):
+        if not self.source:
+            return None
+        return hz.survey_key(*self.source)
+
+    def trace_at(self, xval):
+        """(i, j) grid indices of the trace nearest to section x value, or None (time slice)."""
+        kind, name = self.source
+        if kind == "2D":
+            cdp = self.project.line(name).cdp
+            return 0, int(np.argmin(np.abs(cdp - xval)))
+        v = self.project.volume(name)
+        if self.mode == "Inline":
+            return v.il_index(self.number), v.xl_index(xval)
+        if self.mode == "Crossline":
+            return v.il_index(xval), v.xl_index(self.number)
+        return None
+
+    def _active(self):
+        hs = self.hset()
+        h = hs.get(self.active_horizon) if hs is not None and self.active_horizon else None
+        if h is None:
+            self.cursorInfo.emit("Create or select a horizon in the Horizons panel first.")
+        return h
+
+    def _edited(self):
+        self.draw_horizons()
+        if self.horizonsEdited:
+            self.horizonsEdited()
+
+    def pick_at(self, x, t_ms, erase=False):
+        """Click in pick mode: snapped seed pick (or erase the pick on that trace)."""
+        h = self._active()
+        if h is None or not self.source:
+            return None
+        ij = self.trace_at(x)
+        if ij is None:
+            self.cursorInfo.emit("Pick on an inline, crossline or 2D line (not on a time slice).")
+            return None
+        key, pk = self.section_key(), self.picker()
+        if erase:
+            pk.erase(h, key, [ij[0]], [ij[1]])
+            self.seeds = [s for s in self.seeds if s != (key, ij[0], ij[1])]
+            self._edited()
+            return None
+        t = pk.pick_points(h, key, ij[0], ij[1], t_ms, self.snap_mode, self.snap_ms)
+        self.seeds.append((key, ij[0], ij[1]))
+        self.cursorInfo.emit(f"Seed {len(self.seeds)} on {h.name} at {float(t[0]):.1f} ms - press T to track")
+        self._edited()
+        return float(t[0])
+
+    def pick_drag(self, pts, erase=False):
+        """Drag in pick mode: manual line through the dragged points (snapped lightly), or erase that span."""
+        h = self._active()
+        if h is None or not self.source or len(pts) < 1:
+            return
+        ijs = [self.trace_at(x) for x, _ in pts]
+        if any(ij is None for ij in ijs):
+            return
+        key, pk = self.section_key(), self.picker()
+        ii = np.array([ij[0] for ij in ijs])
+        jj = np.array([ij[1] for ij in ijs])
+        tt = np.array([t for _, t in pts], float)
+        if erase:
+            along = jj if (key.startswith("2D:") or self.mode == "Inline") else ii
+            k = np.arange(along.min(), along.max() + 1)
+            if key.startswith("2D:") or self.mode == "Inline":
+                pk.erase(h, key, np.full(len(k), ii[0]), k)
+            else:
+                pk.erase(h, key, k, np.full(len(k), jj[0]))
+        else:
+            pk.manual_line(h, key, ii, jj, tt, self.snap_mode, min(self.snap_ms, 4.0))
+        self._edited()
+
+    def track(self):
+        """T: autotrack the active horizon from the seeds on this survey (no seeds: from all its picks)."""
+        h = self._active()
+        if h is None or not self.source:
+            return 0
+        key, pk = self.section_key(), self.picker()
+        seeds = [(i, j) for k, i, j in self.seeds if k == key]
+        p = self.track_params
+        p.mode = self.snap_mode
+        p.smooth = self.mix_2d if key.startswith("2D:") else self.mix_3d
+        line_only = self.track_scope == "This line only"
+        if key.startswith("2D:"):
+            if line_only:
+                n = pk.track(h, key, seeds or None, p)
+            else:
+                res = pk.track_2d_network(h, [self.source[1]], p)
+                n = sum(res.values())
+                self.cursorInfo.emit(f"Tracked {h.name} on {len(res)} line(s): {n:,} traces")
+        else:
+            scope = (self.mode, self.number) if line_only and self.mode in ("Inline", "Crossline") else None
+            n = pk.track(h, key, seeds or None, p, scope=scope)
+        self.seeds = [s for s in self.seeds if s[0] != key]
+        if not key.startswith("2D:") or line_only:
+            self.cursorInfo.emit(f"Tracked {h.name}: {n:,} new picks")
+        self._edited()
+        return n
+
+    def undo(self):
+        hs = self.hset()
+        if hs is not None:
+            name = hs.undo()
+            self.cursorInfo.emit(f"Undo ({name})" if name else "Nothing to undo")
+            self._edited()
+
+    def draw_horizons(self):
+        for it in self._hz_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._hz_items = []
+        hs = self.hset()
+        if hs is None or not self.source or self._data is None:
+            return
+        key = self.section_key()
+        kind, name = self.source
+        try:
+            surv = self.project.volume(name) if kind == "3D" else self.project.line(name)
+        except Exception:
+            return
+        for h in hs.items:
+            if not h.visible:
+                continue
+            width = 3 if h.name == self.active_horizon else 2
+            if kind == "3D" and self.mode == "Time slice":
+                pts = hz.slice_points(h, key, surv, self.number)
+                if pts is None or not len(pts[0]):
+                    continue
+                it = pg.ScatterPlotItem(pts[0], pts[1], size=4, pen=None, brush=pg.mkBrush(*h.color))
+            else:
+                c = hz.section_curve(h, key, surv, self.mode, self.number)
+                if c is None or not np.isfinite(c[1]).any():
+                    continue
+                it = pg.PlotCurveItem(np.asarray(c[0], float), np.asarray(c[1], float), connect="finite",
+                                      pen=pg.mkPen(h.color, width=width))
+            self.plot.addItem(it)
+            self._hz_items.append(it)
+        for k, i, j in self.seeds:
+            if k != key or (kind == "3D" and self.mode == "Time slice"):
+                continue
+            g = hs.get(self.active_horizon).get(k) if hs.get(self.active_horizon) else None
+            if g is None:
+                continue
+            t = g[j] if g.ndim == 1 else g[i, j]
+            if kind == "2D":
+                xv = surv.cdp[j]
+            elif self.mode == "Inline" and i == surv.il_index(self.number):
+                xv = surv.xlines[j]
+            elif self.mode == "Crossline" and j == surv.xl_index(self.number):
+                xv = surv.inlines[i]
+            else:
+                continue
+            it = pg.ScatterPlotItem([xv], [t], symbol="x", size=10, pen=pg.mkPen((0, 0, 0), width=2))
+            self.plot.addItem(it)
+            self._hz_items.append(it)
 
     # ------------------------------------------------------------ for the basemap
     def current_trace_line(self):

@@ -44,11 +44,23 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `well_project` (a .wcproj.json; `wells()` -> [(name, x, y)] NZTM2000 metres), `display` dict.
   `volume(name)`, `line(name)` cached. Interpretation objects (horizons, faults, RGT) should be added as
   new keys + files in `<project>_seismic/` next to the project, never inside the JSON if large.
+- `horizons.py` (v0.2): `Horizon` (name, color, visible, `data` {"3D:<vol>": float32 (nil, nxl) ms,
+  "2D:<line>": float32 (ntr,) ms}, NaN = unpicked), `HorizonSet` (items, undo stack of array snapshots,
+  save/load to `<project>_seismic/horizons/<safe name>/<safe key>.npy`, JSON list in the project under
+  "horizons"), `snap_times` (peak/trough parabolic, zero crossings linear), `correlate_pairs`,
+  `track_grid(get_traces, grid_idx, seeds, params, dt_ms, ns, allowed, blocked)` (vectorised wavefront
+  tracker with relaxing thresholds + gap bridging; `blocked(pi,pj,ci,cj)` is the hook for faults),
+  `TrackParams` (mode, window_ms, max_jump_ms, min_corr, max_gap, smooth), `Picker(project, hset)`
+  (pick_points, manual_line, erase, clear_section, track(scope), track_2d_network via
+  `line_intersections`), display helpers `section_curve`, `slice_points`, `grid_transform`,
+  `structure_rgba`. `synth.py` builds synthetic projects (folded 3D + crossing 2D lines) for tests;
+  `test_horizons.py` holds the horizon tests (`run` in --selftest, `run_gui` in --guitest).
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +
   slider + step, colormap, clip %, reverse polarity; PgUp/PgDn; signals positionChanged, cursorInfo;
-  `current_trace_line()` for basemap), `basemap.Basemap` (outlines, 2D lines, wells, red current line;
+  `current_trace_line()` for basemap; `PickViewBox` routes left click/drag to `pick_at`/`pick_drag` in pick
+  mode; `track()`, `undo()`, `draw_horizons()`), `horizon_dock.HorizonDock` (list, settings, buttons), `basemap.Basemap` (outlines, 2D lines, wells, red current line, horizon time map via `show_horizon`;
   signals openLine(name), openInline(vol, il, xl)), `colormaps.lut(name, reverse)`.
 - `__main__`: `--selftest`, `--info FILE.sgy`, `--png PROJECT OUT.png` (matplotlib render, no Qt).
 - `selftest.write_segy(path, traces, headers{byte: int array}, dt_us, fmt)` makes synthetic SEG-Y (IBM or
@@ -72,6 +84,8 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
 - Units: metres; NZ coords NZTM2000 (EPSG:2193); NPRA nav in its own projected metres.
 
 ## Testing GUI code (no Qt here)
+`cd "tools/Seismic Interpretation Tool" && PYTHONPATH=../../dev/fakeqt:. python3 -m seismic_tool --guitest`
+runs the GUI logic tests (also works with real Qt, offscreen).
 `PYTHONPATH=/path/to/repo/dev/fakeqt:. python3 -c "..."` - `dev/fakeqt/anything.py` returns a permissive
 `Anything` for every Qt/pyqtgraph attribute; signals are no-ops; combo/spin values are mocks (not real), so
 set panel state directly (e.g. `panel.source=("3D","Synth"); panel.mode="Inline"; panel.number=7;
@@ -83,4 +97,7 @@ key results with matplotlib to PNG and look at them.
 - Pin PySide6 6.5.3 / pyqtgraph 0.13.7 (see above).
 - FDCC is a density correction, not RHOB. Remove flat-lined cased-hole log sections.
 - numpy 2: use `np.ptp(a)`, not `a.ptp()`.
+- Trace-to-trace tracking on the NPRA land 2D lines fails within tens of traces on raw data (static
+  jitter, noise); a 5-9 trace lateral mix + gap bridging makes it track 1000+ traces. Synthetic tests alone
+  would not have shown this - always try new algorithms on the real data in data/.
 - Chris wants Kingdom/GeoGraphix-style behaviour and speed with big datasets; avoid per-trace Python loops.

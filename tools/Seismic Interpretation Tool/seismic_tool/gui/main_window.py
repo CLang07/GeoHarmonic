@@ -11,6 +11,7 @@ from ..project import EXT, SeisProject  # noqa: E402
 from ..segy import IL_XL_CANDIDATES, SegyFile  # noqa: E402
 from ..volume import import_3d  # noqa: E402
 from .basemap import Basemap  # noqa: E402
+from .horizon_dock import HorizonDock  # noqa: E402
 from .section_panel import SectionPanel  # noqa: E402
 
 
@@ -80,8 +81,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.basemap = Basemap()
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderHidden(True)
+        self.horizon_dock = HorizonDock(self.section)
         for title, w, area in (("Data", self.tree, QtCore.Qt.LeftDockWidgetArea),
-                               ("Basemap", self.basemap, QtCore.Qt.LeftDockWidgetArea)):
+                               ("Basemap", self.basemap, QtCore.Qt.LeftDockWidgetArea),
+                               ("Horizons", self.horizon_dock, QtCore.Qt.RightDockWidgetArea)):
             d = QtWidgets.QDockWidget(title, self)
             d.setObjectName(title)
             d.setWidget(w)
@@ -100,6 +103,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.basemap.openLine.connect(lambda n: self.section.show("2D", n))
         self.basemap.openInline.connect(lambda v, il, xl: self.section.show("3D", v, "Inline", il))
         self.tree.itemDoubleClicked.connect(self._tree_open)
+        self.horizon_dock.changed.connect(self._horizons_changed)
         self._menus()
         self.resize(1500, 900)
         if path:
@@ -121,18 +125,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Link &well project...", self.link_wells_dialog)
         m.addSeparator()
         self._act(m, "E&xit", self.close, "Ctrl+Q")
+        m = mb.addMenu("&Interpret")
+        self._act(m, "&New horizon...", lambda: self.horizon_dock.new_horizon())
+        self._act(m, "&Pick mode on/off", self.horizon_dock.toggle_pick_mode, "P")
+        self._act(m, "&Track horizon from seeds", self.horizon_dock.track, "T")
+        self._act(m, "&Undo horizon edit", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
         self._act(m, "Next line / slice (PgDown)", lambda: self.section.step(1))
         self._act(m, "Previous line / slice (PgUp)", lambda: self.section.step(-1))
         m.addSeparator()
         m.addAction(self.dock_data.toggleViewAction())
         m.addAction(self.dock_basemap.toggleViewAction())
+        m.addAction(self.dock_horizons.toggleViewAction())
         m = mb.addMenu("&Help")
         self._act(m, "About", lambda: QtWidgets.QMessageBox.information(
             self, "Seismic Interpretation Tool",
             f"Seismic Interpretation Tool {__version__}\nGeo Tool Kit\n\n"
             "PgUp/PgDown step through lines (Shift = 10x). Mouse wheel zooms, right-drag stretches axes, "
-            "right-click > View all resets."))
+            "right-click > View all resets.\n\nHorizons: P = pick mode (click = seed, drag = manual line, "
+            "Shift = erase), T = track from seeds, Ctrl+Z = undo."))
 
     def _act(self, menu, text, fn, key=None):
         a = QtGui.QAction(text, self)
@@ -161,6 +172,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.expandAll()
         self.basemap.set_project(p)
         self.section.set_project(p)
+        self.horizon_dock.set_project(p)
+        self._horizons_changed()
+
+    def _horizons_changed(self):
+        self.section.draw_horizons()
+        self.basemap.show_horizon(self.horizon_dock.active() if self.horizon_dock.map_chk.isChecked() else None)
+        self.basemap.show_current(self.section.current_trace_line())
 
     def _tree_open(self, item, _col):
         d = item.data(0, QtCore.Qt.UserRole)

@@ -101,7 +101,33 @@ def run():
         nav = np.array([[1, 0.0, 0.0], [120, 1190.0, 0.0]])
         l = Line2D("L", p2, nav=nav)
         check(np.allclose(l.data(), tr2) and l.has_coords and abs(l.x[60] - 600) < 1e-6, "2D line + nav")
+        # ---- horizons: snapping, 3D/2D autotracking, ties, undo, save/load
+        from . import test_horizons
+        test_horizons.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
+    return ok
+
+
+def run_gui():
+    """GUI logic tests. Here: PYTHONPATH=<repo>/dev/fakeqt:. python3 -m seismic_tool --guitest.
+    On a PC with Qt it runs against real widgets (offscreen)."""
+    ok = True
+
+    def check(cond, msg):
+        nonlocal ok
+        print(("PASS " if cond else "FAIL ") + msg)
+        ok &= bool(cond)
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6 import QtWidgets
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])  # noqa: F841
+    from . import test_horizons
+    tmp = tempfile.mkdtemp(prefix="seis_guitest_")
+    try:
+        test_horizons.run_gui(check, tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("GUI TEST PASSED" if ok else "GUI TEST FAILED")
     return ok

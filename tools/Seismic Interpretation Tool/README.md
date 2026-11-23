@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.1, step 1: loading and viewing
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.2: loading, viewing, horizon picking + autotracking
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -28,10 +28,28 @@ Starter projects:
 - **PgUp / PgDown** step lines (Shift = 10x). Mouse wheel zoom, right-drag stretch, right-click > View all.
 - Status bar: IL, XL, time, amplitude, X, Y under the cursor. Red line on the basemap = section shown.
 
+## Horizons (Horizons panel, right side; Interpret menu)
+- **New** creates a horizon and turns on **Pick mode (P)**. In pick mode on an inline, crossline or 2D line:
+  - click = seed pick, snapped to the nearest Peak / Trough / Zero crossing (+ to - or - to +) within
+    "Snap search" ms, with sub-sample interpolation;
+  - left-drag = manual line through the dragged points (every trace in between gets a lightly snapped pick);
+  - Shift+click = erase the pick on that trace, Shift+drag = erase the span.
+  Pan with the mouse wheel / right-drag while pick mode is on, or press P to leave pick mode.
+- **T (Track)** grows the horizon from the seeds (no seeds: from all its picks). Settings:
+  correlation window (+/- ms), max jump per trace, min correlation, lateral mix (2D: running mean over N
+  traces - 5-9 helps a lot on noisy land lines such as NPRA; 3D: n x n block), bridge gaps (jump over up
+  to N dead/noisy traces). Scope: **Whole survey** (3D: all inlines/crosslines; 2D: follows line ties onto
+  crossing lines) or **This line only**.
+- **Ctrl+Z** undoes the last pick/erase/track/delete (30 steps). **Clear line** removes the active horizon's
+  picks on the section shown.
+- Horizons show as coloured lines on sections, as dots on time slices, and the active horizon's time map
+  is drawn on the basemap (3D as an image, 2D as coloured dots; red = shallow).
+- Saved with the project: `<project>_seismic\horizons\<name>\*.npy` + list in the project file.
+
 ## Command line
-`python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--png PROJECT OUT.png`.
+`python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.
 
 ## Coming next
-2. Horizon picking (seed + autotrack on peak/trough, 2D and 3D), faults sticks.
+2. Fault sticks and planes (tracker stops at faults), relative geologic time (RGT) workflow.
 3. Wells on seismic: tops in time via checkshots, synthetics from DT/RHOB.
 4. Time/structure maps from horizons, amplitude extractions, mistie integration for 2D.

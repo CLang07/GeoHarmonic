@@ -7,6 +7,9 @@ from PySide6 import QtCore, QtWidgets  # noqa: E402
 import numpy as np  # noqa: E402
 import pyqtgraph as pg  # noqa: E402
 
+from .. import horizons as hz  # noqa: E402
+from . import colormaps  # noqa: E402
+
 COLORS = [(31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40), (148, 103, 189), (140, 86, 75)]
 
 
@@ -28,9 +31,14 @@ class Basemap(QtWidgets.QWidget):
         hint = QtWidgets.QLabel("Click a 2D line to open it; click inside a 3D survey to open the inline there.")
         hint.setStyleSheet("color:#555")
         lay.addWidget(hint)
+        self.legend = QtWidgets.QLabel("")
+        lay.addWidget(self.legend)
         self.project = None
         self._lines = {}  # name -> (x, y) decimated
         self._current = None
+        self._hz_name = None  # horizon shown as a time-structure map
+        self._hz_items = []
+        self.hz_range = None  # (vmin, vmax) of the last map, for the legend text
         self.plot.scene().sigMouseClicked.connect(self._clicked)
 
     def set_project(self, project):
@@ -78,9 +86,71 @@ class Basemap(QtWidgets.QWidget):
                 t = pg.TextItem(name, color=(0, 0, 0), anchor=(-0.1, 1.1))
                 t.setPos(x, y)
                 self.plot.addItem(t, ignoreBounds=True)
+        self._hz_items = []
+        self._draw_horizon_map()
         self._current = pg.PlotCurveItem(pen=pg.mkPen((220, 0, 0), width=3))
         self.plot.addItem(self._current)
         self.plot.getPlotItem().getViewBox().autoRange(padding=0.05)
+
+    def show_horizon(self, name):
+        """Show a horizon's time-structure map (3D grids as colour images, 2D picks as coloured dots)."""
+        self._hz_name = name
+        self._draw_horizon_map()
+
+    def horizon_map_layers(self, name):
+        """Pure-data description of the map for a horizon: list of ("image", rgba, transform6) and
+        ("points", x, y, rgba) plus (vmin, vmax) shared by all layers."""
+        p = self.project
+        h = p.horizons.get(name) if p and name else None
+        if h is None:
+            return [], None
+        vals = [a[np.isfinite(a)] for a in h.data.values()]
+        vals = np.concatenate(vals) if vals else np.array([])
+        if not vals.size:
+            return [], None
+        vmin, vmax = float(vals.min()), float(vals.max())
+        lut = colormaps.lut("Rainbow (attributes)", reverse=True)
+        out = []
+        for key, a in h.data.items():
+            kind, sname = key.split(":", 1)
+            try:
+                if kind == "3D":
+                    vol = p.volume(sname)
+                    rgba, _, _ = hz.structure_rgba(a, lut, vmin, vmax)
+                    out.append(("image", rgba, hz.grid_transform(vol)))
+                else:
+                    line = p.line(sname)
+                    fin = np.isfinite(a)
+                    if not line.has_coords or not fin.any():
+                        continue
+                    rgba, _, _ = hz.structure_rgba(a[fin], lut, vmin, vmax)
+                    out.append(("points", line.x[fin], line.y[fin], rgba))
+            except Exception:
+                continue
+        return out, (vmin, vmax)
+
+    def _draw_horizon_map(self):
+        for it in self._hz_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._hz_items = []
+        layers, self.hz_range = self.horizon_map_layers(self._hz_name)
+        from PySide6 import QtGui
+        for lay in layers:
+            if lay[0] == "image":
+                it = pg.ImageItem(lay[1])
+                it.setTransform(QtGui.QTransform(*lay[2]))
+                it.setZValue(-10)
+            else:
+                _, x, y, rgba = lay
+                it = pg.ScatterPlotItem(x, y, size=5, pen=None, brush=[pg.mkBrush(*c) for c in rgba[:, :3]])
+                it.setZValue(-5)
+            self.plot.addItem(it)
+            self._hz_items.append(it)
+        self.legend.setText(f"Time map {self._hz_name}: {self.hz_range[0]:.0f} ms (red, shallow) to "
+                            f"{self.hz_range[1]:.0f} ms (purple, deep)" if self.hz_range else "")
 
     def show_current(self, xy):
         if self._current is None:

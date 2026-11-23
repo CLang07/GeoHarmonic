@@ -7,6 +7,7 @@ import json
 import os
 
 from . import __version__
+from .horizons import HorizonSet
 from .volume import Line2D, Volume3D, match_nav, read_nav_csv
 
 EXT = ".seisproj.json"
@@ -21,6 +22,8 @@ class SeisProject:
         self.nav_files = []  # CSV paths (line,cdp,x,y)
         self.well_project = None  # path to a Well Correlation project (.wcproj.json)
         self.display = {"cmap": "seismic", "clip": 99.0, "reverse": False}
+        self.horizons = HorizonSet()
+        self._hz_saved_to = None
         self._vol_cache = {}
         self._line_cache = {}
         self._nav = None
@@ -42,14 +45,24 @@ class SeisProject:
             return p
         return p if os.path.isabs(p) else os.path.normpath(os.path.join(self.base(), p))
 
+    def seismic_dir(self):
+        """<project>_seismic folder next to the project file (volume stores, interpretation)."""
+        stem = os.path.basename(self.path)[:-len(EXT)] if self.path else self.name
+        return os.path.join(self.base(), stem + "_seismic")
+
     def save(self, path=None):
         if path:
             self.path = path if path.endswith(EXT) else path + EXT
+        hz_dir = os.path.join(self.seismic_dir(), "horizons")
+        if self.horizons.items and (self.horizons.dirty or self._hz_saved_to != hz_dir):
+            self.horizons.save(hz_dir)
+            self._hz_saved_to = hz_dir
         d = {"app": "seismic_tool", "version": __version__, "name": self.name,
              "volumes": [dict(v, store=self._rel(v["store"]), segy=self._rel(v.get("segy"))) for v in self.volumes],
              "lines": [dict(l, segy=self._rel(l["segy"])) for l in self.lines],
              "nav_files": [self._rel(n) for n in self.nav_files],
-             "well_project": self._rel(self.well_project), "display": self.display}
+             "well_project": self._rel(self.well_project), "display": self.display,
+             "horizons": self.horizons.to_json(self._rel(hz_dir))}
         tmp = self.path + ".tmp"
         with open(tmp, "w") as fh:
             json.dump(d, fh, indent=1)
@@ -67,6 +80,11 @@ class SeisProject:
         p.nav_files = [p._abs(n) for n in d.get("nav_files", [])]
         p.well_project = p._abs(d.get("well_project"))
         p.display.update(d.get("display", {}))
+        try:
+            p.horizons = HorizonSet.load(d.get("horizons"), p.base())
+            p._hz_saved_to = os.path.join(p.seismic_dir(), "horizons")
+        except Exception as e:  # never block opening the project because of interpretation files
+            print("Could not load horizons:", e)
         return p
 
     # ------------------------------------------------------------ data access
