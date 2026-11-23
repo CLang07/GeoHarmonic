@@ -165,6 +165,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   (cache of DynamicDepthModel), `adopt_depth_model`, `ddc_refresh`. MainWindow: `set_ddc`, `toggle_ddc`, `ddc_tick`,
   QFileSystemWatcher + 1 s debounce + 2 s poll; `_horizons_changed` starts the debounce. Dialog: `ddm`,
   `model_refreshed`, `add_what_if`, `clear_what_if`. Tests: `test_ddc.run_dynamic`, `run_gui_dynamic`.
+  v0.24 (17b): `vgrid.py` (`grid_values(X, Y, px, py, v, method idw|tps|kriging, opts)`, `tps_fit/eval` in a centred
+  scaled frame, `fit_variogram` (binned experimental, LS sill per trial range), `krige_fit/eval` (dual form, simple
+  kriging), `sample_volume` (nearest trace, one inline read at a time), `dix`, `guide_trends`, `guided_grid`).
+  `VelocityModel(gridding={method, variogram, range, smooth})`, functions[k]["guide"] = {volume, kind rms|interval,
+  mode ratio|difference}; trends cached in grids["trends"] keyed by `trend_keys` (horizon arrays); `trend_grid(k)`.
+  Dialog: set_gridding, set_layer_guide, column 5 guide combo. Tests: `run_gridding`, `run_gui_gridding`.
 - `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
   (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
   Correlation zones)), `engineering` (13a+: ALIASES/PRESETS column mapping + prefix fallback, unit detection

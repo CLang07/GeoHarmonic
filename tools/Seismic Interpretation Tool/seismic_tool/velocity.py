@@ -149,10 +149,13 @@ def fit_line(x, y, nsigma=2.0):
 
 class VelocityModel:
     def __init__(self, project, survey_key, layers, residual_correction=False, cell=100.0, below_velocity=None,
-                 functions=None):
+                 functions=None, gridding=None):
         """layers: [(horizon name, formation name or None)] top to bottom.
         functions: per layer None or {"func": "v0"|"v0kz"|"v0kt"|"td", "k": float|None (None = fit over the wells),
-        "blend": "idw"|"nearest" (td)}; missing = "v0" (item-12 behaviour)."""
+        "blend": "idw"|"nearest" (td), "guide": {"volume": name, "kind": "rms"|"interval", "mode": "ratio"|"difference"}
+        (seismic-velocity trend for v0 / v0kz / v0kt)}; missing = "v0" (item-12 behaviour).
+        gridding: {"method": "idw"|"tps"|"kriging", "variogram": "spherical"|"exponential", "range": m|None,
+        "smooth": float} for the gridded well values and residuals (default IDW)."""
         self.project = project
         self.key = survey_key
         self.layers = list(layers)
@@ -165,6 +168,8 @@ class VelocityModel:
             if f.get("func", "v0") not in FUNCTIONS:
                 raise ValueError(f"unknown velocity function {f.get('func')!r}")
             f.setdefault("func", "v0")
+        self.gridding = dict(gridding or {"method": "idw"})
+        self.gridding.setdefault("method", "idw")
         self._grids = None
 
     # -------------------------------------------------------------- inputs
@@ -265,6 +270,33 @@ class VelocityModel:
                 tds = reuse["td"]
             else:
                 tds = self._td_curves([wt[i] for i in real])
+        from .vgrid import grid_values, guided_grid, guide_trends
+        gm = self.gridding.get("method", "idw")
+        gsig = repr(sorted(self.gridding.items()))
+        # seismic-velocity guide: trend interval velocity per guided layer (cached while its horizons are unchanged)
+        trends, tkeys = {}, {}
+        old_tr = (reuse or {}).get("trends", {}) if reuse is not None else {}
+        old_tk = (reuse or {}).get("trend_keys", {}) if reuse is not None else {}
+        groups = {}
+        for k in range(K):
+            gd = self.functions[k].get("guide")
+            if gd and self.functions[k]["func"] != "td":
+                top = tg[k - 1].z if k else np.zeros(1)
+                tkeys[k] = _sig(gd.get("volume"), gd.get("kind", "rms"), top, tg[k].z)
+                if old_tk.get(k) == tkeys[k]:
+                    trends[k] = old_tr[k]
+                else:
+                    groups.setdefault((gd.get("volume"), gd.get("kind", "rms")), []).append(k)
+        for (vname, kind), ks in groups.items():
+            vol = self.project.volume(vname)
+            trends.update(guide_trends(vol, X, Y, tg, ks, kind))
+
+        def grid(k, px_, py_, vals):
+            gd = self.functions[k].get("guide")
+            if gd and trends.get(k) is not None:
+                return guided_grid(X, Y, px_, py_, vals, trends[k], gd.get("mode", "ratio"), gm, self.gridding)[0]
+            return grid_values(X, Y, px_, py_, vals, gm, self.gridding)
+
         vgrids, zraw, v0grids, info = [], [], [], []
         if from_layer:
             vgrids = list(reuse["v"][:from_layer])
@@ -292,8 +324,8 @@ class VelocityModel:
             names = [r["well"] for r in rows]
             if func == "v0":
                 vw = np.array([r["vint"][k] for r in rows])
-                lay["sig"] = _sig(func, names, vw)
-                v = reuse["v"][k] if prev.get("sig") == lay["sig"] else _idw_nodes(X, Y, px, py, vw)
+                lay["sig"] = _sig(func, names, vw, gsig, tkeys.get(k))
+                v = reuse["v"][k] if prev.get("sig") == lay["sig"] else grid(k, px, py, vw)
                 z = z_prev + v * dt / 2000.0
             elif func in ("v0kz", "v0kt"):
                 kk, src = self._layer_k(rows, k)
@@ -305,8 +337,8 @@ class VelocityModel:
                 ok = np.isfinite(v0w)
                 if not ok.any():
                     raise ValueError(f"layer {self.layers[k][0]}: no well with a usable thickness for V0")
-                lay["sig"] = _sig(func, [n for n, o in zip(names, ok) if o], v0w[ok], kk)
-                v0 = reuse["v0"][k] if prev.get("sig") == lay["sig"] else _idw_nodes(X, Y, px[ok], py[ok], v0w[ok])
+                lay["sig"] = _sig(func, [n for n, o in zip(names, ok) if o], v0w[ok], kk, gsig, tkeys.get(k))
+                v0 = reuse["v0"][k] if prev.get("sig") == lay["sig"] else grid(k, px[ok], py[ok], v0w[ok])
                 if func == "v0kz":
                     z = kz_base(z_prev, v0, kk, dt / 2000.0)
                     v_top = v0 + kk * z_prev
@@ -353,10 +385,11 @@ class VelocityModel:
                 res = np.array([wt[i]["z"][k] for i in use]) - dg.sample(px_all[use], py_all[use])
                 ok = np.isfinite(res)
                 if ok.any():
-                    z = z + _idw_nodes(X, Y, px_all[use][ok], py_all[use][ok], res[ok])
+                    z = z + grid_values(X, Y, px_all[use][ok], py_all[use][ok], res[ok], gm, self.gridding)
             zgrids.append(z)
         self._grids = {"t": tg, "v": vgrids, "z": zgrids, "z_raw": zraw, "v0": v0grids, "wells": wt, "layers": info,
-                       "td": tds, "td_wells": [wt[i]["well"] for i in real], "px": td_px, "py": td_py}
+                       "td": tds, "td_wells": [wt[i]["well"] for i in real], "px": td_px, "py": td_py,
+                       "trends": trends, "trend_keys": tkeys}
         return self
 
     def layer_info(self):
@@ -413,6 +446,16 @@ class VelocityModel:
             return None
         t = g["t"][k]
         return MapGrid(g["v0"][k], t.kind, "m/s", f"V0 of {self.layers[k][0]}", t.vol, t.x0, t.y0, t.dx, t.dy)
+
+    def trend_grid(self, k):
+        """Seismic-velocity trend (interval velocity) of a guided layer, or None."""
+        g = self.grids()
+        tr = g.get("trends", {}).get(k)
+        if tr is None:
+            return None
+        t = g["t"][k]
+        return MapGrid(tr, t.kind, "m/s", f"Seismic interval velocity trend, {self.layers[k][0]}", t.vol, t.x0, t.y0,
+                       t.dx, t.dy)
 
     def misfit_table(self):
         """[(well, horizon, formation, z_well, z_model, residual)] - residual = well - model (m)."""
@@ -537,14 +580,16 @@ class VelocityModel:
     def to_dict(self):
         d = {"survey": self.key, "layers": [list(l) for l in self.layers], "residual_correction":
              self.residual_correction, "cell": self.cell, "below_velocity": self.below_velocity}
-        if any(f.get("func", "v0") != "v0" for f in self.functions):
+        if any(f.get("func", "v0") != "v0" or f.get("guide") for f in self.functions):
             d["functions"] = [dict(f) for f in self.functions]
+        if self.gridding.get("method", "idw") != "idw":
+            d["gridding"] = dict(self.gridding)
         return d
 
     @classmethod
     def from_dict(cls, project, d):
         return cls(project, d["survey"], [tuple(l) for l in d["layers"]], d.get("residual_correction", False),
-                   d.get("cell", 100.0), d.get("below_velocity"), d.get("functions"))
+                   d.get("cell", 100.0), d.get("below_velocity"), d.get("functions"), d.get("gridding"))
 
 
 def _sig(*parts):

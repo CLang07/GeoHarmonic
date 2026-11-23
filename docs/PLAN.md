@@ -245,7 +245,7 @@ Kingdom-like interaction; large data.
    1 ms / 0.5% / 5 deg; DTW warp respects the velocity cap; deterministic wavelet = true wavelet (corr > 0.95)
    at 10% noise; polarity flip detected; cycle-skip case flagged; multi-well batch on 10 synthetic wells.
 
-17. **Dynamic depth conversion (Kingdom DDC-style)** - status: partial (17a done v0.22.0; 17c done v0.23.0; next 17b, then 17d, 17e)
+17. **Dynamic depth conversion (Kingdom DDC-style)** - status: partial (17a done v0.22.0; 17c done v0.23.0; 17b done v0.24.0; next 17d, then 17e)
    Chris asked for this on 2026-11-23: he likes Kingdom's Dynamic Depth Conversion (new well tops update the
    velocity model and depth maps immediately; used for geosteering prognosis). Petrel's equivalent is Domain
    Conversion (+ Velit = Kingdom VelPAK as a Petrel plugin, Cegal Blueback Rocks Velocity); GeoGraphix has

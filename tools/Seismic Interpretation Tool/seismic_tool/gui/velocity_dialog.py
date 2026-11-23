@@ -25,11 +25,40 @@ class VelocityDialog(QtWidgets.QDialog):
         self.resid = QtWidgets.QCheckBox("Correct the remaining misfit at the wells (grid residuals)")
         form.addRow("Survey", self.survey)
         form.addRow(self.resid)
+        grow = QtWidgets.QHBoxLayout()
+        self.g_method = QtWidgets.QComboBox()
+        for key_, label in (("idw", "Inverse distance"), ("tps", "Thin-plate spline"), ("kriging", "Kriging")):
+            self.g_method.addItem(label, key_)
+        self.g_vario = QtWidgets.QComboBox()
+        self.g_vario.addItems(["spherical", "exponential"])
+        self.g_range = QtWidgets.QLineEdit("")
+        self.g_range.setPlaceholderText("range m (blank = fit)")
+        self.g_kind = QtWidgets.QComboBox()
+        self.g_kind.addItem("RMS / stacking velocity (Dix)", "rms")
+        self.g_kind.addItem("interval velocity", "interval")
+        self.g_mode = QtWidgets.QComboBox()
+        self.g_mode.addItem("scale by ratio at the wells", "ratio")
+        self.g_mode.addItem("shift by difference at the wells", "difference")
+        for w_ in (self.g_method, QtWidgets.QLabel("variogram"), self.g_vario, self.g_range):
+            grow.addWidget(w_)
+        form.addRow("Gridding of well values", grow)
+        hrow = QtWidgets.QHBoxLayout()
+        hrow.addWidget(self.g_kind)
+        hrow.addWidget(self.g_mode)
+        form.addRow("Seismic velocity guide volume is", hrow)
+        # plain state (the Qt mock's widgets hold no values)
+        self._gridding = {"method": "idw"}
+        self._guide_opts = {"kind": "rms", "mode": "ratio"}
+        self.g_method.currentIndexChanged.connect(lambda *_: self._grid_widgets_changed())
+        self.g_vario.currentIndexChanged.connect(lambda *_: self._grid_widgets_changed())
+        self.g_range.textChanged.connect(lambda *_: self._grid_widgets_changed())
+        self.g_kind.currentIndexChanged.connect(lambda *_: self._grid_widgets_changed())
+        self.g_mode.currentIndexChanged.connect(lambda *_: self._grid_widgets_changed())
         lay.addLayout(form)
         lay.addWidget(QtWidgets.QLabel("Layers (top to bottom): tick the horizons to use and link each to a well top"))
-        self.table = QtWidgets.QTableWidget(0, 5)
+        self.table = QtWidgets.QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["use", "horizon", "formation top at the wells", "velocity function",
-                                              "k (blank = fit)"])
+                                              "k (blank = fit)", "seismic velocity guide"])
         lay.addWidget(self.table, 1)
         self.fms = ["(time-depth at the wells)"]
         if project.well_project:
@@ -91,6 +120,7 @@ class VelocityDialog(QtWidgets.QDialog):
         self.table.setRowCount(len(order))
         self._combos = []
         self._funcs = {}
+        self._guides = {}
         for r, h in enumerate(order):
             chk = QtWidgets.QTableWidgetItem("")
             chk.setFlags(chk.flags() | QtCore.Qt.ItemIsUserCheckable)
@@ -112,6 +142,11 @@ class VelocityDialog(QtWidgets.QDialog):
             kedit.setPlaceholderText("fit")
             self.table.setCellWidget(r, 4, kedit)
             self._combos.append((h.name, cb, chk))
+            gcb = QtWidgets.QComboBox()
+            gcb.addItems(["(none)"] + [v["name"] for v in self.project.volumes])
+            self.table.setCellWidget(r, 5, gcb)
+            gcb.currentIndexChanged.connect(lambda *_, n=h.name, c=gcb: self._guide_changed(n, c))
+            self._guides[h.name] = [gcb, None]
             self._funcs[h.name] = [fcb, kedit, "v0", ""]  # widgets + plain state (the mock's widgets hold no values)
             fcb.currentIndexChanged.connect(lambda *_, n=h.name, c=fcb: self._func_changed(n, c))
             kedit.textChanged.connect(lambda txt, n=h.name: self._k_changed(n, txt))
@@ -142,6 +177,46 @@ class VelocityDialog(QtWidgets.QDialog):
             fcb.setCurrentIndex(keys.index(func))
         kedit.setText(self._funcs[name][3])
 
+    def _grid_widgets_changed(self):
+        m = self.g_method.itemData(self.g_method.currentIndex())
+        rng = str(self.g_range.text()).strip()
+        try:
+            rv = float(rng) if rng else None
+        except ValueError:
+            rv = None
+        self.set_gridding(m if isinstance(m, str) else "idw", str(self.g_vario.currentText()), rv, update_widgets=False)
+        k = self.g_kind.itemData(self.g_kind.currentIndex())
+        md = self.g_mode.itemData(self.g_mode.currentIndex())
+        if isinstance(k, str) and isinstance(md, str):
+            self._guide_opts = {"kind": k, "mode": md}
+
+    def set_gridding(self, method="idw", variogram="spherical", range_m=None, update_widgets=True):
+        """Gridding of the well values / residuals: idw | tps | kriging (+ variogram model, range or None = fit)."""
+        g = {"method": method}
+        if method == "kriging":
+            g["variogram"] = variogram if variogram in ("spherical", "exponential") else "spherical"
+            if range_m:
+                g["range"] = float(range_m)
+        self._gridding = g
+        if update_widgets:
+            self.g_method.setCurrentIndex(["idw", "tps", "kriging"].index(method))
+        return g
+
+    def _guide_changed(self, name, combo):
+        t = str(combo.currentText())
+        self._guides[name][1] = None if (not t or t.startswith("(")) else t
+
+    def set_layer_guide(self, name, volume=None, kind=None, mode=None):
+        """Seismic velocity guide of a layer: a project volume name (None = no guide); kind rms|interval and mode
+        ratio|difference apply to all guided layers."""
+        self._guides[name][1] = volume
+        if kind:
+            self._guide_opts["kind"] = kind
+        if mode:
+            self._guide_opts["mode"] = mode
+        names = [v["name"] for v in self.project.volumes]
+        self._guides[name][0].setCurrentIndex(names.index(volume) + 1 if volume in names else 0)
+
     def functions_from_table(self, names=None):
         """Function dicts of the ticked layers (or of `names`), in layers_from_table() order."""
         names = [n for n, _ in self.layers_from_table()] if names is None else list(names)
@@ -159,11 +234,14 @@ class VelocityDialog(QtWidgets.QDialog):
                     raise ValueError(f"layer {n}: k '{ktxt}' is not a number")
                 if f["k"] is None:
                     del f["k"]
+            gv = self._guides.get(n, [None, None])[1]
+            if gv and func in ("v0", "v0kz", "v0kt"):
+                f["guide"] = {"volume": gv, **self._guide_opts}
             out.append(f)
         return out
 
     # ------------------------------------------------------------ logic (testable)
-    def build(self, key=None, layers=None, residual=None, functions=None):
+    def build(self, key=None, layers=None, residual=None, functions=None, gridding=None):
         key = key or self.survey.currentText()
         if layers is None:
             layers = self.layers_from_table()
@@ -171,7 +249,8 @@ class VelocityDialog(QtWidgets.QDialog):
                 functions = self.functions_from_table()
         residual = bool(self.resid.isChecked()) if residual is None else residual
         from ..ddc import DynamicDepthModel
-        self.model = VelocityModel(self.project, key, layers, residual, functions=functions)
+        self.model = VelocityModel(self.project, key, layers, residual, functions=functions,
+                                   gridding=gridding if gridding is not None else dict(self._gridding))
         self.ddm = DynamicDepthModel(self.project, self.model).build()
         self._fill_misfit()
         return self.model
@@ -234,8 +313,12 @@ class VelocityDialog(QtWidgets.QDialog):
                 s += f", k = {lay['k']:.4g} {unit} ({lay['k_source']})"
             if lay.get("blend"):
                 s += f" ({lay['blend']})"
+            if self.model.functions[len(out)].get("guide"):
+                gd = self.model.functions[len(out)]["guide"]
+                s += f", guided by {gd['volume']} ({gd.get('kind', 'rms')}, {gd.get('mode', 'ratio')})"
             out.append(s)
-        return "; ".join(out)
+        gm = self.model.gridding.get("method", "idw")
+        return "; ".join(out) + f"; gridding: {gm}"
 
     def crossplot(self, k):
         """Cross-plot data of layer k (see VelocityModel.crossplot)."""

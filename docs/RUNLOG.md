@@ -168,4 +168,4 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - Next: PLAN item 17a.
 
 ## 2026-11-23 - run 3 (scheduled, started 17:19 UTC) - in progress
-- 17a velocity functions done (v0.22.0); 17c dynamic update done (v0.23.0); continuing with 17b.
+- 17a velocity functions done (v0.22.0); 17c dynamic update done (v0.23.0); 17b gridding + guide done (v0.24.0); continuing with 17d.

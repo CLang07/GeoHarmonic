@@ -42,6 +42,17 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.24.0 - Dynamic depth conversion, part 3: gridding choices + seismic velocity guide (PLAN item 17b)
+- Velocity model dialog, "Gridding of well values": Inverse distance (old default), Thin-plate spline (honours planar
+  trends between wells), Kriging (simple kriging, spherical or exponential variogram fitted to the wells, or type a
+  range in m). Used for V / V0 and for the residual-correction grids.
+- New table column "seismic velocity guide": pick a velocity volume of the project for a layer. Choose whether the
+  volume is RMS / stacking velocity (Dix interval velocity between the layer's horizons) or interval velocity, and
+  whether the wells scale it by ratio or shift it by difference. The trend fills in where wells are sparse; the
+  wells still decide the level. Load a stacking-velocity SEG-Y with File > Import 3D like any volume.
+- Test: Maui 3D + NZ wells with Kriging; if you have a Maui stacking-velocity volume, guide the deeper layers with
+  it and compare the depth maps away from the wells.
+
 ## Seismic v0.23.0 - Dynamic depth conversion, part 2: live update + what-if wells (PLAN item 17c)
 - **View > Auto-update depth model**: while on, the tool watches the linked well project (.wcproj.json) and the
   horizons of the model. Save a moved / new top in the Well Correlation Tool (or re-track a horizon) and within ~1-2 s

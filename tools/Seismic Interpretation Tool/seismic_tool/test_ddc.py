@@ -40,7 +40,7 @@ def kt_earth(t1, t2):
     return z1, z2
 
 
-def ddc_case(tmp, name, earth, wells=None, n=None, ns=250):
+def ddc_case(tmp, name, earth, wells=None, n=None, ns=250, earth_xy=False):
     """3D survey (41 x 41, 25 m) with two horizons and wells whose tops follow `earth(t1, t2) -> (z1, z2)`.
     n = survey size (n x n) for speed tests (ns small: the traces do not matter to the velocity model)."""
     from .welltie import wc
@@ -58,7 +58,7 @@ def ddc_case(tmp, name, earth, wells=None, n=None, ns=250):
     i, j = np.meshgrid(np.arange(nil), np.arange(nxl), indexing="ij")
     X, Y = x0 + DX * j, y0 + DX * i
     t1, t2 = t_surfaces(X, Y, x0, y0)
-    z1, z2 = earth(t1, t2)
+    z1, z2 = earth(t1, t2, X - x0) if earth_xy else earth(t1, t2)
     lines = ["Well,UWI,Latitude,Longitude,Elevation_m,Elev_Ref,TD_m"]
     m_per_deg_lat = 111320.0
     for n, (ii, jj) in wells.items():
@@ -75,7 +75,7 @@ def ddc_case(tmp, name, earth, wells=None, n=None, ns=250):
     for n in wells:
         w = wp.wells[n]
         tt1, tt2 = t_surfaces(np.float64(w.x), np.float64(w.y), x0, y0)
-        zz1, zz2 = earth(tt1, tt2)
+        zz1, zz2 = earth(tt1, tt2, w.x - x0) if earth_xy else earth(tt1, tt2)
         tops[n] = {"Top A": float(zz1) + 25.0, "Top B": float(zz2) + 25.0}
     wp.tops = tops
     wp.formations = [{"name": "Top A", "color": "#ff0000"}, {"name": "Top B", "color": "#0000ff"}]
@@ -297,6 +297,130 @@ def run_dynamic(check, tmp):
     return sp
 
 
+V2_TREND = 3000.0
+
+
+def v1_trend(dx):
+    return 2000.0 + 0.8 * np.asarray(dx, float)  # 2000 -> 2800 m/s west -> east
+
+
+def trend_earth(t1, t2, dx):
+    z1 = v1_trend(dx) * t1 / 2000.0
+    return z1, z1 + V2_TREND * (t2 - t1) / 2000.0
+
+
+def add_velocity_volume(sp, tmp, T, bias=1.08, ns=200, dt_ms=8.0):
+    """RMS-velocity volume 'VEL' consistent with trend_earth (times a bias, like stacking velocities)."""
+    from .synth import write_3d
+    from .volume import import_3d
+    from .welltie import wc
+    wc()
+    from well_correlation.geo import tm_forward
+    x0, y0 = tm_forward(LAT, LON)
+    x0, y0 = round(x0), round(y0)
+    t = np.arange(ns) * dt_ms
+    v1 = v1_trend(T["X"] - x0)[..., None]
+    t1 = T["t1"][..., None]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        vrms = np.where(t[None, None, :] <= t1, v1,
+                        np.sqrt((v1 ** 2 * t1 + V2_TREND ** 2 * (t[None, None, :] - t1)) / np.maximum(t, 1e-9)))
+    cube = (bias * vrms).astype(np.float32)
+    d = os.path.dirname(sp.path)
+    write_3d(os.path.join(d, "vel.sgy"), cube, dt_us=int(dt_ms * 1000), x0=x0, y0=y0)
+    store = os.path.join(d, "v_seismic", "VEL")
+    import_3d(os.path.join(d, "vel.sgy"), store)
+    sp.volumes.append({"name": "VEL", "store": store, "segy": ""})
+    sp.save()
+
+
+def run_gridding(check, tmp):
+    """17b: TPS, kriging, seismic-velocity guide."""
+    import time
+    from .vgrid import grid_values, fit_variogram, krige_fit, krige_eval, tps_fit, tps_eval
+    from .velocity import VelocityModel
+    rng = np.random.default_rng(7)
+    X, Y = np.meshgrid(1.7e6 + np.arange(60) * 50.0, 5.6e6 + np.arange(50) * 50.0)
+    px = 1.7e6 + rng.uniform(0, 2950, 9)
+    py = 5.6e6 + rng.uniform(0, 2450, 9)
+    plane = lambda x, y: 2500.0 + 0.2 * (x - 1.7e6) - 0.1 * (y - 5.6e6)  # noqa: E731
+    gt = grid_values(X, Y, px, py, plane(px, py), "tps")
+    gi = grid_values(X, Y, px, py, plane(px, py), "idw")
+    et, ei = np.max(np.abs(gt - plane(X, Y))), np.max(np.abs(gi - plane(X, Y)))
+    check(et < 1e-4 and ei > 50, f"17b: TPS reproduces a planar trend on NZTM coordinates ({et:.1e} m/s; IDW {ei:.0f})")
+    v = rng.normal(2500, 120, 9)
+    f = tps_fit(px, py, v)
+    check(np.max(np.abs(tps_eval(f, px, py) - v)) < 1e-6, "17b: TPS exact at the wells")
+    # kriging
+    for model in ("spherical", "exponential"):
+        vg = fit_variogram(px, py, v, model)
+        kf = krige_fit(px, py, v, vg)
+        ex = np.max(np.abs(krige_eval(kf, px, py) - v))
+        # transect between the two closest wells
+        d = np.hypot(px[:, None] - px[None, :], py[:, None] - py[None, :]) + np.eye(9) * 1e9
+        a, b = np.unravel_index(np.argmin(d), d.shape)
+        s = np.linspace(0, 1, 101)
+        tr = krige_eval(kf, px[a] + s * (px[b] - px[a]), py[a] + s * (py[b] - py[a]))
+        lo, hi = v.min() - 0.1 * np.ptp(v), v.max() + 0.1 * np.ptp(v)
+        jump = np.max(np.abs(np.diff(tr)))
+        check(ex < 1e-3 and tr.min() > lo and tr.max() < hi and jump < 0.1 * np.ptp(v) and vg["sill"] > 0,
+              f"17b: kriging ({model}) exact at wells ({ex:.1e}), smooth between (max step {jump:.1f} m/s), "
+              f"range {vg['range']:.0f} m, sill {vg['sill']:.0f}")
+    # variogram range on a field with a known correlation length
+    gx = rng.uniform(0, 20000, 300)
+    gy = rng.uniform(0, 20000, 300)
+    field = np.sin(gx / 1500.0) + np.cos(gy / 1500.0)
+    vs = fit_variogram(gx, gy, field, "spherical")
+    vl = fit_variogram(gx, gy, np.sin(gx / 6000.0) + np.cos(gy / 6000.0), "spherical")
+    check(vl["range"] > 2 * vs["range"], f"17b: fitted range grows with the correlation length "
+                                         f"({vs['range']:.0f} m vs {vl['range']:.0f} m)")
+    big = rng.uniform(0, 30000, (500, 2))
+    Xb, Yb = np.meshgrid(np.arange(200) * 150.0, np.arange(200) * 150.0)
+    t0 = time.perf_counter()
+    grid_values(Xb, Yb, big[:, 0], big[:, 1], rng.normal(0, 1, 500), "kriging")
+    tk = time.perf_counter() - t0
+    check(tk < 10.0, f"17b: kriging 500 wells onto 200 x 200 nodes in {tk:.1f} s")
+    # model-level gridding choice on the V0 + kZ earth
+    sp, T = ddc_case(tmp, "grid", kz_earth)
+    for m in ("tps", "kriging"):
+        vm = VelocityModel(sp, "3D:V", LAYERS, functions=[{"func": "v0kz"}, {"func": "v0kz"}],
+                           gridding={"method": m}).build()
+        e = max(np.nanmax(np.abs(vm.depth_grid(i).z - T[f"z{i + 1}"])) for i in range(2))
+        vr = VelocityModel(sp, "3D:V", LAYERS, residual_correction=True, gridding={"method": m}).build()
+        res = np.max(np.abs([r[5] for r in vr.misfit_table()]))
+        check(e < 1.0 and res < 0.5, f"17b: {m} gridding: V0 + kZ depth error {e:.2f} m; residual-corrected misfit "
+                                     f"{res:.2f} m")
+    vm = VelocityModel(sp, "3D:V", LAYERS, gridding={"method": "kriging", "variogram": "exponential"})
+    check(VelocityModel.from_dict(sp, vm.to_dict()).gridding == vm.gridding, "17b: gridding saved with the model")
+    # seismic-velocity guide: wells only in the west, velocity rises to the east
+    west = {"G-1": (5, 3), "G-2": (20, 6), "G-3": (36, 4)}
+    sg, TG = ddc_case(tmp, "guide", trend_earth, wells=west, earth_xy=True)
+    add_velocity_volume(sg, tmp, TG)
+    plain = VelocityModel(sg, "3D:V", LAYERS).build()
+    gd = {"volume": "VEL", "kind": "rms", "mode": "ratio"}
+    guided = VelocityModel(sg, "3D:V", LAYERS, functions=[{"func": "v0", "guide": gd},
+                                                          {"func": "v0", "guide": gd}]).build()
+    east = (slice(None), slice(30, None))
+    ep = np.nanmax(np.abs(plain.depth_grid(1).z[east] - TG["z2"][east]))
+    eg = np.nanmax(np.abs(guided.depth_grid(1).z[east] - TG["z2"][east]))
+    check(eg < 5.0 and ep > 100.0, f"17b: seismic-velocity guide recovers the eastward trend: east error {eg:.1f} m "
+                                   f"(wells only: {ep:.0f} m)")
+    tr = guided.trend_grid(0)
+    check(tr is not None and abs(np.nanmedian(tr.z / v1_trend(TG["X"] - TG["X"][0, 0])) - 1.08) < 0.01,
+          "17b: trend = Dix interval velocity of the RMS volume (8% stacking bias, removed by the well ratio)")
+    gdiff = VelocityModel(sg, "3D:V", LAYERS, functions=[{"func": "v0", "guide": dict(gd, mode="difference")},
+                                                         {"func": "v0", "guide": dict(gd, mode="difference")}]).build()
+    ed = np.nanmax(np.abs(gdiff.depth_grid(1).z[east] - TG["z2"][east]))
+    check(ed < 0.25 * ep, f"17b: difference mode also follows the trend (east error {ed:.1f} m)")
+    # guide inside the dynamic model: trend reused when only a top moves
+    from .ddc import DynamicDepthModel
+    dm = DynamicDepthModel(sg, guided.to_dict()).build()
+    tr0 = dm.vm.grids()["trends"][1]
+    _edit_tops(sg.well_project, lambda t: t["G-2"].__setitem__("Top B", t["G-2"]["Top B"] + 3.0))
+    dm.refresh()
+    check(dm.vm.grids()["trends"][1] is tr0, "17b: guide trend cached across dynamic rebuilds (horizons unchanged)")
+    return sp
+
+
 def run_gui(check, tmp):
     from .gui.velocity_dialog import VelocityDialog
     sp, T = ddc_case(tmp, "kzgui", kz_earth)
@@ -358,4 +482,30 @@ def run_gui_dynamic(check, tmp):
     check(rep is not None and rep["from_layer"] == 0, "17c GUI: horizon edit picked up by the tick")
     w.set_ddc(False)
     check(not w.ddc_auto and w._ddc_watched == [], "17c GUI: auto-update off")
+    return True
+
+
+def run_gui_gridding(check, tmp):
+    """17b in the velocity dialog: gridding choice + per-layer seismic velocity guide."""
+    from .gui.velocity_dialog import VelocityDialog
+    west = {"G-1": (5, 3), "G-2": (20, 6), "G-3": (36, 4)}
+    sg, TG = ddc_case(tmp, "guigd", trend_earth, wells=west, earth_xy=True)
+    add_velocity_volume(sg, tmp, TG)
+    dlg = VelocityDialog(sg)
+    g = dlg.set_gridding("kriging", "exponential", None)
+    check(g == {"method": "kriging", "variogram": "exponential"}, "17b dialog: gridding choice")
+    dlg.set_layer_guide("H1", "VEL", kind="rms", mode="ratio")
+    dlg.set_layer_guide("H2", "VEL")
+    fs = dlg.functions_from_table(["H1", "H2"])
+    check(fs[0]["guide"] == {"volume": "VEL", "kind": "rms", "mode": "ratio"} and fs[1]["guide"]["volume"] == "VEL",
+          "17b dialog: guide per layer from the table")
+    vm = dlg.build("3D:V", LAYERS, False, functions=fs)
+    east = (slice(None), slice(30, None))
+    e = np.nanmax(np.abs(vm.depth_grid(1).z[east] - TG["z2"][east]))
+    check(vm.gridding["method"] == "kriging" and e < 10.0 and "guided by VEL" in dlg.info_text(),
+          f"17b dialog: guided kriging model built (east error {e:.1f} m)")
+    dlg.set_layer_guide("H1", None)
+    check("guide" not in dlg.functions_from_table(["H1"])[0], "17b dialog: guide removed")
+    dlg.use()
+    check(sg.display["velocity_model"].get("gridding", {}).get("method") == "kriging", "17b dialog: gridding stored")
     return True
