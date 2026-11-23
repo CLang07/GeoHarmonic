@@ -5,6 +5,7 @@ Folder layout the importer understands (what we built for the NZ data):
     <data folder>/
         wells_header.csv            Well, UWI, Latitude, Longitude, Elevation_m, Elev_Ref, TD_m, ...
         wells/<Well>/las/*.las      log data (any number of files / runs)
+        wells/<Well>/dlis/*.dlis    DLIS log data (read directly, depth frames -> curves like LAS)
         wells/<Well>/survey/*.csv   optional MD,INC,AZI (also picks up *Survey*.txt in mudlog/)
 
 Composited logs are cached as .npz next to the project file (``<project>_cache/``) so a
@@ -127,6 +128,8 @@ class Project:
             if not las:
                 las = sorted(glob.glob(os.path.join(wd, "*.las")) + glob.glob(os.path.join(wd, "*.LAS")))
             las = sorted(set(las), key=str.lower)
+            las += sorted(set(glob.glob(os.path.join(wd, "dlis", "*.dlis")) + glob.glob(os.path.join(wd, "dlis", "*.DLIS"))),
+                          key=str.lower)
             w = Well(name)
             w.las_paths = las
             sv = glob.glob(os.path.join(wd, "survey", "*")) + [f for f in glob.glob(os.path.join(wd, "mudlog", "*")) if "survey" in os.path.basename(f).lower()]
@@ -234,7 +237,11 @@ class Project:
         files = []
         for pth in w.las_paths:
             try:
-                files.append(LasFile(pth))
+                if pth.lower().endswith(".dlis"):
+                    from .dlis import DlisLogs
+                    files.append(DlisLogs(pth))
+                else:
+                    files.append(LasFile(pth))
             except Exception as e:  # keep going, report in sources
                 w.sources.setdefault("_errors", []).append(f"{os.path.basename(pth)}: {e}")
         grid, logs, src, cands = composite(files, self.aliases, self.curve_overrides.get(name))

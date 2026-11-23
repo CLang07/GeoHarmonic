@@ -134,6 +134,9 @@ def run():
             check(os.path.getsize(os.path.join(tmp, "s.png")) > 1000, "PNG export")
         except ImportError:
             print("SKIP PNG export (matplotlib not installed)")
+        # ---- DLIS reader (synthetic file + real Tui-1 files when present)
+        from . import test_dlis
+        test_dlis.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")

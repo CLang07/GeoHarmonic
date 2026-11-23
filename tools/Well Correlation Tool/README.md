@@ -1,4 +1,4 @@
-# Well Correlation Tool (Geo Tool Kit) – v0.4 (steps 1-4)
+# Well Correlation Tool (Geo Tool Kit) – v0.5 (steps 1-4 + DLIS)
 
 Kingdom-style log cross sections with a GeoGraphix-style base map. PySide6 + pyqtgraph, runs offline.
 
@@ -86,11 +86,24 @@ Double-click **Well Correlation Tool.bat**. It opens the last project you used, 
   *File > Reload logs* rebuilds the cache after you change LAS files.
 - Extra aliases can be added to the `"extra_aliases"` block of the project file, e.g. `{"GR": ["MYGR"]}`.
 
+## DLIS files (v0.5)
+- DLIS (RP66 v1) is read directly, no extra packages: put files in `wells\<Well>\dlis\` and they load like
+  LAS (every depth frame's scalar channels become curves; depth "0.1 in" etc. converted to metres; absent
+  values -999.25 dropped). Tui-1 is now in the NZ project from its two DLIS files (2379-2561 m intermediate
+  run, 3593-3729 m repeat pass).
+- The big Tui-1 main-pass DLIS (171 MB, not in the repo) and Pateke-2's combined DLIS: convert or just drop
+  them into the well's `dlis` folder. To convert to LAS 2.0 (one LAS per frame):
+  `python -m well_correlation --dlis2las IN.dlis OUT_FOLDER` (`--arrays` also writes array channels such as
+  waveforms, one column per element). `--dlisinfo FILE.dlis` lists frames and channels.
+- Checkshots: `python -m well_correlation --checkshot TUI_1_MAIN_SURVEY_096LNP.DLIS out.csv` extracts the
+  time-depth table (median of repeated shots, vertical times from the source offset) from CSAT/VSI files.
+
 ## Command line
     python -m well_correlation --selftest
     python -m well_correlation --check "C:\path\to\data folder"     curve inventory
     python -m well_correlation --png project.wcproj.json out.png    export without the GUI
+    python -m well_correlation --dlisinfo FILE.dlis | --dlis2las IN.dlis OUT_DIR [--arrays] | --checkshot IN.dlis OUT.csv
 
 ## Next ideas
-Add Tui-1 / Amokura-1 (Tui area), Pateke-2 DLIS conversion, seismic well ties (synthetics),
+Amokura-1 (Tui area), seismic well ties (synthetics, in the Seismic Interpretation Tool),
 depth conversion of maps with a velocity model.

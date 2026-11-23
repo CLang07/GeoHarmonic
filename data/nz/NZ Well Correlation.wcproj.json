@@ -298,6 +298,35 @@
     "wells/Rahi-1/las/MAIN_LOG_WCR.LAS"
    ],
    "survey": null
+  },
+  {
+   "name": "Tui-1",
+   "uwi": "100000474283",
+   "lat": -39.434701213000004,
+   "lon": 173.24659399,
+   "x": 1621221.7461475863,
+   "y": 5634953.3434776,
+   "elev": 25.0,
+   "elev_ref": "KB",
+   "td": 3902.0,
+   "info": {
+    "UWI": "100000474283",
+    "Latitude": "-39.434701213000004",
+    "Longitude": "173.24659399",
+    "Elevation_m": "25.0",
+    "Elev_Ref": "KB",
+    "TD_m": "3902.0",
+    "Operator": "NEW ZEALAND OVERSEAS PETROLEUM LTD",
+    "Purpose": "Exploration",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "24 January 2003",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Tui-1/dlis/TUI_1_INTERMEDIATE__045PUP.DLIS",
+    "wells/Tui-1/dlis/TUI_1_PEX_DSI_HALS__084PUP.DLIS"
+   ],
+   "survey": null
   }
  ],
  "curve_overrides": {},

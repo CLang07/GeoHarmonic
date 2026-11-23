@@ -1,6 +1,17 @@
-# What's new (for Chris) - Seismic Interpretation Tool
+# What's new (for Chris) - Geo Tool Kit
 
 Newest first. Each section: what it does, how to use it, what to test.
+
+## Well Correlation Tool v0.5.0 - DLIS reader (PLAN item 6b)
+- DLIS files in `wells\<Well>\dlis\` load like LAS; Tui-1 added to the NZ project from its two DLIS
+  files (header from wells_header.csv; PR3099 tops were already there).
+- `--dlis2las IN OUT_DIR [--arrays]`, `--dlisinfo`, `--checkshot IN.dlis OUT.csv` (Tui-1 + Pateke-2 CSAT).
+- Convert the 171 MB Tui-1 main-pass DLIS on your PC: either copy it into `data\nz\wells\Tui-1\dlis\`
+  (loads directly, File > Reload logs) or run --dlis2las into `wells\Tui-1\las\`.
+- Tests: synthetic DLIS written byte by byte (segments, padding, absent attributes, arrays, IBM floats)
+  round-trips exactly; real Tui-1 files parse in 0.5 s with sane GR/RHOZ/TNPH/DTCO ranges.
+- Known limits: encrypted records skipped; checkshot vertical times assume a straight ray from a source at
+  the SRD (offset 65.7 m at Tui-1, negligible below 1 km).
 
 ## v0.7.0 - RGT editing (PLAN item 6)
 - RGT contours on sections; RGT edit mode (E): click a level, click where it belongs -> local re-solve

@@ -116,6 +116,16 @@ mapping.py (TPS/IDW grids, contours), export.py, gui/. Hang modes TVDSS/MD/FLAT:
 KB). Formations: Tikorangi Limestone, C-sands (Mangahewa), D-sands (Kaimiro), E-shale, Tane Member,
 F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
 
+- `dlis.py` (v0.5): RP66 v1 reader - `read_logical_records` (SUL, visible records, segments: padding,
+  checksum, trailing length, predecessor/successor flags), `parse_eflr` (SET/template/OBJECT/ABSATR, all rep
+  codes incl. IBM/VAX/FSHORT/DTIME/OBNAME/OBJREF), `DlisFile` -> `LogicalFile` (origin, channels, frames,
+  parameters, tools; FILE-HEADER starts a logical file), `frame_data` (vectorised structured dtype per frame;
+  slow path for variable-size codes), `dlis_to_las`, `DlisLogs` (LAS-like adapter used by
+  project.load_well for *.dlis in las_paths), `checkshot_from_dlis` / `write_checkshot_csv`. Tests in
+  `test_dlis.py` write a synthetic DLIS byte by byte (multi-segment records, padding, arrays, IBM).
+  Tui-1 checkshot (main survey): 11 levels 1897-3900 m MD, TWT 1685-2806 ms. Pateke-2 checkshot:
+  SEIS_CSI_037PNP.DLIS (27 levels); the CSI_0xx files are cased-hole GR/CCL logs, not checkshots.
+
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.
 - GUI: PySide6 imported before pyqtgraph; `pg.setConfigOptions(antialias=False, imageAxisOrder="row-major")`;

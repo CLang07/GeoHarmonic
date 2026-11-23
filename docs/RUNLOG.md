@@ -29,4 +29,8 @@
   Tests PASS (selftest + guitest); NPRA R-2 Wheeler flat.
 - Item 6 DONE - RGT editing (v0.7.0): rgt/edit.py, test_edit.py, panel RGT edit mode + contours, Interpret
   menu (edit mode E, horizon constraint, fault re-link). Tests PASS (locality bit-exact, undo exact).
-- Working on PLAN item 6b next.
+- Item 6b DONE - DLIS reader (Well Correlation v0.5.0): well_correlation/dlis.py, test_dlis.py, project loads
+  wells/<Well>/dlis/*.dlis, CLI --dlisinfo/--dlis2las/--checkshot, Tui-1 added to the NZ project (logs from
+  DLIS: GR, RHOB, NPHI, DT, PE, RDEEP, RSHAL, SP, CALI). Tests: synthetic DLIS round trip + real Tui-1 sanity
+  ranges + checkshot PASS; all tool self-tests PASS.
+- Working on PLAN item 7 next.

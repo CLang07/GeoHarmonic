@@ -39,7 +39,7 @@ Kingdom-like interaction; large data.
 6. **RGT step D - interactive editing** - status: done (run 1, 2026-11-23; v0.7.0)
    - User adds/moves control points or horizons as constraints, local re-solve in a window around the edit
      (fast), fault re-linking; undo. Tests: constraint changes the model only locally.
-6b. **DLIS reader (numpy, RP66 v1)** - status: todo
+6b. **DLIS reader (numpy, RP66 v1)** - status: done (run 1, 2026-11-23; Well Correlation v0.5.0)
    - `tools/Well Correlation Tool/well_correlation/dlis.py`: parse storage unit label, visible records,
      logical record segments (encryption/padding/trailer flags), EFLR sets (FILE-HEADER, ORIGIN, CHANNEL,
      FRAME, PARAMETER, TOOL) with RP66 representation codes, IFLR frame data incl. multi-sample
