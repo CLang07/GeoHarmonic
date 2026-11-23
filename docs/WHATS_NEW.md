@@ -25,7 +25,10 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
    then **Model QC...** - read the summary (baselines / leakage / Moran) and open the HTML. Try
    **Import engineering / production CSV...** on `python dev/make_synthetic_engineering.py C:\temp\eng`
    (completions.csv first, then production.csv) - the mapping form (combo per column) is new real-Qt code.
-8. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
+8. Dashboard (new real-Qt window): on the NZ project linked to the Maui 3D, Interpret > Dashboard - deviated
+   Maui wells should be drawn from their surveys; Colour by TVDSS, then a basemap grid; drag the histogram range;
+   click a well on the map / a table row and check the highlight follows in all panels.
+9. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
    orientation (top row first).
 
 ## Known limits (all items)
@@ -37,6 +40,13 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
 
 ## Change log (newest first)
+
+## Seismic v0.16.0 - Dashboard with laterals (PLAN item 14, first parts)
+- Interpret > Dashboard: map / histogram / crossplot / table docks with linked selection and filters; wells from
+  the project with deviation surveys; laterals coloured along MD by TVDSS, grids, seismic amplitude, stage CSV
+  values or in-zone; per-lateral stats (mean/P10/P50/P90, % in zone) -> Analytics; layouts; HTML export.
+- Drawing is batched: one curve per colour bin for all wells plus level-of-detail decimation (1,000 synthetic
+  laterals -> 16 curves in 0.1 s).
 
 ## Seismic v0.15.1 - engineering / production import dialog
 - Analytics window: **Import engineering / production CSV...** (presets Enverus, IHS, Texas RRC, FracFocus,

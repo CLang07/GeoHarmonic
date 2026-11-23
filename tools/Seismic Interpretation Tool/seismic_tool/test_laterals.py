@@ -152,3 +152,94 @@ def dashboard_checks(check, tmp, tab):
     txt = open(out, encoding="utf-8").read()
     check("data:image/png" in txt and txt.count("class='sel'") == 3 and "42-000-00002" in txt,
           "dashboard: standalone HTML export")
+
+
+def run_gui(check, tmp):
+    """Dashboard window logic: wells from the linked project (survey + vertical), colouring by TVDSS / grid /
+    seismic / stages / zone, lateral stats, linked selection, analytics hand-off, HTML export."""
+    from . import laterals as L
+    from .gui.dashboard_window import DashboardWindow
+    from .maps import MapGrid, horizon_grid
+    from .test_velocity import velocity_case
+    d = os.path.join(tmp, "dashgui")
+    os.makedirs(d)
+    sp, T = velocity_case(d)
+    ws = sp.wellset()
+    b = ws.well("B-1")
+    md, inc, azi, kop, md_land = L.synthetic_survey(None, 1000.0 + float(b.elev or 0), 400.0, 90.0, 6.0)
+    sv = os.path.join(d, "B-1_survey.csv")
+    with open(sv, "w") as fh:
+        fh.write("MD,INC,AZI\n" + "\n".join(f"{a},{c},{e}" for a, c, e in zip(md, inc, azi)))
+    b.survey_path = sv
+    trajs = L.trajectories_from_wellset(ws)
+    tb = next(t for t in trajs if t.name == "B-1")
+    ta = next(t for t in trajs if t.name == "A-1")
+    check(len(trajs) == 3 and abs(tb.z[-1] - 1000.0) < 1.0 and tb.x[-1] > b.x + 600 and ta.lateral_length() == 0.0
+          and abs(ta.z[0] + float(ws.well("A-1").elev or 0)) < 1e-6,
+          "wells from the project: deviated (survey, min. curvature) + vertical")
+    win = DashboardWindow(sp)
+    win._ws = ws
+    from .analytics.table import AttributeTable
+    extra = AttributeTable(["A-1", "B-1", "C-1"]).add("eur", [1.0, 2.0, 3.0])
+    win.set_trajectories(trajs, extra)
+    check(win.model.table.names[:2] == ["lateral_m", "lateral_ft"] and list(win.model.table.cols["eur"]) == [1, 2, 3],
+          "dashboard: wells + joined engineering table")
+    g1 = horizon_grid(sp, sp.horizons.get("H1"), "3D:V")
+    win.add_grid("H1 time", g1)
+    srcs = win.color_sources()
+    check(srcs[:2] == ["TVDSS", "grid: H1 time"] and "seismic: V" in srcs, f"dashboard: colour sources {srcs}")
+    vz = win.color_by("TVDSS")
+    check(np.allclose(vz["B-1"], tb.z) and win.vrange[0] < win.vrange[1], "dashboard: colour by TVDSS")
+    vg = win.color_by("grid: H1 time")
+    check(np.allclose(vg["B-1"], g1.sample(tb.x, tb.y), equal_nan=True), "dashboard: colour by a map grid")
+    vs = win.color_by("seismic: V")
+    td = ws.td_for("B-1")
+    k = len(tb.md) - 1
+    direct = L.sample_volume(L.Trajectory("p", [0], [tb.x[k]], [tb.y[k]], [tb.z[k]]), sp.volume("V"), td.twt)[0]
+    check(np.isfinite(vs["B-1"]).mean() > 0.5 and abs(vs["B-1"][k] - direct) < 1e-6,
+          "dashboard: colour by seismic amplitude along the wellbore (well time-depth)")
+    win.color_by("TVDSS")
+    bat = win.map_batches()
+    check(0 < len(bat) <= 16, "dashboard: batched colour curves")
+    st = win.add_lateral_stats()
+    check("TVDSS mean" in win.model.table.cols and np.isfinite(win.model.table.cols["TVDSS mean"][1])
+          and np.isnan(win.model.table.cols["TVDSS mean"][0]), "dashboard: lateral statistics (only for laterals)")
+    zt = MapGrid(np.full(g1.z.shape, 990.0), g1.kind, "m", "top", g1.vol, g1.x0, g1.y0, g1.dx, g1.dy)
+    zb = MapGrid(np.full(g1.z.shape, 1010.0), g1.kind, "m", "base", g1.vol, g1.x0, g1.y0, g1.dx, g1.dy)
+    win.add_grid("top", zt)
+    win.add_grid("base", zb)
+    win.set_zone("top", "base")
+    vzn = win.color_by("in zone")
+    win.add_lateral_stats()
+    check(np.nanmax(vzn["B-1"]) == 1.0 and win.model.table.cols["pct_in_zone"][1] == 100.0,
+          "dashboard: in-zone colouring + % in zone")
+    stp = os.path.join(d, "stages.csv")
+    with open(stp, "w") as fh:
+        fh.write("Well,Top MD,Base MD,Proppant per ft\n")
+        for s in range(5):
+            fh.write(f"B-1,{md_land + 80 * s},{md_land + 80 * s + 60},{1000 + 100 * s}\n")
+    win.load_stages(stp)
+    vst = win.color_by("stage: Proppant per ft")
+    check(np.nanmax(vst["B-1"]) == 1400.0 and np.all(np.isnan(vst["A-1"])), "dashboard: colour by stage CSV values")
+    check(win.nearest_well(tb.x[-1] + 5, tb.y[-1]) == trajs.index(tb), "dashboard: map click picks the nearest wellbore")
+    win.model.select([1])
+    check(win.model.selected == {1}, "dashboard: linked selection")
+    win.filter_from_region("eur", 1.5, 10.0, (1.0, 3.0))
+    check(win.model.filters["eur"] == ("range", 1.5, None) and list(np.nonzero(win.model.visible())[0]) == [1, 2],
+          "dashboard: histogram range handles filter the wells")
+    win.filter_from_region("eur", 0.0, 9.0, (1.0, 3.0))
+    check("eur" not in win.model.filters, "dashboard: range dragged to the data limits removes the filter")
+
+    class _A:
+        got = None
+
+        def add_table(self, t):
+            self.got = t
+            return t
+    a = _A()
+    win.send_to_analytics(a)
+    check(a.got is not None and "pct_in_zone" in a.got.cols, "dashboard: lateral stats sent to Analytics")
+    out = win.export_html(os.path.join(d, "dash.html"))
+    check(os.path.getsize(out) > 5000 and "data:image/png" in open(out, encoding="utf-8").read(),
+          "dashboard: HTML export with the coloured lateral map")
+    return True

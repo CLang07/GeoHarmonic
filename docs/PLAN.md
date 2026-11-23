@@ -175,8 +175,12 @@ Kingdom-like interaction; large data.
    `laterals.py` (min-curvature trajectories, synthetic laterals, survey/stage CSV, attributes along MD from
    grids / 3D volume / logs / stages / zones, per-lateral stats table, colour bins batched over many wells + LOD)
    and `dashboard_model.py` (filters, linked selection, histogram/crossplot/table data, layouts, HTML export).
-   LEFT: Dashboard window (pyqtgraph panels on the model), loading real trajectories from the well project,
-   well strip / geosteering view, predicted-property colouring)
+   14b done: `gui/dashboard_window.py` (Interpret > Dashboard; docks map / histogram / crossplot / table, linked
+   selection, histogram range filter, wells from the linked project with surveys, colour by TVDSS / map grid /
+   seismic via well time-depth / stage CSV / in-zone, lateral stats, send to Analytics, layouts, HTML export).
+   LEFT: well strip / geosteering view; log curves and predicted-property maps as colour sources in the menu
+   (grids already work: add the predicted map to the basemap first); background grid image under the dashboard
+   map; text filters in the UI (only via saved layouts); bubbles/pies per well)
    - Dashboard window (dockable, linked panels, Spotfire-style): map, histogram, crossplot, data table,
      well strip view; selecting wells/points in one panel highlights them in all others; filters
      (formation, operator, date, attribute ranges); save/restore layouts; export PNG + standalone HTML.

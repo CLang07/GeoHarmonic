@@ -186,6 +186,15 @@ Starter projects:
 - Optional: `Install analytics extras (optional).bat` installs xgboost, scikit-learn, shap;
   `python -m seismic_tool --check-ml` compares them with the built-in numpy models.
 
+## Dashboard (Interpret > Dashboard)
+- Wells of the linked well project drawn as full trajectories (deviation surveys, minimum curvature); laterals
+  coloured segment by segment by TVDSS, any basemap grid (structure, amplitude, predicted property...), seismic
+  amplitude along the wellbore (through each well's time-depth), stage CSV values (e.g. proppant per ft) or
+  "in zone" (between two depth grids).
+- Linked panels: map, histogram (drag the shaded range to filter), crossplot (with fit and r), table; selecting
+  in one highlights in all. "Lateral stats" adds mean / P10 / P50 / P90 of the colour attribute and % in zone per
+  lateral; "Send to Analytics" makes them model inputs. Save / load layouts; export a standalone HTML page.
+
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--check-ml`, `--png PROJECT OUT.png`.
 

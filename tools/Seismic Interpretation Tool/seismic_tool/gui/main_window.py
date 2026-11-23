@@ -215,6 +215,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "M&istie analysis (2D-3D, 2D-2D)...", self.mistie_analysis)
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
         self._act(m, "&Analytics (attribute table, models, SHAP)...", self.analytics)
+        self._act(m, "&Dashboard (wells, laterals coloured by attribute)...", self.dashboard)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -605,6 +606,16 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.show()
         self._analytics = dlg
         return dlg
+
+    def dashboard(self):
+        from .dashboard_window import DashboardWindow
+        win = DashboardWindow(self.project, self.basemap, self)
+        win.analytics_window = getattr(self, "_analytics", None)
+        if self.project.well_project:
+            win.load_project_wells()
+        win.show()
+        self._dashboard = win
+        return win
 
     def velocity_model(self):
         if not self.project.horizons.items or not self.project.well_project:

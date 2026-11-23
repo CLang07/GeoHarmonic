@@ -172,7 +172,11 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   colour bin: one PlotCurveItem(connect='finite') per bin), lod_indices, colormap_rgb. `dashboard_model.py`:
   DashboardModel (filters range/in, selection replace/add/toggle/remove, select_box/lasso/hist_bin/ids,
   subscribe(kind), histogram, crossplot, table_rows, summary, save/load_layout JSON, export_html).
-  Tests: `test_laterals.py`.
+  `laterals.trajectories_from_wellset` (survey via well_correlation.geo, else vertical; MD ref = elev).
+  `gui/dashboard_window.DashboardWindow` (QMainWindow with docks; set_trajectories, add_grid, load_stages,
+  color_sources/values_for/color_by, add_lateral_stats, send_to_analytics, map_batches, filter_from_region,
+  nearest_well, export_html; model events data|filter|selection; selection does not rebuild the table).
+  Tests: `test_laterals.py` (run + run_gui).
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

@@ -230,11 +230,13 @@ def lateral_stats(traj, values, in_zone=None, min_inc=80.0):
 
 
 def stats_table(trajs, attributes, zones=None, min_inc=80.0):
-    """AttributeTable (rows = wells, ids = API or name) with '<attr> mean/p10/p50/p90' columns per attribute,
+    """AttributeTable (rows = wells, ids = API when every well has a unique one, else well names) with '<attr> mean/p10/p50/p90' columns per attribute,
     lateral length (m, ft), landing depth, toe-up and '% in zone'.
     attributes: {attr name: {well name: values along that well's stations}}; zones: {well name: in-zone array}."""
     from .analytics.table import AttributeTable
-    ids = [t.api or t.name for t in trajs]
+    apis = [str(t.api or "").strip() for t in trajs]
+    use_api = all(apis) and len(set(apis)) == len(apis)  # placeholder / duplicate UWIs -> well names
+    ids = apis if use_api else [t.name for t in trajs]
     tab = AttributeTable(ids)
     cols = {}
 
@@ -276,7 +278,7 @@ def color_bins(x, y, values, vmin=None, vmax=None, n_bins=16):
     vmin = np.nanmin(sv) if vmin is None else vmin
     vmax = np.nanmax(sv) if vmax is None else vmax
     span = (vmax - vmin) or 1.0
-    b = np.clip(((sv - vmin) / span * n_bins).astype(int), 0, n_bins - 1)
+    b = np.clip(((np.where(ok, sv, vmin) - vmin) / span * n_bins).astype(int), 0, n_bins - 1)
     out = []
     for k in np.unique(b[ok]):
         idx = np.nonzero(ok & (b == k))[0]
@@ -342,4 +344,37 @@ def synthetic_laterals(n=6, x0=0.0, y0=0.0, spacing=300.0, landing_tvdss=2000.0,
             inc = np.where(md > md_land, 90.0 - np.degrees(np.arctan(dip_per_m)), inc)
         out.append(Trajectory.from_survey(f"H-{i + 1}", md, inc, azi, x0, y0 + i * spacing, kb,
                                           api=f"42-000-{i + 1:05d}"))
+    return out
+
+
+# ====================================================================== wells of the linked well project
+def trajectories_from_wellset(ws, step=10.0):
+    """[Trajectory] for every well of a WellSet with a location: deviation survey (Well Correlation project
+    survey file, minimum curvature) when there is one, otherwise vertical to the deepest log / TD.  MD reference =
+    the well's elevation (KB)."""
+    from .welltie import wc
+    geo = wc().geo
+    out = []
+    for n in ws.names:
+        w = ws.well(n)
+        if w.x is None or w.y is None:
+            continue
+        kb = float(w.elev or 0.0)
+        s = None
+        if getattr(w, "survey_path", None):
+            try:
+                s = geo.read_survey(w.survey_path)
+            except Exception:
+                s = None
+        if s is not None:
+            md, inc, azi = s
+            t = Trajectory.from_survey(n, md, inc, azi, float(w.x), float(w.y), kb, api=getattr(w, "uwi", None) or None)
+        else:
+            td = float(w.td or 0.0) or (float(w.depth[-1]) if getattr(w, "depth", None) is not None and len(w.depth)
+                                        else 0.0)
+            if td <= 0:
+                continue
+            t = Trajectory(n, [0.0, td], [w.x, w.x], [w.y, w.y], [-kb, td - kb], [0.0, 0.0],
+                           api=getattr(w, "uwi", None) or None)
+        out.append(t.resample(step) if len(t.md) > 1 else t)
     return out
