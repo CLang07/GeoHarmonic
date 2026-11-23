@@ -221,5 +221,22 @@ Kingdom-like interaction; large data.
    - Read every module for bugs, edge cases (irregular 3D geometry, missing traces, dead traces, IBM vs
      IEEE, big files > 2 GB on Windows), performance on a 2 GB synthetic, docs/WHATS_NEW.md refresh.
 
+16. **Well tie upgrade (HRS-style auto-correlate + constrained stretch/squeeze)** - status: todo
+   Chris asked for this on 2026-11-23 (he likes the Hampson-Russell auto-correlate). Comparison with HRS, RokDoc,
+   Kingdom/GeoSyn, Petrel, GeoGraphix + references: Claude doc "Well tie & synthetics" (link in RUNLOG).
+   16a. Auto-correlate panel: window, correlation-vs-lag curve (FFT), polarity + phase scan, sub-sample peak,
+        second-peak (cycle-skip) warning, best trace within N traces; fast auto_tie (FFT per stretch, stretch
+        about the window top / anchor event, held-out-window score + NRMS).
+   16b. Event-pair stretch/squeeze (<= 10 pairs, undo) + constrained DTW auto stretch/squeeze (Sakoe-Chiba band,
+        max interval velocity change, default 10%); drift / interval-velocity QC panel with checkshots;
+        checkshot-calibrated sonic; write the tied time-depth as a checkshot CSV.
+   16c. Wavelets: deterministic least-squares (Tikhonov) + multitaper-coherence variant, constant-phase
+        estimate, spectra + NMSE/predictability, JSON wavelet library; multi-well tie batch (table, bulk-shift
+        map, average wavelet); log conditioning (despike, washout mask, Backus); angle synthetics (Shuey /
+        Aki-Richards); deviated-well synthetic via laterals.wellbore_section.
+   Tests: synthetic well with known shift, stretch, phase and a 3-segment velocity error -> recovered within
+   1 ms / 0.5% / 5 deg; DTW warp respects the velocity cap; deterministic wavelet = true wavelet (corr > 0.95)
+   at 10% noise; polarity flip detected; cycle-skip case flagged; multi-well batch on 10 synthetic wells.
+
 Later (Chris back): Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.
