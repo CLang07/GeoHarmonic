@@ -43,7 +43,15 @@ class SegyFile:
         self.dt = int.from_bytes(b[16:18], bo) / 1e6  # seconds
         self.ns = int.from_bytes(b[20:22], bo)
         ext = int.from_bytes(b[304:306], bo, signed=True)  # rev 1 extended text headers
-        self.data_offset = 3600 + max(0, ext) * 3200
+        rev = int.from_bytes(b[300:302], bo)
+        self.data_offset = 3600
+        if ext > 0 and rev >= 1:  # rev 0 files often carry junk here: use it only if it fits the file
+            bps0 = _FMT[fmt][0]
+            off = 3600 + ext * 3200
+            ns0 = int.from_bytes(self.mm[off + 114: off + 116].tobytes(), bo) if off + 116 <= self.mm.size else 0
+            tl = 240 + (ns0 or self.ns) * bps0
+            if off < self.mm.size and tl > 240 and (self.mm.size - off) % tl == 0:
+                self.data_offset = off
         bps, dt = _FMT[fmt]
         self.bps = bps
         self.sample_dtype = dt if self.endian == ">" else dt.replace(">", "<")
@@ -53,7 +61,10 @@ class SegyFile:
             self.ns = ns_tr
         if self.dt == 0:
             self.dt = int.from_bytes(self.mm[self.data_offset + 116: self.data_offset + 118].tobytes(), bo) / 1e6 or 0.004
+        if self.ns <= 0:
+            raise ValueError(f"{path}: number of samples is 0 in the binary and the first trace header")
         self.trace_len = 240 + self.ns * bps
+        self.size_remainder = (self.mm.size - self.data_offset) % self.trace_len  # != 0: variable-length traces?
         self.ntraces = (self.mm.size - self.data_offset) // self.trace_len
         if self.ntraces <= 0:
             raise ValueError(f"{path}: no traces")

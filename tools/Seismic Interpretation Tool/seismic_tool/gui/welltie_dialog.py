@@ -30,6 +30,8 @@ class WellTieDialog(QtWidgets.QDialog):
         cands = [n for n in self.ws.names if self._inside(n)]
         self.well_combo.addItems(cands or self.ws.names)
         if well:
+            if well not in cands and well in self.ws.names:
+                self.well_combo.addItem(well)  # requested explicitly: offer it even if outside the survey
             self.well_combo.setCurrentText(well)
         self.wav_combo = QtWidgets.QComboBox()
         self.wav_combo.addItems(["Ricker", "Statistical (from seismic)", "Deterministic (from tie)"])
@@ -179,8 +181,18 @@ class WellTieDialog(QtWidgets.QDialog):
         return self.survey.has_coords and np.min(np.hypot(self.survey.x - w.x, self.survey.y - w.y)) < 1000
 
     # ------------------------------------------------------------ logic (testable)
+    def set_well(self, name):
+        """Switch wells: the previous well's tie / warp / best-trace choice must not carry over."""
+        if name != self.well_name:
+            self.state = TK.TieState()
+            self.shift, self.stretch, self.t_centre, self.corr = 0.0, 1.0, None, None
+            self.trace_offset = 0
+            self._pending = None
+            self._data = None
+        self.well_name = name
+
     def _changed(self):
-        self.well_name = self.well_combo.currentText() or self.well_name
+        self.set_well(self.well_combo.currentText() or self.well_name)
         txt = self.wav_combo.currentText()
         self.wavelet_kind = "Statistical" if txt.startswith("Statistical") else \
             "Deterministic" if txt.startswith("Deterministic") else "Ricker"
@@ -236,8 +248,7 @@ class WellTieDialog(QtWidgets.QDialog):
         tie = (self.project.display.get("well_ties") or {}).get(n)
         if tie and self.corr is None:
             self.state = TK.TieState.from_dict(tie)
-            self.shift, self.stretch = tie["shift_ms"], tie["stretch"]
-            self.t_centre = tie.get("t_centre", self.t_centre)
+            self._from_state()  # spin boxes show the saved tie (a nudge must not reset it to 0)
         self.corr = self.tie_corr()
         return self._data
 
@@ -609,7 +620,7 @@ class WellTieDialog(QtWidgets.QDialog):
         self.p_rc.plot(d["rc"], tc, pen=pg.mkPen((0, 0, 0)))
         m = (d["ts"] >= tc[0] - 100) & (d["ts"] <= tc[-1] + 100)
         s = d["seis"][m]
-        sc = np.abs(s).max() or 1.0
+        sc = (np.abs(s).max() if s.size else 0.0) or 1.0
         y = d["syn"] / (np.abs(d["syn"]).max() or 1.0)
         for k in range(3):  # three copies side by side like a classic tie panel
             self.p_sy.plot(2.5 * k + y, tc, pen=pg.mkPen((200, 0, 0)))

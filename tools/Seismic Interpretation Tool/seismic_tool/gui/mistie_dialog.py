@@ -100,8 +100,8 @@ class MistieDialog(QtWidgets.QDialog):
         self.b_apply.clicked.connect(lambda: self.apply())
         self.b_reset.clicked.connect(lambda: self.reset())
         self.b_map.clicked.connect(lambda: self.show_residuals())
-        self.b_csv.clicked.connect(self._export_csv)
-        self.b_sgy.clicked.connect(self._export_segy)
+        self.b_csv.clicked.connect(lambda *_: self._export_csv())
+        self.b_sgy.clicked.connect(lambda *_: self._export_segy())
 
     def _read(self):
         t0, t1 = float(self.t0.value()), float(self.t1.value())

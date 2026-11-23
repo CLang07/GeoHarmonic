@@ -117,7 +117,7 @@ def correlate_pairs(parent_tr, child_tr, t_parent, half, maxlag):
     den2 = y0 - 2 * y1 + y2
     inner = (k > 0) & (k < len(lags) - 1) & (np.abs(den2) > 1e-12)
     delta = np.where(inner, 0.5 * (y0 - y2) / np.where(den2 == 0, 1, den2), 0.0)
-    lag = lags[k] + np.clip(delta, -0.5, 0.5) + (c - t_parent)  # relative to the fractional parent time
+    lag = lags[k] + np.clip(delta, -0.5, 0.5)  # waveform shift = child time - parent time (fraction kept)
     # optimum beyond max jump (incl. the extra edge lag): the event moved too far - reject
     best = np.where(np.abs(lags[k]) > maxlag, -1.0, best)
     return lag, best
@@ -435,6 +435,7 @@ class HorizonSet:
             h = e[2]
             if not self.get(h.name):
                 self.items.insert(min(e[3], len(self.items)), h)
+            self.dirty = True  # its files were removed by a save after the delete
             return h.name
         _, _, h, key, old = e
         if old is None:
@@ -445,18 +446,34 @@ class HorizonSet:
         return h.name
 
     # -- persistence
+    def folders(self):
+        """{horizon name: folder name}: safe_name, made unique case-insensitively ('Top C1.5' / 'Top C1_5', or
+        'top' / 'Top' on Windows, must not share a folder)."""
+        out, used = {}, set()
+        for h in self.items:
+            base = safe_name(h.name)
+            d, k = base, 2
+            while os.path.normcase(d).lower() in used:
+                d = f"{base}_{k}"
+                k += 1
+            used.add(os.path.normcase(d).lower())
+            out[h.name] = d
+        return out
+
     def to_json(self, folder_rel):
+        fd = self.folders()
         return [{"name": h.name, "color": list(h.color), "visible": h.visible,
-                 "dir": os.path.join(folder_rel, safe_name(h.name)),
+                 "dir": os.path.join(folder_rel, fd[h.name]),
                  "keys": {safe_name(k): k for k in h.data}} for h in self.items]
 
     def save(self, folder):
         os.makedirs(folder, exist_ok=True)
         keep = set()
+        fd = self.folders()
         for h in self.items:
-            d = os.path.join(folder, safe_name(h.name))
+            d = os.path.join(folder, fd[h.name])
             os.makedirs(d, exist_ok=True)
-            keep.add(safe_name(h.name))
+            keep.add(fd[h.name].lower())
             present = set()
             for k, a in h.data.items():
                 fn = safe_name(k) + ".npy"
@@ -467,7 +484,7 @@ class HorizonSet:
                     os.remove(os.path.join(d, fn))
         for dn in os.listdir(folder):  # folders of deleted / renamed horizons (only if they hold just .npy)
             d = os.path.join(folder, dn)
-            if os.path.isdir(d) and dn not in keep and all(f.endswith(".npy") for f in os.listdir(d)):
+            if os.path.isdir(d) and dn.lower() not in keep and all(f.endswith(".npy") for f in os.listdir(d)):
                 for f in os.listdir(d):
                     os.remove(os.path.join(d, f))
                 os.rmdir(d)

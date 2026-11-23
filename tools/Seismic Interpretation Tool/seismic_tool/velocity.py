@@ -164,6 +164,9 @@ class VelocityModel:
     def section_to_depth(self, arr, x, y, times, dz=None, zmax=None):
         """arr (ns, n) time section at map points (x, y) -> (depth section (nz, n), z axis)."""
         zt = self.depth_of_time(x, y, times)  # (n, ns)
+        zt = _monotonic_depths(zt)
+        if not np.isfinite(zt).any():  # section outside the model
+            return np.full((2, arr.shape[1]), np.nan, np.float32), np.array([0.0, 1.0])
         dz = dz or max(1.0, float(np.nanmedian(np.diff(zt, axis=1))))
         zmax = zmax or float(np.nanmax(zt))
         z = np.arange(0.0, zmax + dz / 2, dz)
@@ -182,3 +185,13 @@ class VelocityModel:
     def from_dict(cls, project, d):
         return cls(project, d["survey"], [tuple(l) for l in d["layers"]], d.get("residual_correction", False),
                    d.get("cell", 100.0), d.get("below_velocity"))
+
+
+def _monotonic_depths(zt):
+    """Depth must increase with time along each trace (a negative interval velocity from inconsistent tops would
+    fold the section): running maximum per trace, NaN kept."""
+    zt = np.array(zt, float)
+    fin = np.isfinite(zt)
+    z = np.where(fin, zt, -np.inf)
+    z = np.maximum.accumulate(z, axis=-1)
+    return np.where(fin, z, np.nan)

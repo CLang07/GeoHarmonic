@@ -65,15 +65,15 @@ class AnalyticsWindow(QtWidgets.QDialog):
         ws = project.wellset() if project.well_project else None
         if ws is not None and ws.wcp is not None:
             self.zone.addItems([f["name"] for f in ws.wcp.formations])
-        self.b_grid.clicked.connect(self._add_basemap_grid)
-        self.b_csv.clicked.connect(self._load_csv_dialog)
-        self.b_eng.clicked.connect(self._engineering_dialog)
+        self.b_grid.clicked.connect(lambda *_: self._add_basemap_grid())
+        self.b_csv.clicked.connect(lambda *_: self._load_csv_dialog())
+        self.b_eng.clicked.connect(lambda *_: self._engineering_dialog())
         self.b_zone.clicked.connect(lambda: self.add_zone(self.zone.currentText()))
         self.b_explore.clicked.connect(lambda: self._show(self.explore()))
-        self.b_train.clicked.connect(self._train_clicked)
+        self.b_train.clicked.connect(lambda *_: self._train_clicked())
         self.b_map.clicked.connect(lambda: self.predict_map())
-        self.b_report.clicked.connect(self._report_dialog)
-        self.b_qc.clicked.connect(self._qc_dialog)
+        self.b_report.clicked.connect(lambda *_: self._report_dialog())
+        self.b_qc.clicked.connect(lambda *_: self._qc_dialog())
 
     # ------------------------------------------------------------ data
     def wells(self):

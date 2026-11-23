@@ -71,8 +71,8 @@ class DashboardWindow(QtWidgets.QMainWindow):
                          ("Save layout...", self._save_layout), ("Load layout...", self._load_layout),
                          ("Export HTML...", self._export_dialog)):
             a = tb.addAction(text)
-            a.triggered.connect(fn)
-        self.color_box.currentTextChanged.connect(lambda s: s and self.color_by(s))
+            a.triggered.connect(lambda *_, fn=fn: fn())  # never pass 'checked' into optional parameters
+        self.color_box.textActivated.connect(lambda s: s and self.color_by(s))  # also re-picking the shown entry
         self.bg_box.currentTextChanged.connect(lambda s: self.set_background(s))
         self.hist_box.currentTextChanged.connect(lambda s: self.draw_histogram())
         self.x_box.currentTextChanged.connect(lambda s: self.draw_crossplot())
@@ -426,7 +426,10 @@ class DashboardWindow(QtWidgets.QMainWindow):
         self.bg_box.blockSignals(False)
         self.color_box.blockSignals(True)
         self.color_box.clear()
-        self.color_box.addItems(self.color_sources())
+        srcs = self.color_sources()
+        self.color_box.addItems(srcs)
+        if self.color_name in srcs:  # keep showing what the map is coloured by
+            self.color_box.setCurrentText(self.color_name)
         self.color_box.blockSignals(False)
 
     # ------------------------------------------------------------ linking
@@ -469,12 +472,24 @@ class DashboardWindow(QtWidgets.QMainWindow):
         return int(self._pick_owner[int(np.argmin(d))])
 
     def _map_clicked(self, ev):
+        if ev.button() != QtCore.Qt.LeftButton:
+            return
         vb = self.map.getViewBox()
+        if not vb.sceneBoundingRect().contains(ev.scenePos()):
+            return
         p = vb.mapSceneToView(ev.scenePos())
         k = self.nearest_well(p.x(), p.y())
-        if k is not None:
-            mods = ev.modifiers()
-            self.model.select([k], "toggle" if mods & QtCore.Qt.ControlModifier else "replace")
+        mods = ev.modifiers()
+        tol = 12 * abs(vb.viewPixelSize()[0])  # a click far from every wellbore clears the selection
+        if k is None or self.distance_to_well(k, p.x(), p.y()) > tol:
+            if not mods & QtCore.Qt.ControlModifier:
+                self.model.select([], "replace")
+            return
+        self.model.select([k], "toggle" if mods & QtCore.Qt.ControlModifier else "replace")
+
+    def distance_to_well(self, k, x, y):
+        t = self.trajs[k]
+        return float(np.min(np.hypot(t.x - x, t.y - y)))
 
     # ------------------------------------------------------------ layouts + export
     def _save_layout(self):

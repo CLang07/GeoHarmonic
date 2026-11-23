@@ -52,7 +52,7 @@ class VelocityDialog(QtWidgets.QDialog):
         self.b_build.clicked.connect(lambda: self._build())
         self.b_map.clicked.connect(lambda: self.show_depth_map(max(0, self.table.currentRow())))
         self.b_use.clicked.connect(lambda: self.use())
-        self.b_csv.clicked.connect(self._csv)
+        self.b_csv.clicked.connect(lambda *_: self._csv())
 
     def _fill_layers(self):
         hs = self.project.horizons.items

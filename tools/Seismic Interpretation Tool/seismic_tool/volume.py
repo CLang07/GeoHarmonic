@@ -27,6 +27,24 @@ def _affine(il, xl, x, y):
     return cx.tolist(), cy.tolist()
 
 
+def _fix_degenerate(cx, cy, nil, nxl, il_step, xl_step, il0, xl0):
+    """A single-inline (or single-crossline) survey leaves the other axis' coefficients undetermined by the
+    least-squares fit: make that axis perpendicular to the varying one, same spacing per trace, keeping the fitted
+    positions of the existing traces."""
+    cx, cy = list(map(float, cx)), list(map(float, cy))
+    if nil == 1 and nxl > 1:
+        Cx, Cy = cx[0] + cx[1] * il0, cy[0] + cy[1] * il0  # constant part at the one inline
+        ex, ey = cx[2] * xl_step, cy[2] * xl_step  # metres per crossline trace
+        cx[1], cy[1] = -ey / il_step, ex / il_step
+        cx[0], cy[0] = Cx - cx[1] * il0, Cy - cy[1] * il0
+    elif nxl == 1 and nil > 1:
+        Cx, Cy = cx[0] + cx[2] * xl0, cy[0] + cy[2] * xl0
+        ex, ey = cx[1] * il_step, cy[1] * il_step
+        cx[2], cy[2] = ey / xl_step, -ex / xl_step
+        cx[0], cy[0] = Cx - cx[2] * xl0, Cy - cy[2] * xl0
+    return cx, cy
+
+
 def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_byte=185, scalar_byte=71,
               chunk=20000, progress=None, cancel=None, workers=None):
     """Scan headers, then write the two float16 stores. progress(fraction, text) and cancel() -> bool are
@@ -170,8 +188,9 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
     sel = np.linspace(0, n - 1, min(n, 20000)).astype(int)
     if np.ptp(x[sel]) > 0 or np.ptp(y[sel]) > 0:
         cx, cy = _affine(il[sel].astype(float), xl[sel].astype(float), x[sel], y[sel])
-    else:  # no coordinates: use il/xl numbers as a nominal 25 m grid
-        cx, cy = [0.0, 0.0, 25.0 * xl_step], [0.0, 25.0 * il_step, 0.0]
+        cx, cy = _fix_degenerate(cx, cy, nil, nxl, il_step, xl_step, il0, xl0)
+    else:  # no coordinates: use il/xl numbers as a nominal 25 m grid (coefficients are per header number)
+        cx, cy = [0.0, 0.0, 25.0 / xl_step], [0.0, 25.0 / il_step, 0.0]
     np.save(os.path.join(store_dir, "filled.npy"), filled)
     meta = {"version": STORE_VERSION, "segy": os.path.abspath(segy_path), "il_byte": il_byte, "xl_byte": xl_byte,
             "il0": il0, "il_step": il_step, "nil": nil, "xl0": xl0, "xl_step": xl_step, "nxl": nxl,
@@ -277,7 +296,8 @@ class Line2D:
         self.f = SegyFile(segy_path)
         self.ns, self.dt, self.t0 = self.f.ns, self.f.dt, self.f.t0
         cdp = self.f.header(cdp_byte, 4).astype(float)
-        if not np.all(np.diff(cdp) > 0):
+        d = np.diff(cdp)
+        if not (np.all(d > 0) or np.all(d < 0)):  # descending CDP numbers are common and fine
             cdp = np.arange(1, self.f.ntraces + 1, dtype=float)
         self.cdp = cdp
         x, y = self.f.coordinates(x_byte, y_byte, scalar_byte)
@@ -349,3 +369,12 @@ def match_nav(name, nav):
         if norm(k) == norm(name):
             return v
     return None
+
+
+def unused_store(store):
+    """store, or store_2, store_3 ... when a volume store already exists there."""
+    cand, k = store, 2
+    while os.path.exists(os.path.join(cand, "meta.json")) or os.path.exists(os.path.join(cand, "data_ilxl.npy")):
+        cand = f"{store}_{k}"
+        k += 1
+    return cand

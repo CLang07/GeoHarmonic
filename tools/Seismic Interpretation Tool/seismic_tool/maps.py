@@ -141,8 +141,9 @@ def idw_grid(x, y, v, cell, reach=None, power=2.0, max_pts=4000, pad=None):
     num = np.zeros(GX.shape)
     den = np.zeros(GX.shape)
     dmin = np.full(GX.shape, np.inf)
-    for k0 in range(0, len(v), 256):
-        px, py, pv = x[k0:k0 + 256], y[k0:k0 + 256], v[k0:k0 + 256]
+    nb = int(max(1, min(256, 2e7 // max(1, GX.size))))  # keep the (ny, nx, nb) temporaries ~160 MB
+    for k0 in range(0, len(v), nb):
+        px, py, pv = x[k0:k0 + nb], y[k0:k0 + nb], v[k0:k0 + nb]
         d2 = (GX[..., None] - px) ** 2 + (GY[..., None] - py) ** 2
         w = 1.0 / np.maximum(d2, 1e-6) ** (power / 2)
         num += (w * pv).sum(-1)
@@ -194,6 +195,8 @@ def extract_amplitude(vol, surface_ms, above_ms=0.0, below_ms=0.0, kind="rms", b
             continue
         k_lo = int(max(0, np.floor((np.nanmin(sb) - above_ms - t0_ms) / dt_ms) - 1))
         k_hi = int(min(vol.ns - 1, np.ceil((np.nanmax(sb) + below_ms - t0_ms) / dt_ms) + 1))
+        if k_hi < k_lo:  # surfaces of this block lie outside the record
+            continue
         tr = np.asarray(vol.ilxl[a:b, :, k_lo:k_hi + 1], np.float32) * vol.inv  # (bi, nxl, nk)
         tk = t0_ms + dt_ms * np.arange(k_lo, k_hi + 1)
         if kind == "at":
@@ -203,7 +206,8 @@ def extract_amplitude(vol, surface_ms, above_ms=0.0, below_ms=0.0, kind="rms", b
             w = idc - k0
             v0 = np.take_along_axis(tr, k0[..., None], 2)[..., 0]
             v1 = np.take_along_axis(tr, (k0 + 1)[..., None], 2)[..., 0]
-            out[a:b] = np.where(fin, v0 * (1 - w) + v1 * w, np.nan)
+            inside = (idx >= 0) & (idx <= tr.shape[2] - 1)
+            out[a:b] = np.where(fin & inside, v0 * (1 - w) + v1 * w, np.nan)
             continue
         m = (tk[None, None, :] >= sb[..., None] - above_ms - 1e-6) & (tk[None, None, :] <= sb[..., None] + below_ms + 1e-6)
         cnt = m.sum(-1)

@@ -42,6 +42,34 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.20.1 - fixes from a full code review (run 2)
+Core:
+- Autotracker kept only the whole-sample part of each pick in mode "None" (dipping horizons came out flat); fixed.
+- Horizons: undo of a delete after Save lost the horizon's files; two horizon names mapping to the same folder
+  ("Top C1.5" / "Top C1_5", or "top" / "Top" on Windows) overwrote or deleted each other's picks. Folders are now unique.
+- 2D lines with descending CDP numbers lost their navigation (all traces at one end of the line).
+- SEG-Y: a junk extended-header count in rev-0 files skipped the first traces; ns = 0 now gives a clear error.
+- Amplitude extraction no longer crashes when a horizon lies outside the volume's record (NaN there).
+- Depth sections: no crash outside the velocity model; depths can no longer fold.
+- Single-inline / single-crossline 3D surveys get a sensible map transform; nominal 25 m grid was wrong with steps != 1.
+- Gridding 2D picks over large areas used several GB of RAM (batches now scaled to the grid size).
+- Re-importing a volume under the same name writes a new store folder (the old one may be memory-mapped; on
+  Windows the overwrite failed, and a cancelled re-import deleted the old volume).
+GUI (real-Qt behaviour the mock could not show):
+- Menu actions / buttons no longer pass Qt's "checked" flag into optional parameters (attribute volume, horizon
+  stack levels and "stack level -> horizon" were affected).
+- Opening a section from the data tree / basemap / after import, and restoring the last section, compared a list
+  with a tuple and silently did nothing - fixed.
+- New / open project resets the section panel (old source, RGT editors) and is refused while a job runs; a finished
+  import goes to the project it started in.
+- Enter in the line-number box jumps to the line again (Return / Esc stick shortcuts now only on the plot).
+- Shift+click on a seed or stick point reaches the pick handler (scatter symbols let clicks through).
+- Well tie: switching wells resets shift / stretch / warp (no carry-over into the next well's saved tie); a saved
+  tie fills the spin boxes; no crash when the tied synthetic is outside the record.
+- Dashboard: histogram range can be widened again after filtering; colour box keeps showing the current colouring
+  and re-picking an entry works; right-clicks / axis clicks no longer change the selection, a click away from all
+  wells clears it; an all-null log curve no longer breaks "Colour by log" / Well strip.
+
 ## Seismic v0.20.0 - well tie upgrade, part 2 (PLAN item 16c; item 16 done)
 Third button row in Interpret > Well tie:
 - **Estimate wavelet**: deterministic least-squares wavelet from the tied reflectivity and the seismic (window

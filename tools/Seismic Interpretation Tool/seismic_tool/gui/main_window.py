@@ -168,7 +168,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.b_cancel = QtWidgets.QPushButton("Cancel")
         self.b_cancel.setToolTip("Stop the running job (import, RGT, attributes...) at the next block")
         self.b_cancel.hide()
-        self.b_cancel.clicked.connect(self.cancel_job)
+        self.b_cancel.clicked.connect(lambda *_: self.cancel_job())
         self.statusBar().addPermanentWidget(self.b_cancel)
         self._job = None
 
@@ -249,7 +249,7 @@ class MainWindow(QtWidgets.QMainWindow):
         a = QtGui.QAction(text, self)
         if key:
             a.setShortcut(QtGui.QKeySequence(key))
-        a.triggered.connect(fn)
+        a.triggered.connect(lambda *_, fn=fn: fn())  # never pass 'checked' into optional parameters
         menu.addAction(a)
         return a
 
@@ -298,7 +298,17 @@ class MainWindow(QtWidgets.QMainWindow):
                                                                "in a folder next to the project file.")
         return self.save_as()
 
+    def job_running(self):
+        """True (with a message) while an import / computation runs - it writes into the current project."""
+        if getattr(self, "_job", None):
+            QtWidgets.QMessageBox.information(self, "Job running", "Wait for the running job to finish (or Cancel it) "
+                                                                   "before opening another project.")
+            return True
+        return False
+
     def new_project(self):
+        if self.job_running():
+            return
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "New seismic project", os.path.expanduser("~/Documents"),
                                                         f"Seismic project (*{EXT})")
         if not path:
@@ -310,6 +320,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh()
 
     def open_dialog(self):
+        if self.job_running():
+            return
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open seismic project", os.path.expanduser("~/Documents"),
                                                         f"Seismic project (*{EXT})")
         if path:
@@ -405,6 +417,9 @@ class MainWindow(QtWidgets.QMainWindow):
         name = dlg.name.text().strip() or "Volume"
         store = os.path.join(self.project.base(), os.path.basename(self.project.path)[:-len(EXT)] + "_seismic",
                              "".join(c if c.isalnum() or c in "-_ " else "_" for c in name))
+        from ..volume import unused_store
+        store = unused_store(store)  # never write over a store that may be memory-mapped (re-import)
+        proj = self.project  # the job belongs to this project even if another one is opened meanwhile
         args = dict(il_byte=dlg.il.value(), xl_byte=dlg.xl.value(), x_byte=dlg.xb.value(), y_byte=dlg.yb.value())
         state = {"frac": 0.0, "text": "Starting...", "done": False, "error": None, "cancel": False}
 
@@ -438,10 +453,13 @@ class MainWindow(QtWidgets.QMainWindow):
             if state["error"]:
                 QtWidgets.QMessageBox.critical(self, "Import failed", state["error"][-2000:])
                 return
-            self.project.volumes = [v for v in self.project.volumes if v["name"] != name]
-            self.project._vol_cache.pop(name, None)
-            self.project.volumes.append({"name": name, "store": store, "segy": path, **args})
-            self.project.save()
+            proj.volumes = [v for v in proj.volumes if v["name"] != name]
+            proj._vol_cache.pop(name, None)
+            proj.volumes.append({"name": name, "store": store, "segy": path, **args})
+            proj.save()
+            if proj is not self.project:
+                self.statusBar().showMessage(f"Imported {name} into {proj.path}", 8000)
+                return
             self._refresh()
             self.section.show("3D", name, "Inline")
             self.statusBar().showMessage(f"Imported {name}", 8000)

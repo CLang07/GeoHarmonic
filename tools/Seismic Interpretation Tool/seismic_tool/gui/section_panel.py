@@ -66,6 +66,18 @@ class PickViewBox(pg.ViewBox):
         super().mouseDragEvent(ev, axis)
 
 
+def _click_through(item):
+    """Scatter symbols accept left clicks in pyqtgraph, so Shift+click on a seed / stick point would never reach
+    the pick ViewBox: let clicks pass through."""
+    for it in (item, getattr(item, "scatter", None)):
+        if it is not None:
+            try:
+                it.mouseClickEvent = lambda ev: ev.ignore()
+            except Exception:
+                pass
+    return item
+
+
 class SectionPanel(QtWidgets.QWidget):
     positionChanged = QtCore.Signal()  # current line / slice changed (basemap follows)
     cursorInfo = QtCore.Signal(str)
@@ -179,12 +191,21 @@ class SectionPanel(QtWidgets.QWidget):
             s.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
             s.activated.connect(lambda d=d: self.step(d))
         for key, fn in (("Return", self.end_stick), ("Enter", self.end_stick), ("Escape", self.cancel_stick)):
-            s = QtGui.QShortcut(QtGui.QKeySequence(key), self)
+            # on the plot only: Enter in the line-number box must still jump to the line
+            s = QtGui.QShortcut(QtGui.QKeySequence(key), self.plot)
             s.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
             s.activated.connect(fn)
 
     # ------------------------------------------------------------ setup
     def set_project(self, project):
+        if project is not self.project:  # nothing of the previous project may survive (stores, editors)
+            self.source = None
+            self._data = None
+            self._img = None
+            self._rgt_editors = {}
+            self._rgt_grab = None
+            self.stick = []
+            self.__dict__.pop("_vm_cache", None)
         self.project = project
         self.refresh_sources()
 
@@ -202,17 +223,20 @@ class SectionPanel(QtWidgets.QWidget):
         self.clip_spin.setValue(float(d.get("clip", 99.0)))
         self.rev_chk.setChecked(bool(d.get("reverse", False)))
         want = select or (tuple(d["source"]) if d.get("source") else None)
-        idx = next((i for i in range(self.src_combo.count()) if self.src_combo.itemData(i) == want), 0)
+        # PySide6 returns the stored tuple as a list: compare as tuples
+        idx = next((i for i in range(self.src_combo.count()) if want and tuple(self.src_combo.itemData(i) or ()) == tuple(want)), 0)
         if self.src_combo.count():
             self.src_combo.setCurrentIndex(idx)
             self._source_changed(idx, number=d.get("number"), mode=d.get("mode"))
         else:
+            self.source = None
+            self._data = None
             self.plot.clear()
 
     def show(self, kind, name, mode=None, number=None):
         """Open a 3D volume (with mode/number) or a 2D line."""
         for i in range(self.src_combo.count()):
-            if self.src_combo.itemData(i) == (kind, name):
+            if tuple(self.src_combo.itemData(i) or ()) == (kind, name):
                 self.src_combo.blockSignals(True)
                 self.src_combo.setCurrentIndex(i)
                 self.src_combo.blockSignals(False)
@@ -406,7 +430,10 @@ class SectionPanel(QtWidgets.QWidget):
         kind, name = self.source
         times = self.project.volume(name).times if kind == "3D" else self.project.line(name).times
         x, y = self.section_xy()
-        zt = vm.depth_of_time(x, y, times)
+        from ..velocity import _monotonic_depths
+        zt = _monotonic_depths(vm.depth_of_time(x, y, times))
+        if not np.isfinite(zt).any():
+            raise RuntimeError("this section is outside the velocity model")
         dz = max(1.0, float(np.nanmedian(np.diff(zt, axis=1))))
         z = np.arange(0.0, float(np.nanmax(zt)) + dz / 2, dz)
         out = np.full((len(z), arr.shape[1]), np.nan, np.float32)
@@ -1097,6 +1124,7 @@ class SectionPanel(QtWidgets.QWidget):
             else:
                 it = pg.PlotDataItem(xs, ys, pen=pg.mkPen(c, width=2, style=QtCore.Qt.DashLine), symbol="s",
                                      symbolSize=7, symbolBrush=pg.mkBrush(255, 255, 255), symbolPen=pg.mkPen(c))
+            _click_through(it)
             self.plot.addItem(it)
             self._flt_items.append(it)
 
@@ -1127,7 +1155,7 @@ class SectionPanel(QtWidgets.QWidget):
                 pts = hz.slice_points(h, key, surv, self.number)
                 if pts is None or not len(pts[0]):
                     continue
-                it = pg.ScatterPlotItem(pts[0], pts[1], size=4, pen=None, brush=pg.mkBrush(*h.color))
+                it = _click_through(pg.ScatterPlotItem(pts[0], pts[1], size=4, pen=None, brush=pg.mkBrush(*h.color)))
             else:
                 c = hz.section_curve(h, key, surv, self.mode, self.number)
                 if c is None or not np.isfinite(c[1]).any():
@@ -1160,7 +1188,7 @@ class SectionPanel(QtWidgets.QWidget):
                 xv = surv.inlines[i]
             else:
                 continue
-            it = pg.ScatterPlotItem([xv], [t], symbol="x", size=10, pen=pg.mkPen((0, 0, 0), width=2))
+            it = _click_through(pg.ScatterPlotItem([xv], [t], symbol="x", size=10, pen=pg.mkPen((0, 0, 0), width=2)))
             self.plot.addItem(it)
             self._hz_items.append(it)
 

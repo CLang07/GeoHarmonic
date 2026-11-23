@@ -48,13 +48,13 @@ class EngineeringImportDialog(QtWidgets.QDialog):
         lay.addLayout(row)
         self.info = QtWidgets.QLabel("")
         lay.addWidget(self.info)
-        self.b_file.clicked.connect(self._file_dialog)
+        self.b_file.clicked.connect(lambda *_: self._file_dialog())
         self.preset_box.currentTextChanged.connect(lambda s: self.set_preset(s))
         self.kind_box.currentTextChanged.connect(lambda s: self.set_kind(s.split()[0]))
-        self.b_save.clicked.connect(self._save_dialog)
-        self.b_load.clicked.connect(self._load_dialog)
-        self.b_ok.clicked.connect(self._ok)
-        self.b_cancel.clicked.connect(self.reject)
+        self.b_save.clicked.connect(lambda *_: self._save_dialog())
+        self.b_load.clicked.connect(lambda *_: self._load_dialog())
+        self.b_ok.clicked.connect(lambda *_: self._ok())
+        self.b_cancel.clicked.connect(lambda *_: self.reject())
         if path:
             self.load(path)
 

@@ -61,10 +61,13 @@ class DashboardModel:
         self.filters.clear()
         self._emit("filter")
 
-    def visible(self):
-        """Boolean mask of rows passing all filters (NaN fails a numeric range)."""
+    def visible(self, exclude=None):
+        """Boolean mask of rows passing all filters (NaN fails a numeric range); exclude: ignore that column's
+        own filter (the histogram of a filtered column shows its full range so the range can be widened)."""
         m = np.ones(len(self), bool)
         for col, f in self.filters.items():
+            if col == exclude:
+                continue
             v = self.values(col)
             if f[0] == "in":
                 m &= np.array([x in f[1] for x in v])
@@ -132,12 +135,14 @@ class DashboardModel:
 
     # ------------------------------------------------------------ panel data
     def histogram(self, col, bins=20):
-        """(edges, counts of visible rows, counts of selected rows)."""
+        """(edges, counts of visible rows, counts of selected rows). The edges span the column's values under the
+        other columns' filters (not its own), so its range filter can be widened again."""
         v = np.asarray(self.values(col), float)
         vis = self.visible() & np.isfinite(v)
-        if not vis.any():
+        base = self.visible(exclude=col) & np.isfinite(v)
+        if not base.any():
             return np.array([0.0, 1.0]), np.zeros(1, int), np.zeros(1, int)
-        edges = np.histogram_bin_edges(v[vis], bins)
+        edges = np.histogram_bin_edges(v[base], bins)
         c, _ = np.histogram(v[vis], edges)
         sel = np.zeros(len(v), bool)
         sel[list(self.selected)] = True

@@ -149,7 +149,9 @@ def sample_volume(traj, vol, twt_of_z, halfwin=0):
 def sample_log(traj, log_md, log_values):
     """Log curve (on its own MD axis) at the trajectory stations (NaN outside the logged interval)."""
     log_md, v = np.asarray(log_md, float), np.asarray(log_values, float)
-    ok = np.isfinite(v)
+    ok = np.isfinite(v) & np.isfinite(log_md)
+    if not ok.any():  # all-null curve
+        return np.full(len(traj.md), np.nan)
     out = np.interp(traj.md, log_md[ok], v[ok], left=np.nan, right=np.nan)
     return out
 

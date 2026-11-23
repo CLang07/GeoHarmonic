@@ -49,6 +49,7 @@ def run(check, tmp):
     wellindex_checks(check, d)
     welllayer_checks(check)
     parallel_import_checks(check, d)
+    review_checks(check, d)
     return v
 
 
@@ -192,4 +193,140 @@ def run_gui(check, tmp):
     lo, hi = SectionPanel.color_levels(s3)
     full = float(np.percentile(np.abs(s3._data.astype(np.float32)), 99.0))
     check(abs(hi - full) / full < 0.01 and lo == -hi, f"section clip from a 1M sample of 6M values ({hi:.3f} vs {full:.3f})")
+    review_gui_checks(check, tmp)
     return True
+
+
+def review_gui_checks(check, tmp):
+    """Regressions for the run-2 code review (GUI logic + laterals)."""
+    from .dashboard_model import DashboardModel
+    from .analytics.table import AttributeTable
+    tab = AttributeTable([f"W{i}" for i in range(10)])
+    tab.add("a", np.arange(10.0))
+    m = DashboardModel(tab)
+    m.set_filter("a", 3.0, 6.0)
+    e, c, _ = m.histogram("a")
+    check(e[0] == 0.0 and e[-1] == 9.0 and c.sum() == 4, "dashboard: histogram of a filtered column spans its full range")
+    from . import laterals as L
+    t = L.synthetic_laterals(1)[0]
+    v = L.sample_log(t, np.arange(0.0, 3000.0, 10.0), np.full(300, np.nan))
+    check(np.isnan(v).all() and len(v) == len(t.md), "all-null log curve samples to NaN (no crash)")
+    from .gui.section_panel import SectionPanel
+    from .project import SeisProject
+    sp = SectionPanel()
+
+    class Combo:  # PySide6 hands the stored tuple back as a list
+        def __init__(self):
+            self.items = [["3D", "A"], ["2D", "L1"]]
+            self.cur = None
+
+        def count(self):
+            return len(self.items)
+
+        def itemData(self, i):
+            return self.items[i]
+
+        def blockSignals(self, b):
+            pass
+
+        def setCurrentIndex(self, i):
+            self.cur = i
+    sp.src_combo = Combo()
+    got = []
+    sp._source_changed = lambda i, number=None, mode=None: got.append(i)
+    sp.show("2D", "L1")
+    check(got == [1], "section panel: show() matches a source stored as a list")
+    sp._rgt_editors = {"3D:A": object()}
+    sp.source = ("3D", "A")
+    sp.refresh_sources = lambda select=None: None
+    sp.set_project(SeisProject())
+    check(sp.source is None and sp._rgt_editors == {}, "section panel: new project drops the old source and RGT editors")
+    from .gui.welltie_dialog import WellTieDialog
+    from . import tie as TK
+
+    class D:
+        pass
+    dlg = D()
+    dlg.well_name = "A"
+    dlg.state = TK.TieState(5.0, 1.01, 900.0)
+    dlg.shift, dlg.stretch, dlg.t_centre, dlg.corr, dlg.trace_offset, dlg._pending, dlg._data = 5.0, 1.01, 900.0, 0.8, 2, 1.0, {}
+    WellTieDialog.set_well(dlg, "B")
+    check(dlg.well_name == "B" and dlg.shift == 0.0 and dlg.state.shift == 0.0 and dlg.corr is None
+          and dlg.trace_offset == 0, "well tie: switching wells resets the tie (no carry-over)")
+
+
+def review_checks(check, tmp):
+    """Regressions for the run-2 code review (core modules)."""
+    from .horizons import correlate_pairs, HorizonSet
+    # 1. fractional parent time kept by the trace-to-trace correlation (no snapping)
+    t = np.arange(200.0)
+    tr = np.exp(-0.5 * ((t - 100.4) / 3.0) ** 2)
+    lag, c = correlate_pairs(tr[None], tr[None], np.array([100.4]), 8, 4)
+    check(abs(lag[0]) < 0.05 and c[0] > 0.99, f"tracker: same trace at a fractional time -> lag {lag[0]:+.3f} (0)")
+    # 2 + 3. horizon folders: undo of a delete after saving, name collisions (also case-only on Windows)
+    d = os.path.join(tmp, "hzfold")
+    hs = HorizonSet()
+    for nm, v in (("Top C1.5", 1.0), ("Top C1_5", 2.0), ("top", 3.0), ("Top", 4.0)):
+        hs.new(nm).data["3D:S"] = np.full((3, 3), v, np.float32)
+    hs.save(d)
+    js = hs.to_json(d)
+    back = HorizonSet.load(js, d)
+    ok = [float(back.get(n).data["3D:S"][0, 0]) for n in ("Top C1.5", "Top C1_5", "top", "Top")] == [1, 2, 3, 4]
+    check(ok and len({os.path.normcase(e["dir"]).lower() for e in js}) == 4, "horizon folders unique (C1.5 / C1_5, top / Top)")
+    hs.delete("Top C1.5")
+    hs.save(d)
+    hs.dirty = False
+    hs.undo()
+    check(hs.dirty, "undo of a deleted horizon marks the set dirty (its files are written again)")
+    # 4. 2D line with descending CDP numbers keeps its navigation
+    from .selftest import write_segy
+    from .volume import Line2D
+    n = 30
+    cdp = np.arange(500, 500 - n, -1)
+    p = os.path.join(tmp, "desc.sgy")
+    write_segy(p, np.random.default_rng(1).standard_normal((n, 50)).astype(np.float32), {21: cdp})
+    nav = np.column_stack([np.arange(400.0, 520.0), 1000.0 + 25 * np.arange(120.0), np.zeros(120)])
+    ln = Line2D("D", p, 21, nav)
+    check(np.allclose(ln.x, 1000.0 + 25 * (cdp - 400)), "2D line with descending CDPs keeps its navigation")
+    # 6. junk extended-header count in a rev-0 file is ignored; ns = 0 raises
+    from .segy import SegyFile
+    raw = bytearray(open(p, "rb").read())
+    raw[3504:3506] = (2).to_bytes(2, "big")
+    raw[3500:3502] = (0).to_bytes(2, "big")
+    p2 = os.path.join(tmp, "junkext.sgy")
+    open(p2, "wb").write(bytes(raw))
+    check(SegyFile(p2).ntraces == n, "rev-0 file with junk extended-header count: all traces read")
+    # 8. amplitude extraction with the surface below the record -> NaN, no crash
+    from .synth import write_3d
+    from .volume import import_3d
+    from .maps import extract_amplitude
+    cube = np.random.default_rng(2).standard_normal((4, 5, 60)).astype(np.float32)
+    write_3d(os.path.join(tmp, "short.sgy"), cube)
+    v = import_3d(os.path.join(tmp, "short.sgy"), os.path.join(tmp, "short"))
+    surf = np.full((4, 5), 5000.0)
+    surf[0, 0] = 100.0
+    ok = True
+    for kind in ("rms", "max", "max_abs", "at"):
+        r = extract_amplitude(v, surf, 8, 8, kind)
+        ok &= np.isnan(r[1:, :]).all() and np.isfinite(r[0, 0])
+    check(ok, "amplitude extraction: surface outside the record -> NaN, not a crash")
+    # 10 + 11. single-inline survey map transform; nominal grid spacing with crossline step 2
+    from .volume import _fix_degenerate, _affine
+    xl = np.arange(10, 40, 2.0)
+    il = np.full(len(xl), 7.0)
+    x, y = 1000 + 12.5 * (xl - 10), 2000 + 0 * xl
+    cx, cy = _affine(il, xl, x, y)
+    cx, cy = _fix_degenerate(cx, cy, 1, len(xl), 1, 2, 7, 10)
+    px = cx[0] + cx[1] * il + cx[2] * xl
+    py = cy[0] + cy[1] * il + cy[2] * xl
+    step_il = np.hypot(cx[1], cy[1])
+    check(np.allclose(px, x) and np.allclose(py, y) and abs(step_il - 25.0) < 1e-6 and abs(cx[1]) < 1e-9,
+          f"single-inline survey: inline axis perpendicular, {step_il:.1f} m (was arbitrary)")
+    # 9. depth section outside the model / folding depths
+    from .velocity import _monotonic_depths
+    z = _monotonic_depths(np.array([[0.0, 10.0, 8.0, 20.0, np.nan]]))
+    check(np.allclose(z[0, :4], [0, 10, 10, 20]) and np.isnan(z[0, 4]), "depth conversion never folds (running max)")
+    # 5. re-import goes to a new store folder
+    from .volume import unused_store
+    check(unused_store(os.path.join(tmp, "short")) == os.path.join(tmp, "short") + "_2"
+          and unused_store(os.path.join(tmp, "new")) == os.path.join(tmp, "new"), "re-import never overwrites a store")
