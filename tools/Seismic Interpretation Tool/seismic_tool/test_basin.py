@@ -309,10 +309,107 @@ def run_thermal(check, tmp):
     check([r_["ok"] for r_ in sc] == [False, True], "implausible BHT (190 degC/km) flagged")
 
 
+def synthetic_depth_grids(ny=31, nx=41, dx=250.0):
+    """Depth maps (MapGrid 'xy') of the burial_table surfaces: a dome deepening to the east."""
+    from .maps import MapGrid
+    Y, X = np.mgrid[0:ny, 0:nx].astype(float)
+    dome = 300.0 * np.exp(-((X - nx / 2) ** 2 + (Y - ny / 2) ** 2) / (2 * (nx / 5) ** 2))
+    east = 25.0 * X
+    z = {"Seabed": 100.0 + 0 * X, "A": 900.0 + 0.3 * east - 0.2 * dome, "B": 2000.0 + 0.6 * east - 0.6 * dome,
+         "C": 3200.0 + east - dome, "Base": 4000.0 + east - dome}
+    return {k: MapGrid(v.astype(np.float32), "xy", "m", k, None, 0.0, 0.0, dx, dx) for k, v in z.items()}
+
+
+def run_maps(check, tmp):
+    import time
+
+    from .basin import burial as B
+    from .basin import maturity as MT
+    from .basin import pseudowells as PW
+    from .basin import thermal as TH
+    T = burial_table()
+    names = ["Seabed", "A", "B", "C", "Base"]
+    D = np.array([[100, 900, 2000, 3200, 4000], [100, 1000, 2300, 3600, 4500], [100, 700, 1500, 2500, 3000.0]])
+    res = PW.run_columns(T, names, D, 100.0, heat_flow=62.0, surface_t=11.0, surfaces=["B", "C"], n_sub=4, full=True)
+    single = []
+    for row in D:
+        bh = B.BurialHistory(B.column_units(T, dict(zip(names, row)), 100.0), water_depth=100.0)
+        th = TH.ThermalHistory(bh, heat_flow=62.0, surface_t=11.0, n_sub=4)
+        Tc = dict((n, t) for n, _, t in th.surface_temperatures())["C"]
+        single.append((Tc[-1], MT.easy_ro(th.ages, Tc)[-1]))
+    single = np.array(single)
+    check(np.allclose(res["surfaces"]["C"]["temperature"], single[:, 0], atol=1e-6) and
+          np.allclose(res["surfaces"]["C"]["ro"], single[:, 1], atol=1e-3),
+          "batched pseudo-wells == one-column model (temperature, %Ro at C)")
+    c = res["surfaces"]["C"]
+    check(c["ro"][1] > c["ro"][0] > c["ro"][2] and np.all(np.isfinite(c["oil_entry"][:2])),
+          "deeper column is more mature; oil-window entry ages " + ", ".join(f"{a:.1f}" for a in c["oil_entry"]))
+    # Wheeler colouring: property of the sediment of each age, today and at 30 Ma
+    ax = np.arange(0.0, 80.0, 0.5)
+    W = PW.wheeler_property(res, ax, "ro", 0.0)
+    k30 = int(np.argmin(np.abs(ax - 30.0)))
+    check(np.allclose(W[k30], res["surfaces"]["B"]["ro"], atol=1e-3) and np.all(np.diff(W[:, 0][np.isfinite(W[:, 0])]) >= -1e-6),
+          "Wheeler %Ro: the 30 Ma row == %Ro at surface B; %Ro increases with age")
+    Wp = PW.wheeler_property(res, ax, "temperature", 30.0)
+    check(np.isnan(Wp[ax < 29.9]).all() and np.isfinite(Wp[ax > 30.1]).all(),
+          "Wheeler at 30 Ma: younger sediment not yet deposited (blank)")
+    Wphi = PW.wheeler_property(res, ax, "porosity", 0.0)
+    check(np.nanmax(Wphi) < 0.7 and np.nanmin(Wphi) > 0.0, "Wheeler porosity today")
+    tr_x = np.linspace(0, 2, 11)
+    tw = PW.to_traces(W, [0.0, 1.0, 2.0], tr_x)
+    check(tw.shape == (len(ax), 11) and np.allclose(tw[:, 5], W[:, 1], equal_nan=True), "columns -> section traces")
+    sec0 = PW.burial_section(res, 0.0)
+    sec30 = PW.burial_section(res, 30.0)
+    check(np.allclose(sec0["C"], D[:, 3], atol=1e-3) and np.all(sec30["C"] < sec0["C"]) and "A" not in sec30,
+          f"restored section at 30 Ma: C at {sec30['C'][0]:.0f} m (today {sec0['C'][0]:.0f} m), A not yet deposited")
+    # maps
+    G = synthetic_depth_grids()
+    t0 = time.time()
+    M = PW.map_run(G, T, "C", stride=5, heat_flow=62.0, surface_t=11.0)
+    dt = time.time() - t0
+    ro = M["ro"].z
+    check(ro.shape == G["C"].z.shape and np.isfinite(ro).all() and ro[:, -1].mean() > ro[:, 0].mean() and
+          ro[15, 20] < ro[15, 35], f"%Ro map at C: {M['_info']['columns']} pseudo-wells in {dt:.2f} s, "
+          f"{ro.min():.2f}-{ro.max():.2f} %Ro, crest less mature")
+    j, i = 10, 15
+    one = PW.run_columns(T, names, np.array([[float(G[n].z[i, j]) for n in names]]), 100.0, 62.0, None, 11.0,
+                         surfaces=["C"])
+    check(abs(float(one["surfaces"]["C"]["ro"][0]) - float(ro[i, j])) < 1e-4,
+          "map node on the stride == direct column run")
+    check(set(M) >= {"temperature", "ro", "tr", "oil_entry"} and M["temperature"].unit == "degC",
+          "map outputs: temperature, %Ro, TR, oil-window entry")
+    G2 = dict(G)
+    G2["C"] = type(G["C"])(G["C"].z + 1, "xy", "m", "C", None, 0, 0, 250.0, 250.0)
+    check(PW.fingerprint(G) != PW.fingerprint(G2) and PW.fingerprint(G) == PW.fingerprint(dict(G)),
+          "map-run fingerprint changes with the depth maps (live update)")
+    try:
+        PW.map_run(G, T, "C", stride=5, cancel=lambda: True)
+        ok = False
+    except RuntimeError as e:
+        ok = "cancel" in str(e)
+    check(ok, "map run cancellable")
+    # event chart
+    T.set("C", role="source")
+    T.set("B", role="reservoir")
+    T.set("A", role="seal")
+    T.set("Seabed", role="overburden")
+    trs = PW.source_tr(res, "C", 0.5, column=1)
+    ch = PW.event_chart(T, res["ages"], trs, trap=(12.0, 5.0))
+    els = [d["element"] for d in ch["events"]]
+    gen = [d for d in ch["events"] if d["element"] == "generation"]
+    check(els[:4] == ["source", "reservoir", "seal", "overburden"] and "trap" in els and gen and
+          gen[0]["start"] > gen[0]["end"] and ch["critical_moment"] is not None,
+          f"event chart: elements from the age table, generation {gen[0]['start']:.1f}-{gen[0]['end']:.1f} Ma, "
+          f"critical moment {ch['critical_moment']:.1f} Ma" if gen and ch["critical_moment"] else "event chart")
+    png = PW.plot_event_chart(ch, os.path.join(tmp, "events.png"))
+    check(os.path.getsize(png) > 5000, "event chart PNG")
+
+
 def run(check, tmp):
     run_chrono(check, tmp)
     run_burial(check, tmp)
     run_thermal(check, tmp)
+    run_maps(check, tmp)
 
 
 def run_gui_chrono(check, tmp):

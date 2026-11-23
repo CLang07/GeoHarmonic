@@ -84,11 +84,11 @@ def column_units(table, depths, seabed=0.0, props=None):
     units = []
     first = ents[0]
     zf = float(depths[first["name"]]) - seabed
-    if first["age"] > 1e-9 and zf > 0:
+    if first["age"] > 1e-9:  # always present (maybe zero thickness) so batches share the same units
         above = [e for e in table.entries if e["age"] < first["age"]]
         lith = above[-1]["lith"] if above else {"shale": 1.0}
         units.append({"name": f"Overburden (above {first['name']})", "top_surface": "Sea floor",
-                      "base_surface": first["name"], "top": 0.0, "base": zf, "age_top": 0.0,
+                      "base_surface": first["name"], "top": 0.0, "base": max(0.0, zf), "age_top": 0.0,
                       "age_base": first["age"], "lith": _norm_lith(lith)})
     for a, b in zip(ents[:-1], ents[1:]):
         zt = max(0.0, float(depths[a["name"]]) - seabed)
@@ -116,6 +116,114 @@ def _time_axis(units, step):
     return a[::-1]  # oldest first
 
 
+def _fraction(u, t):
+    """Fraction of a unit's grain thickness present at age t (deposition linear in time; ghosts eroded linearly)."""
+    a0, a1 = u["age_base"], u["age_top"]  # deposition from a0 (older) to a1
+    if t >= a0:
+        return 0.0
+    if t > a1:
+        return (a0 - t) / max(1e-12, a0 - a1)
+    if u["ghost"]:
+        e = u["erosion_age"]
+        if t <= e:
+            return 0.0
+        return (t - e) / max(1e-12, a1 - e)
+    return 1.0
+
+
+def backstrip(units, tops, bases, step=1.0):
+    """Batched backstripping: units (template, youngest first), tops / bases (B, nu) present depths below the
+    sea floor. Returns {"ages" (nt,), "top", "base", "solid", "top_eff" (B, nt, nu), "solid_full", "offset" (B, nu)}.
+    Below an erosion surface the present porosity is that of maximum burial (offset = eroded - present depth)."""
+    tops = np.asarray(tops, float)
+    bases = np.asarray(bases, float)
+    Bn, nu = tops.shape
+    phi0 = np.array([u["props"]["phi0"] for u in units])
+    c = np.array([u["props"]["c"] for u in units])
+    off = np.zeros((Bn, nu))
+    for i, u in enumerate(units):
+        if u["ghost"]:
+            over = np.maximum(0.0, u["eroded"] - tops[:, i])  # net uplift: eroded column not re-buried
+            off[:, i + 1:] = np.maximum(off[:, i + 1:], over[:, None])
+    sf = solid_thickness(tops + off, bases + off, phi0[None, :], c[None, :])
+    for i, u in enumerate(units):
+        if u["ghost"]:
+            sf[:, i] = float(solid_thickness(0.0, u["eroded"], phi0[i], c[i]))
+    sf = np.maximum(sf, 0.0)
+    ages = _time_axis(units, step)
+    nt = len(ages)
+    top = np.full((Bn, nt, nu), np.nan)
+    base = np.full((Bn, nt, nu), np.nan)
+    solid = np.zeros((Bn, nt, nu))
+    teff = np.full((Bn, nt, nu), np.nan)
+    zmax = np.zeros((Bn, nu))
+    for it, t in enumerate(ages):
+        z = np.zeros(Bn)
+        for i, u in enumerate(units):  # youngest unit is on top
+            f = _fraction(u, t)
+            if f <= 0:
+                if t <= u["age_base"] + 1e-12 and not u["ghost"]:
+                    top[:, it, i] = base[:, it, i] = z  # deposition starting
+                continue
+            s_ = sf[:, i] * f
+            zmax[:, i] = np.maximum(zmax[:, i], z)
+            ze = np.maximum(z, zmax[:, i])
+            h = base_for(ze, s_, phi0[i], c[i]) - ze
+            top[:, it, i], base[:, it, i] = z, z + h
+            teff[:, it, i] = ze
+            solid[:, it, i] = s_
+            z = z + h
+    return {"ages": ages, "top": top, "base": base, "solid": solid, "top_eff": teff, "solid_full": sf,
+            "offset": off}
+
+
+def _water_series(ages, wd):
+    if callable(wd):
+        return np.array([float(wd(t)) for t in ages])
+    if np.ndim(wd) == 0:
+        return np.full(len(ages), float(wd))
+    arr = np.asarray(wd, float)  # [(age, depth)]
+    o = np.argsort(arr[:, 0])
+    return np.interp(ages, arr[o, 0], arr[o, 1])
+
+
+class BurialBatch:
+    """Burial histories of many columns with the same units (pseudo-wells on a map / section).
+    depths: (B, n entries) TVDSS of the template's dated surfaces; seabed (B,) or scalar; water: paleo water
+    depth spec (scalar / [(age, wd)]) - default: the present sea-floor depth of each column."""
+
+    def __init__(self, table, entry_names, depths, seabed, step=1.0, water_depth=None, props=None):
+        depths = np.asarray(depths, float)
+        Bn = depths.shape[0]
+        seabed = np.broadcast_to(np.asarray(seabed, float), (Bn,))
+        d0 = {n: float(np.nanmedian(depths[:, k])) for k, n in enumerate(entry_names)}
+        self.units = column_units(table, d0, float(np.nanmedian(seabed)), props)
+        idx = {n: k for k, n in enumerate(entry_names)}
+        tops = np.zeros((Bn, len(self.units)))
+        bases = np.zeros((Bn, len(self.units)))
+        for i, u in enumerate(self.units):
+            zt = depths[:, idx[u["top_surface"]]] - seabed if u["top_surface"] in idx else np.zeros(Bn)
+            zb = depths[:, idx[u["base_surface"]]] - seabed if u["base_surface"] in idx else zt
+            zt = np.maximum(0.0, np.nan_to_num(zt))
+            tops[:, i] = zt
+            bases[:, i] = np.maximum(zt, np.nan_to_num(zb, nan=0.0))
+        # surfaces must not cross: enforce monotonic depths down the column
+        bases = np.maximum.accumulate(bases, axis=1)
+        tops = np.concatenate([np.zeros((Bn, 1)), bases[:, :-1]], axis=1)
+        r = backstrip(self.units, tops, bases, step)
+        self.ages = r["ages"]
+        self.top, self.base, self.solid, self.top_eff = r["top"], r["base"], r["solid"], r["top_eff"]
+        self.phi0 = np.array([u["props"]["phi0"] for u in self.units])
+        self.c = np.array([u["props"]["c"] for u in self.units])
+        if water_depth is None:
+            self.water = np.repeat(seabed[:, None], len(self.ages), axis=1)
+        else:
+            self.water = np.broadcast_to(_water_series(self.ages, water_depth), (Bn, len(self.ages))).copy()
+
+    def __len__(self):
+        return self.top.shape[0]
+
+
 class BurialHistory:
     """Backstripped burial history of one column. ages (nt,) Ma oldest -> 0; top / base (nt, nu) depth below
     the sediment surface (NaN = not yet deposited / eroded); solid (nt, nu) grain thickness; water (nt,)."""
@@ -126,73 +234,21 @@ class BurialHistory:
         p = [u["props"] for u in units]
         self.phi0 = np.array([q["phi0"] for q in p])
         self.c = np.array([q["c"] for q in p])
-        # present grain thickness; below an erosion surface the porosity is that of maximum burial
-        off = np.zeros(nu)
-        for i, u in enumerate(units):
-            if u["ghost"]:
-                over = max(0.0, u["eroded"] - u["top"])  # net uplift: eroded column not re-buried
-                off[i + 1:] = np.maximum(off[i + 1:], over)
-        self.offset = off
-        s_now = np.array([0.0 if u["ghost"] else
-                          float(solid_thickness(u["top"] + off[i], u["base"] + off[i], self.phi0[i], self.c[i]))
-                          for i, u in enumerate(units)])
-        for i, u in enumerate(units):
-            if u["ghost"]:
-                s_now[i] = float(solid_thickness(0.0, u["eroded"], self.phi0[i], self.c[i]))
-        self.solid_full = s_now
-        self.ages = _time_axis(units, step)
+        tops = np.array([[u["top"] for u in units]], float)
+        bases = np.array([[u["base"] for u in units]], float)
+        r = backstrip(units, tops, bases, step)
+        self.offset = r["offset"][0]
+        self.solid_full = r["solid_full"][0]
+        self.ages = r["ages"]
         nt = len(self.ages)
-        self.top = np.full((nt, nu), np.nan)
-        self.base = np.full((nt, nu), np.nan)
-        self.solid = np.zeros((nt, nu))
-        self.top_eff = np.full((nt, nu), np.nan)  # compaction depth of each unit top (>= top: max burial)
-        zmax = np.zeros(nu)
-        for it, t in enumerate(self.ages):
-            z = 0.0
-            for i in range(nu):  # youngest unit is on top
-                s = self._solid_at(i, t)
-                if s <= 0:
-                    if t <= units[i]["age_base"] + 1e-12 and not units[i]["ghost"]:
-                        self.top[it, i] = self.base[it, i] = z  # deposition starting / zero-thickness unit
-                    continue
-                zmax[i] = max(zmax[i], z)
-                ze = max(z, zmax[i])
-                zb = float(base_for(ze, s, self.phi0[i], self.c[i]))
-                h = zb - ze
-                self.top[it, i], self.base[it, i] = z, z + h
-                self.top_eff[it, i] = ze
-                self.solid[it, i] = s
-                z += h
-        wd = water_depth
-        if callable(wd):
-            self.water = np.array([float(wd(t)) for t in self.ages])
-        elif np.ndim(wd) == 0:
-            self.water = np.full(nt, float(wd))
-        else:
-            arr = np.asarray(wd, float)  # [(age, depth)]
-            o = np.argsort(arr[:, 0])
-            self.water = np.interp(self.ages, arr[o, 0], arr[o, 1])
+        self.top, self.base, self.solid, self.top_eff = r["top"][0], r["base"][0], r["solid"][0], r["top_eff"][0]
+        self.water = _water_series(self.ages, water_depth)
         if sea_level is None:
             self.sea = np.zeros(nt)
         else:
             arr = np.asarray(sea_level, float)
             o = np.argsort(arr[:, 0])
             self.sea = np.interp(self.ages, arr[o, 0], arr[o, 1])
-
-    def _solid_at(self, i, t):
-        u = self.units[i]
-        s = self.solid_full[i]
-        a0, a1 = u["age_base"], u["age_top"]  # deposition from a0 (older) to a1
-        if t >= a0:
-            return 0.0
-        if t > a1:
-            return s * (a0 - t) / max(1e-12, a0 - a1)
-        if u["ghost"]:
-            e = u["erosion_age"]
-            if t <= e:
-                return 0.0
-            return s * (t - e) / max(1e-12, a1 - e)
-        return s
 
     # ---- results
     def surfaces(self):

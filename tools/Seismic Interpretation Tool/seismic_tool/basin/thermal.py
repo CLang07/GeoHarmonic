@@ -92,8 +92,9 @@ class _Column:
     """Interval geometry + properties of a batch of burial histories at each age (same units / ages)."""
 
     def __init__(self, hists, n_sub=6, basement=None, n_base=8, props_override=None):
+        batch = np.ndim(getattr(hists, "top", None)) == 3  # burial.BurialBatch
         self.h = hists
-        h0 = hists[0]
+        h0 = hists if batch else hists[0]
         self.ages = h0.ages
         self.nu = len(h0.units)
         self.m = n_sub
@@ -106,10 +107,15 @@ class _Column:
         self.rc_m = np.array([q["rho"] * q["cp"] for q in p])
         self.phi0 = h0.phi0
         self.c = h0.c
-        self.top = np.array([h.top for h in hists])  # (B, nt, nu)
-        self.base = np.array([h.base for h in hists])
-        self.eff = np.array([np.where(np.isfinite(h.top_eff), h.top_eff - h.top, 0.0) for h in hists])
-        self.water = np.array([h.water for h in hists])  # (B, nt)
+        if batch:
+            self.top, self.base = hists.top, hists.base
+            self.eff = np.where(np.isfinite(hists.top_eff), hists.top_eff - hists.top, 0.0)
+            self.water = hists.water
+        else:
+            self.top = np.array([h.top for h in hists])  # (B, nt, nu)
+            self.base = np.array([h.base for h in hists])
+            self.eff = np.array([np.where(np.isfinite(h.top_eff), h.top_eff - h.top, 0.0) for h in hists])
+            self.water = np.array([h.water for h in hists])  # (B, nt)
 
     def at(self, it):
         """(dz, k, rho c, A, z nodes) for age index it; shapes (B, N) / (B, N + 1)."""
@@ -134,6 +140,7 @@ class _Column:
         rc = np.concatenate([np.broadcast_to(rc, dz_u.shape), np.full((B, self.nb), bs["rho"] * bs["cp"])], axis=1)
         A = np.concatenate([np.broadcast_to(A, dz_u.shape), np.full((B, self.nb), bs["A"] * 1e-6)], axis=1)
         z = np.concatenate([np.zeros((B, 1)), np.cumsum(dz, axis=1)], axis=1)
+        self.phi = np.concatenate([phi, np.zeros((B, self.nb))], axis=1)
         return dz, k, rc, A, z
 
 
@@ -175,14 +182,16 @@ def solve(hists, heat_flow=60.0, surface_t=10.0, n_sub=6, basement=None, max_dt=
     col = _Column(hists, n_sub, basement)
     ages = col.ages
     nt = len(ages)
-    B = len(hists)
+    B = col.top.shape[0]
     q = np.asarray(heat_flow, float) if isinstance(heat_flow, np.ndarray) else heat_flow_history(ages, heat_flow)
     q = np.broadcast_to(q, (B, nt)) * 1e-3
     ts = surface_t if isinstance(surface_t, np.ndarray) else _series(ages, surface_t, 10.0)
     ts = np.broadcast_to(np.asarray(ts, float), (B, nt))
     Tz = np.zeros((B, nt, col.N + 1))
     Z = np.zeros((B, nt, col.N + 1))
+    PHI = np.zeros((B, nt, col.N), np.float32)
     dz, k, rc, A, z = col.at(0)
+    PHI[:, 0] = col.phi
     if not radiogenic:
         A = A * 0
     T = _step(np.zeros((B, col.N + 1)), dz, k, rc, A, ts[:, 0], q[:, 0], np.inf)  # steady start
@@ -200,7 +209,8 @@ def solve(hists, heat_flow=60.0, surface_t=10.0, n_sub=6, basement=None, max_dt=
             T = _step(T, dz, k, rc, A, ts[:, it - 1] * (1 - w) + ts[:, it] * w, q[:, it - 1] * (1 - w) + q[:, it] * w,
                       span / nsub * SEC_MY)
         Tz[:, it], Z[:, it] = T, z
-    return {"ages": ages, "z": Z, "T": Tz, "q": q * 1e3, "m": n_sub, "water": col.water, "nu": col.nu}
+        PHI[:, it] = col.phi
+    return {"ages": ages, "z": Z, "T": Tz, "q": q * 1e3, "m": n_sub, "water": col.water, "nu": col.nu, "phi": PHI}
 
 
 class ThermalHistory:
