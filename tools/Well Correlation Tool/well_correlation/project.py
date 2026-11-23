@@ -215,7 +215,7 @@ class Project:
                 h.update(p.encode())
         h.update(json.dumps(self.aliases, sort_keys=True).encode())
         h.update(json.dumps(self.curve_overrides.get(w.name, {}), sort_keys=True).encode())
-        h.update(b"v3")
+        h.update(b"v4")  # v4: survey column parsing, TVD below the last station, LAS fixes (run 2)
         return h.hexdigest()[:16]
 
     def load_well(self, name, force=False):
