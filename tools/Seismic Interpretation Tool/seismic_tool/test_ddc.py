@@ -509,3 +509,94 @@ def run_gui_gridding(check, tmp):
     dlg.use()
     check(sg.display["velocity_model"].get("gridding", {}).get("method") == "kriging", "17b dialog: gridding stored")
     return True
+
+
+def run_prognosis(check, tmp):
+    """17d: prognosis along vertical / horizontal wells; drilled tops move the horizons ahead of the bit."""
+    from .ddc import DynamicDepthModel
+    from .laterals import Trajectory
+    from .prognosis import Prognosis, vertical_trajectory
+    from .velocity import VelocityModel
+    sp, T = ddc_case(tmp, "prog", kz_earth)
+    md = VelocityModel(sp, "3D:V", LAYERS, functions=[{"func": "v0kz"}, {"func": "v0"}]).to_dict()
+    dm = DynamicDepthModel(sp, md).build()
+    x, y = float(T["X"][28, 12]), float(T["Y"][28, 12])
+    zmap = [float(dm.vm.depth_grid(k).sample([x], [y])[0]) for k in range(2)]
+    pv = Prognosis(dm, vertical_trajectory("P-1", x, y, 3000.0, kb=30.0))
+    rows = pv.compute()
+    ok = len(rows) == 2 and all(abs(r["tvdss"] - z) < 0.05 and abs(r["md"] - (z + 30.0)) < 0.05
+                                for r, z in zip(rows, zmap))
+    check(ok and rows[0]["status"] == "planned", f"17d: vertical prognosis = depth maps at the location "
+                                                 f"(H1 {rows[0]['tvdss']:.1f} / {zmap[0]:.1f} m, MD = TVDSS + KB)")
+    # TD above H2 -> projected
+    short = Prognosis(dm, vertical_trajectory("P-2", x, y, zmap[0] + 50.0))
+    r2 = short.compute()
+    check(len(r2) == 2 and r2[1]["status"] == "below TD (projected)" and abs(r2[1]["tvdss"] - zmap[1]) < 0.05,
+          "17d: horizon below TD projected")
+    # horizontal well at constant TVDSS through the dipping H1 (deepens eastward)
+    zc = float(np.nanmedian(dm.vm.depth_grid(0).z[20]))
+    xs = np.linspace(float(T["X"][20, 2]), float(T["X"][20, 38]), 200)
+    ys = np.full(200, float(T["Y"][20, 0]))
+    mdh = 2000.0 + np.r_[0.0, np.cumsum(np.hypot(np.diff(xs), np.diff(ys)))]
+    th = Trajectory("H-1", mdh, xs, ys, np.full(200, zc))
+    ph = Prognosis(dm, th)
+    rh = [r for r in ph.compute() if r["horizon"] == "H1"]
+    zat = float(dm.vm.depth_grid(0).sample([rh[0]["x"]], [rh[0]["y"]])[0]) if rh else np.nan
+    check(len(rh) == 1 and rh[0]["direction"] == "up" and abs(zat - zc) < 0.5,
+          f"17d: lateral leaves H1 where the map depth = well TVDSS ({zat:.1f} vs {zc:.1f} m, exits {rh and rh[0]['direction']})")
+    # drilling: H1 found 15 m deeper than predicted -> H2 ahead of the bit moves too
+    pv.set_bit(zmap[0] + 30.0 + 20.0)
+    check([r["status"] for r in pv.rows] == ["drilled", "ahead"], "17d: drilled / ahead of the bit")
+    rep = pv.add_top("H1", zmap[0] + 15.0 + 30.0)
+    h1, h2 = pv.rows
+    check(abs(h1["tvdss"] - (zmap[0] + 15.0)) < 1.5 and h1["change"] is not None and abs(h1["change"] - 15.0) < 1.5,
+          f"17d: drilled top honoured (H1 {h1['tvdss']:.1f}, change {h1['change']:+.1f} m; {rep['message']})")
+    check(h2["status"] == "ahead" and abs(h2["change"] - 15.0) < 2.0,
+          f"17d: H2 ahead of the bit follows (+{h2['change']:.1f} m)")
+    import json
+    with open(sp.well_project) as fh:
+        check("P-1" not in json.dumps(json.load(fh)["tops"]), "17d: well project untouched while drilling")
+    p = pv.write_csv(os.path.join(tmp, "prog.csv"))
+    lines = open(p).read().splitlines()
+    check(len(lines) == 3 and lines[0].startswith("well,horizon") and "+15" in lines[1], "17d: prognosis CSV")
+    # live update: a real-well top change moves the prognosis
+    pv.clear_tops()
+    _edit_tops(sp.well_project, lambda t: t["W-6"].__setitem__("Top A", t["W-6"]["Top A"] + 8.0))
+    dm.refresh()
+    moved = pv.update()
+    txt = ", ".join("%s %+.2f" % (r["horizon"], r["change"]) for r in moved)
+    check(any(r["horizon"] == "H1" for r in moved), f"17d: prognosis updates after a dynamic rebuild ({txt})")
+    return sp
+
+
+def run_gui_prognosis(check, tmp):
+    """17d window: well list, planned well, bit, drilled top, live update through the main window tick."""
+    from .gui.main_window import MainWindow
+    sp, T = ddc_case(tmp, "proggui", kz_earth)
+    w = MainWindow(sp.path)
+    check(w.prognosis() is None, "17d GUI: prognosis needs a depth model")
+    dlg = w.velocity_model()
+    dlg.build("3D:V", LAYERS, False, functions=[{"func": "v0kz"}, {"func": "v0"}])
+    dlg.use()
+    pd = w.prognosis()
+    check(sorted(pd._trajs) == sorted(WELLS6), f"17d GUI: wells of the well project listed ({len(pd._trajs)})")
+    prog = pd.set_well("W-3")
+    check(len(prog.rows) == 2 and prog.rows[0]["horizon"] == "H1", "17d GUI: prognosis of a project well")
+    x, y = float(T["X"][28, 12]), float(T["Y"][28, 12])
+    prog = pd.set_planned(x, y, 3000.0)
+    z1 = prog.rows[0]["tvdss"]
+    pd.set_bit(z1 + 10.0)
+    pd.add_top("H1", z1 + 12.0)
+    check(abs(prog.rows[0]["tvdss"] - (z1 + 12.0)) < 1.5 and prog.rows[1]["status"] == "ahead" and
+          "Ahead of the bit" in pd._last_text, "17d GUI: drilled top -> prediction ahead of the bit")
+    check(w.section.depth_model().pseudo, "17d GUI: drilled top is a what-if well of the shared depth model")
+    pd.clear_tops()
+    w.set_ddc(True)
+    _edit_tops(w.project.well_project, lambda t: t["W-6"].__setitem__("Top A", t["W-6"]["Top A"] + 8.0))
+    rep = w.ddc_tick()
+    check(rep is not None and "Moved: H1" in pd._last_text, f"17d GUI: auto-update refreshes the prognosis "
+                                                             f"({pd._last_text.splitlines()[-1] if pd._last_text else ''})")
+    p = pd.write_csv(os.path.join(tmp, "p.csv"))
+    check(os.path.exists(p), "17d GUI: export CSV")
+    w.set_ddc(False)
+    return True

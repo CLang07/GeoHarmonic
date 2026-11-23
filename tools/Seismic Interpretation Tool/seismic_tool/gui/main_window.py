@@ -172,6 +172,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().addPermanentWidget(self.b_cancel)
         self._job = None
         self._velocity_dialog = None
+        self._prognosis_dialog = None
         # dynamic depth conversion (View > Auto-update depth model): file watcher + 1 s debounce + 2 s poll
         self.ddc_auto = False
         self._ddc_debounce = QtCore.QTimer(self)
@@ -238,6 +239,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Horizon &maps (structure, isochron, amplitude, depth)...", self.horizon_maps, "Ctrl+M")
         self._act(m, "M&istie analysis (2D-3D, 2D-2D)...", self.mistie_analysis)
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
+        self._act(m, "Well &prognosis / geosteering...", self.prognosis)
         self._act(m, "&Analytics (attribute table, models, SHAP)...", self.analytics)
         self._act(m, "&Dashboard (wells, laterals coloured by attribute)...", self.dashboard)
         m.addSeparator()
@@ -309,6 +311,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     dlg.model_refreshed(rep)
                 elif dlg.ddm.refresh():
                     dlg.model_refreshed(dlg.ddm.last)
+            if self._prognosis_dialog is not None:
+                self._prognosis_dialog.update(rep)
         return rep
 
     def _act(self, menu, text, fn, key=None):
@@ -775,6 +779,23 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg = VelocityDialog(self.project, self.basemap, self, changed)
         dlg.show()
         self._velocity_dialog = dlg
+        return dlg
+
+    def prognosis(self):
+        if not self.project.display.get("velocity_model"):
+            QtWidgets.QMessageBox.information(self, "Well prognosis", "Define a depth model first: Interpret > Velocity "
+                                              "model, Build, 'Use for depth display'.")
+            return None
+        from .prognosis_dialog import PrognosisDialog
+
+        def changed():
+            self.section.redraw()
+            dlg = self._velocity_dialog
+            if dlg is not None and dlg.ddm is self.section.depth_model():
+                dlg.model_refreshed(dlg.ddm.last)
+        dlg = PrognosisDialog(self.project, self.section.depth_model, self, changed)
+        dlg.show()
+        self._prognosis_dialog = dlg
         return dlg
 
     def mistie_analysis(self):

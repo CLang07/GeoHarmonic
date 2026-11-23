@@ -42,6 +42,19 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.25.0 - Dynamic depth conversion, part 4: well prognosis / geosteering (PLAN item 17d)
+- Interpret > **Well prognosis / geosteering**: pick a well of the linked well project (deviation survey used when
+  present) or a planned vertical well (X, Y, TD). The table lists every horizon the wellbore meets: MD, TVDSS, X, Y,
+  status (planned / drilled / ahead of the bit / below TD projected), +/- 1 sigma (filled once the blind test of
+  17e runs) and the change since the last update. Laterals list every crossing (e.g. leaving a horizon upward).
+- While drilling: "Set bit depth", then "Add drilled top" (horizon + MD): the top becomes a what-if pseudo-top at that
+  point of the wellbore, the model rebuilds from that horizon down, and the info line lists the horizons ahead of
+  the bit with their new depths. "Clear drilled tops" undoes it. Nothing is written to the well project.
+- With View > Auto-update depth model on, the prognosis refreshes when tops / horizons change ("Moved: H1 +0.8 m").
+- Export CSV (well, horizon, MD, TVDSS, X, Y, status, sigma, change).
+- Test: NZ project + Maui depth model; prognosis for a Maui deviated well; a planned vertical well; set bit, add a
+  drilled top 10 m deeper than predicted and check the deeper horizons move.
+
 ## Seismic v0.24.0 - Dynamic depth conversion, part 3: gridding choices + seismic velocity guide (PLAN item 17b)
 - Velocity model dialog, "Gridding of well values": Inverse distance (old default), Thin-plate spline (honours planar
   trends between wells), Kriging (simple kriging, spherical or exponential variogram fitted to the wells, or type a

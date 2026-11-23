@@ -171,6 +171,11 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `VelocityModel(gridding={method, variogram, range, smooth})`, functions[k]["guide"] = {volume, kind rms|interval,
   mode ratio|difference}; trends cached in grids["trends"] keyed by `trend_keys` (horizon arrays); `trend_grid(k)`.
   Dialog: set_gridding, set_layer_guide, column 5 guide combo. Tests: `run_gridding`, `run_gui_gridding`.
+  v0.25 (17d): `prognosis.py` `Prognosis(dm, trajectory, uncertainty)` (trajectory resampled 2 m; `_crossings(k)` =
+  sign changes of TVDSS - map depth, projection below TD along the last segment), compute / update (change vs
+  previous) / set_bit / add_top (what-if "drilling <well>: <key>" at the wellbore point) / clear_tops / write_csv;
+  `vertical_trajectory`. `gui/prognosis_dialog.PrognosisDialog(project, depth_model_fn, parent, on_change)`;
+  MainWindow.prognosis, ddc_tick updates it. Tests: `run_prognosis`, `run_gui_prognosis`.
 - `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
   (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
   Correlation zones)), `engineering` (13a+: ALIASES/PRESETS column mapping + prefix fallback, unit detection
