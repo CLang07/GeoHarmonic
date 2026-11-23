@@ -134,6 +134,10 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `to_dict`/`from_dict` (stored in project.display["velocity_model"]). Panel domain "Depth" (`depth_on`,
   `_to_depth`, generic `_ymap` used for horizon conversion in Wheeler and Depth). `gui/velocity_dialog.py`,
   `test_velocity.py`.
+- `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
+  (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
+  Correlation zones)), `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
+  Pearson/Spearman, vif, pca, regression_line). `test_analytics.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

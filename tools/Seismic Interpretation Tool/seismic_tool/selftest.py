@@ -135,6 +135,9 @@ def run():
         # ---- velocity model + depth conversion
         from . import test_velocity
         test_velocity.run(check, tmp)
+        # ---- analytics
+        from . import test_analytics
+        test_analytics.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")

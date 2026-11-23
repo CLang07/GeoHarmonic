@@ -97,7 +97,7 @@ Kingdom-like interaction; large data.
 12. **Velocity model + depth conversion** - status: done (run 1, 2026-11-23; v0.13.0)
    - Interval/average velocity from well time-depth pairs + horizons (layer-cake), gridded; convert
      horizons and sections to depth; well misfit table.
-13. **Analytics (Transform-style + modern data-science workflow)** - status: todo
+13. **Analytics (Transform-style + modern data-science workflow)** - status: partial (13a done run 1: analytics/table.py + prep.py; next 13a+ engineering, 13b models, 13c explainability + GUI, 13d QC)
    Split into 13a-13c; do them in order, checkpoint after each.
    13a. Data + attribute table: `seismic_tool/analytics/` (shared, importable by the Well Correlation Tool
      too). Table built from horizon/zone extractions (item 11 attributes, isochrons, structure, curvature)
