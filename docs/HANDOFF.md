@@ -274,3 +274,15 @@ key results with matplotlib to PNG and look at them.
 - The Maui-5 / Maui-6 "checkshot" LAS files are mislabelled exports (TIME index with GR/CALI columns) - no
   usable time-depth; Tui-1 (4 CSAT DLIS) and Pateke-2 (SEIS_CSI_037PNP) are the real checkshots.
 - Chris wants Kingdom/GeoGraphix-style behaviour and speed with big datasets; avoid per-trace Python loops.
+- Real-Qt traps the Qt mock hides (run 2 review): `clicked` / `triggered` pass `checked` into slots with default
+  arguments (always connect `lambda *_: fn()`); `QComboBox.itemData` returns a stored tuple as a list (compare with
+  `tuple(...)`); the app uses `imageAxisOrder="row-major"` (rows = y, transpose (n_x, n_t) arrays); scatter symbols
+  swallow clicks (`_click_through`); `hasattr`/`getattr` on a mocked QWidget subclass always succeeds - initialise
+  attributes in `__init__` instead of probing.
+- Never rewrite a store / .npy that may be memory-mapped (Windows refuses, Linux corrupts the live view): new
+  imports and attribute volumes go to a fresh folder (`volume.unused_store`); edits use r+ memmaps of their own.
+- Units / ids from CSV headers: match whole tokens ("..._LBS" contains "_t"); FracFocus water is gallons; API numbers
+  lose leading zeros / gain ".0" in Excel; state production data omit zero months.
+- Two Claude sessions may push to `dev` the same day (scheduled run + Chris's interactive session): always
+  `git pull --rebase` before pushing and merge both sides' version bumps / WHATS_NEW entries.
+

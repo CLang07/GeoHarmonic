@@ -109,6 +109,52 @@ What Chris should test first:
 Next: item 15 leftovers after the PC benchmark; then "Later (Chris back)" items (Maui subset cut, mistie with
 the 2D lines, Tui-1/Amokura-1 wells).
 
-## 2026-11-23 run 2 (scheduled) - started 12:19 UTC, branch dev - IN PROGRESS
-- Working on item 15 leftovers that do not need Chris's PC (well index in basemap/dashboard, overview
-  volume, parallel import option), then hardening.
+## 2026-11-23 run 2 (scheduled) - 12:19-13:40 UTC, branch dev, Seismic v0.17.1 -> v0.21.1 (+ Well Correlation, Mistie fixes)
+- Item 15 DONE (v0.18.0): basemap draws all wells as one scatter item and names only the wells in view (SQLite
+  well index above 2,000 wells; all names for projects <= 500 wells); 3D import converts chunks with up to 4 threads
+  (bit-identical to serial, float32 IBM conversion); section images auto-downsample when zoomed out, colour clip from
+  a 1M-value sample; dashboard map pick vectorised. (Chris's interactive session meanwhile added v0.21.0 fast
+  crosslines + contiguous slab writes; merged.)
+- Item 16 DONE - well tie upgrade (v0.19.0-0.20.0, new tie.py + dialog rows 2/3): HRS-style Correlate (correlation vs
+  lag + envelope, polarity, phase scan, cycle-skip warning), best trace within N, FFT auto tie anchored at the window
+  top with NRMS + held-out score, event pairs (<= 10, undo) and constrained DTW stretch/squeeze (max lag, max 10 %
+  interval-velocity change), warp saved with the tie, drift QC, checkshot-calibrated sonic (td_mode), tied TD CSV
+  export, deterministic + multitaper wavelets with phase / PEP and a JSON wavelet library, despike / washout / Backus,
+  Aki-Richards / Shuey angle gathers, seismic along deviated wellbores, "Tie all wells" batch (table, average
+  wavelet, bulk-shift map on the basemap).
+- Hardening (all plan items done): four independent code reviews of every module -> ~60 fixes with regression tests,
+  v0.20.1-0.21.1. Highlights: autotracker lost fractional pick times in mode None; horizon folders could overwrite
+  each other / undo-delete lost files; descending-CDP 2D lines lost navigation; survey CSVs with MD,INC,AZI,TVD...
+  were read with shifted columns (wrong TVD); engineering units ("..._LBS" read as tonnes, FracFocus gallons as bbl,
+  m3/e3m3 production unconverted), gap months, EUR start; RGT edits erased earlier edits, 2D ties with different t0
+  were off, 2D edits now keep tie traces + update the stack; horizon misties mixed corrected / raw time; Mistie Tool
+  measure returned -max-lag for short windows, and closing after a failed save lost work; real-Qt traps (Qt
+  'checked' arg into slots, itemData list vs tuple, transposed well-strip image, Enter shortcut, click-through).
+  Full list in docs/WHATS_NEW.md.
+- Files: seismic_tool/tie.py, test_tie.py (new); welltie.py, gui/welltie_dialog.py, wellindex.py, gui/basemap.py,
+  volume.py, segy.py, horizons.py, maps.py, velocity.py, mistie.py, attributes.py, rgt/{dip,solve,stack,edit}.py,
+  laterals.py, dashboard_model.py, analytics/{engineering,table,models,qc,validation}.py, gui/* (most dialogs),
+  test_hardening.py, test_edit.py, test_explain.py; Well Correlation geo.py, las.py, dlis.py, project.py (cache key
+  bumped -> logs re-cached once); Mistie Tool app.py, gui.py, measure.py, session.py, __main__.py, selftest.py;
+  launcher .bat files; docs.
+- Tests at the end: seismic_tool --selftest PASS, --guitest (Qt mock) PASS, well_correlation --selftest PASS,
+  mistie_tool --selftest PASS. Real-data check: Tui-1 sonic drifts to -21 ms vs its checkshot; calibrated sonic
+  removes it at all 30 levels; Kiwi-1 survey still reads 106 stations.
+- Known limitations: still no real Qt window opened by me (Chris's guitest with PySide6 is the first check); no 3D
+  seismic in the repo to try the well tie on real data (Maui 3D subset pending); horizon constraints of earlier RGT
+  edits are not re-applied by later edits (point edits are); 2D RGT editor uses default solve parameters; batch tie
+  of sonic-only wells may need DTW (linear stretch cannot follow sonic drift); "Tie all wells" and 2D stack build
+  run on the GUI thread; analytics median imputation happens before CV (small leak); duplicate il/xl traces in a
+  SEG-Y: which copy wins is thread-timing dependent.
+- What Chris should test first:
+  1. Pull dev; run each tool's self-test and `python -m seismic_tool --guitest` with real PySide6 (first real-Qt
+     run of the new well-tie rows, basemap labels, review fixes).
+  2. Well Correlation NZ project: Kiwi-1 trajectory / TVD unchanged, other wells unchanged (logs re-cache once).
+  3. Seismic tool menus: Interpret > attribute volume / build horizon stack / stack level -> horizon now ask for
+     their settings (they used to get Qt's "checked" flag); double-click in the data tree opens the section.
+  4. Interpret > Well tie on Maui 3D + NZ wells: Auto tie, Correlate (phase / cycle-skip text), Auto
+     stretch/squeeze, Pick event pair, Undo, Estimate wavelet, Angle gather, Tie all wells (basemap shift map).
+  5. Mistie Tool on NPRA: open, measure with a short window; Save then close.
+  6. Basemap with your biggest well project: names appear when zoomed in, panning stays smooth.
+- Next: no todo items left in PLAN; "Later (Chris back)" items (Maui subset cut, mistie with the 2D lines,
+  Tui-1/Amokura-1 wells) and the PC-benchmark-driven import work Chris's session started (v0.21.0).
