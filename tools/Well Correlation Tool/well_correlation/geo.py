@@ -58,23 +58,41 @@ def min_curvature(md, inc, azi):
 def read_survey(path):
     """Read MD / INC / AZI from a CSV/TXT survey.
 
-    Accepts a simple 3-column CSV (MD,INC,AZI with or without header) or a Schlumberger
-    style listing where each row is: seq MD INC AZI ...  Returns arrays or None.
+    Column choice: a header line naming MD (MD / Measured / Depth), INC (Inc / Incl / Inclination) and AZI
+    (Azi / Azim / Azimuth) decides; without one, a Schlumberger-style listing (seq MD INC AZI ...) is
+    recognised by its first column counting up by 1, otherwise the first three columns are MD, INC, AZI.
+    Returns arrays or None.
     """
-    rows = []
+    MDN, INCN, AZN = ("MD", "MEASURED", "DEPTH", "DEPT", "MDEPTH"), ("INC", "INCL", "INCLINATION", "DEVI"), \
+        ("AZI", "AZIM", "AZIMUTH", "AZ", "HAZI")
+    cols = None
+    numrows = []
     with open(path, errors="replace") as f:
         for line in f:
-            toks = re.split(r"[,\s;\t]+", line.strip())
+            toks = [t for t in re.split(r"[,\s;\t]+", line.strip()) if t]
             nums = []
             for t in toks:
                 try:
                     nums.append(float(t))
                 except ValueError:
                     break
-            if len(nums) >= 4 and float(nums[0]).is_integer() and nums[1] >= 0 and 0 <= nums[2] <= 180:
-                rows.append(nums[1:4])  # seq md inc azi
-            elif len(nums) == 3 and 0 <= nums[1] <= 180:
-                rows.append(nums)
+            if len(nums) >= 3:
+                numrows.append(nums)
+                continue
+            if cols is None and not nums:
+                up = [re.sub(r"[^A-Z]", "", t.upper()) for t in toks]
+                idx = [next((i for i, t in enumerate(up) if t in names), None) for names in (MDN, INCN, AZN)]
+                if all(i is not None for i in idx) and len(set(idx)) == 3:
+                    cols = idx
+    rows = []
+    if cols is not None:
+        rows = [[r[cols[0]], r[cols[1]], r[cols[2]]] for r in numrows if len(r) > max(cols)]
+    if not rows and numrows:
+        seq = len(numrows) > 1 and all(len(r) >= 4 for r in numrows) and \
+            all(float(r[0]).is_integer() for r in numrows) and \
+            np.all(np.diff([r[0] for r in numrows]) == 1)
+        rows = [r[1:4] if seq else r[:3] for r in numrows]
+    rows = [r for r in rows if r[0] >= 0 and 0 <= r[1] <= 180 and -360 <= r[2] <= 360]
     if len(rows) < 2:
         return None
     a = np.array(rows)

@@ -154,16 +154,16 @@ def block_attribute(name, block, dt_ms, params=None, dip_i=None, dip_j=None):
     return semblance(block, dt_ms, p["window_ms"], dip_i if steer else None, dip_j if steer else None)
 
 
-def _dips(vol, i_sl, j_sl):
-    """Dip (samples/trace) for a sub-block from the stored dip field, or None."""
+def _dips(vol, i_sl, j_sl, t_sl=slice(None)):
+    """Dip (samples/trace) for a sub-block (optionally a time slab) from the stored dip field, or None."""
     from .rgt.dip import DipField
     folder = os.path.join(vol.store, "rgt")
     if not DipField.exists(folder):
         return None, None
     df = DipField(folder)
     dt_ms = vol.dt * 1000.0
-    return (np.asarray(df.arr["dip_il"][i_sl, j_sl], np.float32) / dt_ms,
-            np.asarray(df.arr["dip_xl"][i_sl, j_sl], np.float32) / dt_ms)
+    return (np.asarray(df.arr["dip_il"][i_sl, j_sl, t_sl], np.float32) / dt_ms,
+            np.asarray(df.arr["dip_xl"][i_sl, j_sl, t_sl], np.float32) / dt_ms)
 
 
 def section_attribute(vol, name, mode, number, params=None):
@@ -209,9 +209,7 @@ def section_attribute(vol, name, mode, number, params=None):
     a, b = max(0, k - h), min(vol.ns, k + h + 1)
     slab = np.transpose(np.asarray(vol.tdata[a:b], np.float32) * vol.inv, (1, 2, 0))  # (nil, nxl, nk)
     if lateral:
-        di, dj = _dips(vol, slice(None), slice(None))
-        if di is not None:
-            di, dj = di[:, :, a:b], dj[:, :, a:b]
+        di, dj = _dips(vol, slice(None), slice(None), slice(a, b))  # only the slab, not two whole volumes
         pad = np.pad(slab, ((1, 1), (1, 1), (0, 0)), mode="edge")
         pdi = np.pad(di, ((1, 1), (1, 1), (0, 0)), mode="edge") if di is not None else None
         pdj = np.pad(dj, ((1, 1), (1, 1), (0, 0)), mode="edge") if dj is not None else None
@@ -245,7 +243,9 @@ def compute_volume(project, vol_name, name, params=None, block=16, progress=None
     lateral = ATTRIBUTES[name][0]
     dt_ms = vol.dt * 1000.0
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
-    store = os.path.join(os.path.dirname(vol.store), f"{os.path.basename(vol.store)}__{safe}")
+    from .volume import unused_store
+    # a new folder when the attribute exists already: the old store may be open (memory-mapped) for display
+    store = unused_store(os.path.join(os.path.dirname(vol.store), f"{os.path.basename(vol.store)}__{safe}"))
     os.makedirs(store, exist_ok=True)
     tmp = os.path.join(store, "data_ilxl.npy")
     out = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float16,
@@ -256,6 +256,8 @@ def compute_volume(project, vol_name, name, params=None, block=16, progress=None
                                     shape=(vol.nil, vol.nxl, vol.ns))
     for a in range(0, vol.nil, block):
         if cancel and cancel():
+            del out, raw  # release the memmaps (Windows) and remove the unfinished, unregistered store
+            shutil.rmtree(store, ignore_errors=True)
             raise RuntimeError("cancelled")
         b = min(vol.nil, a + block)
         if lateral:

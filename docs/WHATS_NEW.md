@@ -42,6 +42,38 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.20.2 / Well Correlation - second review round (run 2)
+Well Correlation Tool:
+- **Survey files**: a CSV like `MD,INC,AZI,TVD,NS,EW` was read as "seq, MD, INC, AZI" (columns shifted -> wrong TVD
+  and trajectories). Columns are now taken from the header names; a sequence column is only assumed when it counts
+  1, 2, 3... Kiwi-1's Schlumberger listing still reads the same (106 stations).
+- TVD below the last survey station continues at the last inclination (was held constant).
+- LAS: comma-delimited data (DLM COMMA) loads; a depth curve with a blank unit uses STRT's unit (feet converted).
+- DLIS checkshots: all depth channels converted to metres (only TDEP was).
+Analytics / engineering:
+- Unit detection by whole words: "Proppant_Total_LBS" was read as tonnes (x2204), FracFocus "TotalBaseWaterVolume"
+  is gallons (was taken as bbl, 42x too much), "tons" = US short tons.
+- Production volumes in m3 / e3m3 are converted to bbl / mcf (BOE was wrong for Canadian data); months missing
+  between first and last production count as zero (cums were over too many calendar months); EUR forecast starts
+  after the peak month (was 3 % low with a late peak). Dates like 2020-01-15T00:00:00 and 2020/01/15 read.
+- API numbers that Excel mangled (lost leading zero, trailing ".0") still join.
+- k-means no longer crashes with more clusters than distinct rows; conformal intervals need >= 3 wells (clear
+  message); spatial CV block size from the data extent, clear message when there are no coordinates; optional
+  xgboost / sklearn models can be cloned in CV; lateral stats use the lateral midpoint as the well location.
+Seismic:
+- RGT editing: a new edit no longer erases earlier point edits in its window (they are re-applied).
+- 2D RGT ties between lines with different start times were off by the t0 difference - fixed.
+- Horizon-based misties use raw (uncorrected) pick times, like the waveform ties (re-solving no longer undoes a
+  correction). Mistie measure: max lag limited to the window.
+- Batch well tie skips wells outside the survey (were tied to an edge trace).
+- Stratal slices: surfaces outside the record give NaN (crash / edge values before). NaN samples in 2D lines are
+  replaced on read. Dips are limited to +/-10 samples/trace (flat-amplitude zones gave absurd values); dip block
+  halo enlarged (no seams). Time-slice coherence reads only the needed dip slab (was two whole volumes).
+- Attribute volumes re-computed under the same name go to a new store folder (the old one may be open); a
+  cancelled attribute job removes its unfinished store.
+- Time-depth extrapolation uses the slowness of the last / first 50 m (one washout sample set it before);
+  checkshot levels that go back in time are dropped properly; Ricker wavelet centred for any sample rate.
+
 ## Seismic v0.20.1 - fixes from a full code review (run 2)
 Core:
 - Autotracker kept only the whole-sample part of each pick in mode "None" (dipping horizons came out flat); fixed.

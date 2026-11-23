@@ -50,6 +50,7 @@ def run(check, tmp):
     welllayer_checks(check)
     parallel_import_checks(check, d)
     review_checks(check, d)
+    review2_checks(check, d)
     return v
 
 
@@ -330,3 +331,64 @@ def review_checks(check, tmp):
     from .volume import unused_store
     check(unused_store(os.path.join(tmp, "short")) == os.path.join(tmp, "short") + "_2"
           and unused_store(os.path.join(tmp, "new")) == os.path.join(tmp, "new"), "re-import never overwrites a store")
+
+
+def review2_checks(check, tmp):
+    """Regressions for the second run-2 review (analytics, well readers, RGT / mistie / tie helpers)."""
+    from .welltie import wc, ricker, WellTD
+    wc()
+    from well_correlation.geo import read_survey
+    p = os.path.join(tmp, "surv.csv")
+    with open(p, "w") as fh:
+        fh.write("MD,INC,AZI,TVD,NS,EW\n1500,30,90,1477,1,2\n1600,32,92,1560,3,4\n1700,33,95,1650,5,6\n")
+    md, inc, azi = read_survey(p)
+    check(list(md[1:]) == [1500, 1600, 1700] and list(inc[1:]) == [30, 32, 33] and list(azi[1:]) == [90, 92, 95],
+          "survey CSV with MD,INC,AZI,TVD,... header read by column name (was read as seq,MD,INC,AZI)")
+    from .analytics import engineering as E
+    ok = (E.detect_units("Proppant_Total_LBS", None) == "lb" and E.detect_units("TotalBaseWaterVolume", None) == "gal"
+          and E.detect_units("Proppant (tons)", None) == "ton" and E.detect_units("Oil (m3)", None) == "m3")
+    check(ok, "unit detection by whole tokens (LBS is lb, FracFocus water is gallons, US tons)")
+    check(abs(E._date("2020-01-15T00:00:00") - E._date("01/15/2020")) < 1e-9 and E._date("2020/01/15") == E._date("2020-01-15"),
+          "dates: ISO with time, YYYY/MM/DD")
+    rows = [{"API": "1", "Month": "2020-01", "Oil (m3)": "10"}, {"API": "1", "Month": "2020-04", "Oil (m3)": "5"}]
+    s = E.monthly_series(rows, {"api": "API", "month": "Month", "oil": "Oil (m3)"})["1"]
+    check(len(s["month"]) == 4 and abs(s["oil"][0] - 62.8981) < 1e-3 and s["oil"][1] == 0,
+          "production: m3 -> bbl, missing months filled with 0")
+    q = E.arps_rate(1000.0, 0.1, 1.0, np.arange(0, 400))
+    ser = np.r_[200.0, 500.0, 800.0, q[:9]]  # ramp-up, peak at month 3 (index 3)
+    ft = E.arps_fit(ser[3:])
+    true = ser.sum() + q[9:360 - 3].sum()
+    check(abs(E.eur(ser, ft, peak=3) - true) / true < 0.01, "EUR forecast starts after the peak month")
+    from .analytics.table import normalise_id
+    check(normalise_id("512345678") == normalise_id("05-123-45678") and normalise_id("4225501234.0") == "4225501234",
+          "API ids mangled by Excel (lost leading zero, trailing .0) still join")
+    from .analytics.models import KMeans
+    X = np.array([[1.0, 1.0], [1.0, 1.0], [2.0, 2.0]])
+    try:
+        KMeans(3).fit(X)
+        ok = True
+    except Exception:
+        ok = False
+    check(ok, "k-means with more clusters than distinct rows does not crash")
+    w3 = ricker(30.0, 3.0)
+    check(len(w3) % 2 == 1 and np.argmax(w3) == len(w3) // 2, "Ricker wavelet centred for any dt (3 ms)")
+    z = np.arange(1000.0, 2000.0, 1.0)
+    t = 1000.0 + 2000.0 * (z - 1000.0) / 2500.0
+    t[-1] = t[-2] + 2000.0 * 1.0 / 1500.0 * 3  # one washout-like interval at the end
+    td = WellTD("x", z, t, "sonic")
+    t_below = float(td.twt_raw(2499.0)) - t[-1]
+    check(abs(t_below - 2000.0 * 500.0 / 2500.0) < 50.0, f"time-depth extrapolation not driven by one end sample "
+                                                         f"({t_below:.0f} ms for 500 m at 2500 m/s = 400)")
+    from .mistie import measure
+    rng = np.random.default_rng(3)
+    a = np.convolve(rng.standard_normal((1, 300))[0], ricker(40.0, 1.0, 40.0), "same")
+    b = np.interp(np.arange(300) + 6.0, np.arange(300), a)
+    r = measure(np.tile(a, (3, 1)), np.tile(b, (3, 1)), 1.0, (100, 160), 80.0)
+    check(abs(abs(r["shift_ms"]) - 6.0) < 1.0, f"mistie measure with max lag > window ({r['shift_ms']:+.2f} ms, |6|)")
+    from .selftest import write_segy
+    from .volume import Line2D
+    tr = rng.standard_normal((20, 40)).astype(np.float32)
+    tr[3, 5] = np.nan
+    pth = os.path.join(tmp, "nan2d.sgy")
+    write_segy(pth, tr, {21: np.arange(1, 21)})
+    check(np.isfinite(Line2D("N", pth).data()).all(), "2D line NaN samples replaced (dips / RGT would crash)")

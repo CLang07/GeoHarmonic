@@ -128,9 +128,11 @@ def learning_curve(model, X, y, split_fn, fractions=(0.2, 0.4, 0.6, 0.8, 1.0), m
     for f in fractions:
         s = []
         for tr, te in split_fn():
-            k = max(3, int(round(f * len(tr))))
+            k = min(len(tr), max(3, int(round(f * len(tr)))))
+            if k < 2 or not len(te):
+                continue
             sub = rng.choice(tr, k, replace=False)
             m = model.clone().fit(X[sub], y[sub])
             s.append(metric(y[te], m.predict(X[te])))
-        out.append((f, float(np.mean(s))))
+        out.append((f, float(np.mean(s)) if s else float("nan")))
     return out

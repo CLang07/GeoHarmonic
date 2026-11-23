@@ -66,7 +66,7 @@ def measure(A, B, dt_ms, window_ms=None, max_lag_ms=40.0, t0_ms=0.0):
     if not len(a):
         return {"shift_ms": 0.0, "phase_deg": 0.0, "gain": 1.0, "corr": 0.0, "n": 0}
     m = a.shape[1]
-    L = max(1, int(max_lag_ms / dt_ms))
+    L = max(1, min(int(max_lag_ms / dt_ms), m - 1))  # lags beyond the window would overlap in xc
     nf = int(2 ** np.ceil(np.log2(2 * m)))
     an = a / np.linalg.norm(a, axis=1, keepdims=True)
     bn = b / np.linalg.norm(b, axis=1, keepdims=True)
@@ -296,6 +296,30 @@ def loop_closures(ties, sol=None):
 
 
 # ====================================================================== applying corrections
+def correction_shift(entry, line, t=None):
+    """Time shift (ms; scalar or per trace / per pick) of a stored mistie correction entry."""
+    if not entry:
+        return 0.0
+    base = flex_shift_per_trace(line, entry["flex"]) if entry.get("flex") else entry.get("shift_ms", 0.0)
+    if entry.get("tv") and t is not None:  # time-variant: the shift at each pick's time
+        base = base + np.interp(t, entry["tv"]["t"], entry["tv"]["shift"])
+    return base
+
+
+def raw_pick_times(project, name, t):
+    """2D picks are made on corrected seismic: convert them back to the line's raw (uncorrected) time, the frame
+    in which ties and stored corrections are measured."""
+    entry = (project.display.get("mistie", {}) or {}).get(name)
+    t = np.asarray(t, float)
+    if not entry:
+        return t
+    line = project.line(name)
+    tr = t - np.asarray(correction_shift(entry, line, t), float)
+    if entry.get("tv"):
+        tr = t - np.asarray(correction_shift(entry, line, tr), float)
+    return tr
+
+
 def apply_solution(project, sol):
     """Store per-line corrections in the project; shift existing 2D horizon picks by the change in shift so
     interpretation stays on the same reflectors; reload lines (data() then returns corrected traces)."""
@@ -310,13 +334,7 @@ def apply_solution(project, sol):
         if c.get("tv"):
             new[name]["tv"] = c["tv"]
 
-    def shifts(entry, line, t=None):
-        if not entry:
-            return 0.0
-        base = flex_shift_per_trace(line, entry["flex"]) if entry.get("flex") else entry.get("shift_ms", 0.0)
-        if entry.get("tv") and t is not None:  # time-variant: the shift at each pick's time
-            base = base + np.interp(t, entry["tv"]["t"], entry["tv"]["shift"])
-        return base
+    shifts = correction_shift
 
     for name in set(old) | set(new):
         try:
@@ -439,7 +457,7 @@ def horizon_ties(project, h, volumes=None):
             ln = project.line(L)
             if not ln.has_coords:
                 continue
-            t2 = h.get(f"2D:{L}")
+            t2 = raw_pick_times(project, L, h.get(f"2D:{L}"))  # absolute ties, like the waveform ones
             t3 = grid.sample(ln.x, ln.y)
             ok = np.isfinite(t2) & np.isfinite(t3)
             if ok.sum() < 3:
@@ -454,7 +472,8 @@ def horizon_ties(project, h, volumes=None):
                          "xy": (float(ln.x[mid]), float(ln.y[mid]))})
     geo = {L: (project.line(L).x, project.line(L).y) for L in lines if project.line(L).has_coords}
     for a, ia, b, ib in line_intersections(geo):
-        ta, tb = h.get(f"2D:{a}")[ia], h.get(f"2D:{b}")[ib]
+        ta = float(raw_pick_times(project, a, h.get(f"2D:{a}"))[ia])
+        tb = float(raw_pick_times(project, b, h.get(f"2D:{b}"))[ib])
         if np.isfinite(ta) and np.isfinite(tb):
             la = project.line(a)
             ties.append({"a": a, "b": b, "kind": "horizon 2D-2D", "shift_ms": float(ta - tb), "phase_deg": 0.0,

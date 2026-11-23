@@ -700,14 +700,12 @@ def checkshot_from_dlis(path, source_depth_m=0.0):
             if not ({"CTT1", "BTI1"} & names) or not ({"DEP1", "TDEP", "SDEP"} & names):
                 continue
             d = lf.frame_data(fr.name)
-            if "DEP1" in d:
-                md = clean(d["DEP1"])
-            elif "SDEP" in d:
-                md = clean(d["SDEP"])
-            else:
-                md, _ = depth_to_m(d["TDEP"], next(c.units for c in fr.channels if c.name == "TDEP"))
-                md = clean(md)
-            tvd = clean(d["U-SEIS_TVDSRD1"]) if "U-SEIS_TVDSRD1" in d else md.copy()
+            units = {c.name: c.units for c in fr.channels}
+
+            def in_m(name):  # every depth channel in metres (a file in feet would otherwise give feet)
+                return clean(depth_to_m(d[name], units.get(name))[0])
+            md = in_m("DEP1") if "DEP1" in d else in_m("SDEP") if "SDEP" in d else in_m("TDEP")
+            tvd = in_m("U-SEIS_TVDSRD1") if "U-SEIS_TVDSRD1" in d else md.copy()
             if "CTT1" in d:
                 tt = clean(d["CTT1"])
             else:

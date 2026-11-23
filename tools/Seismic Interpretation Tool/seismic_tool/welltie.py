@@ -91,7 +91,7 @@ def checkshot_for(well, base):
     uk, inv = np.unique(key, return_inverse=True)
     t = np.bincount(inv, t) / np.bincount(inv)
     z = uk
-    keep = np.r_[True, np.diff(t) > 0]
+    keep = t > np.maximum.accumulate(np.r_[-np.inf, t[:-1]])  # strictly later than every shallower level
     z, t = np.r_[0.0, z[keep]], np.r_[0.0, t[keep]]
     return z, t, " + ".join(srcs)
 
@@ -128,9 +128,11 @@ class WellTD:
         z = np.asarray(z_ss, float)
         t = np.interp(z, self.z, self.t)
         # linear extrapolation with the end interval velocities
-        if len(self.z) > 1:
-            s0 = (self.t[1] - self.t[0]) / max(1e-9, self.z[1] - self.z[0])
-            s1 = (self.t[-1] - self.t[-2]) / max(1e-9, self.z[-1] - self.z[-2])
+        if len(self.z) > 1:  # end slowness averaged over >= 50 m (one washout sample must not set it)
+            za = min(self.z[-1], self.z[0] + 50.0)
+            zb = max(self.z[0], self.z[-1] - 50.0)
+            s0 = (np.interp(za, self.z, self.t) - self.t[0]) / max(1e-9, za - self.z[0])
+            s1 = (self.t[-1] - np.interp(zb, self.z, self.t)) / max(1e-9, self.z[-1] - zb)
             t = np.where(z < self.z[0], self.t[0] + (z - self.z[0]) * s0, t)
             t = np.where(z > self.z[-1], self.t[-1] + (z - self.z[-1]) * s1, t)
         return t
@@ -324,11 +326,16 @@ class WellSet:
                     out.append((n, float(survey.cdp[k]), float(d[k])))
         return out
 
-    def trace_at_well(self, kind, survey, name, n_around=0):
-        """Seismic trace(s) at the well: (times ms, traces (m, ns)) - nearest trace (+ neighbours)."""
+    def trace_at_well(self, kind, survey, name, n_around=0, strict=False, max_dist_m=500.0):
+        """Seismic trace(s) at the well: (times ms, traces (m, ns)) - nearest trace (+ neighbours).
+        strict: raise ValueError when the well is outside the 3D survey / farther than max_dist_m from the 2D line
+        (otherwise the nearest edge trace is used)."""
         w = self.well(name)
         if kind == "3D":
             il, xl = survey.ilxl_at(w.x, w.y)
+            if strict and not (survey.inlines[0] - 0.5 * survey.il_step <= il <= survey.inlines[-1] + 0.5 * survey.il_step
+                               and survey.xlines[0] - 0.5 * survey.xl_step <= xl <= survey.xlines[-1] + 0.5 * survey.xl_step):
+                raise ValueError("outside the survey")
             i, j = survey.il_index(il), survey.xl_index(xl)
             ii = np.clip(np.arange(i - n_around, i + n_around + 1), 0, survey.nil - 1)
             jj = np.clip(np.arange(j - n_around, j + n_around + 1), 0, survey.nxl - 1)
@@ -337,13 +344,16 @@ class WellSet:
             return survey.times, tr
         d = np.hypot(survey.x - w.x, survey.y - w.y)
         k = int(np.argmin(d))
+        if strict and (not survey.has_coords or d[k] > max_dist_m):
+            raise ValueError(f"{d[k]:.0f} m from the line")
         kk = np.clip(np.arange(k - n_around, k + n_around + 1), 0, len(survey.cdp) - 1)
         return survey.times, survey.data()[kk]
 
 
 # ====================================================================== synthetics + tie
 def ricker(f_hz, dt_ms, length_ms=128.0):
-    t = np.arange(-length_ms / 2, length_ms / 2 + dt_ms / 2, dt_ms) / 1000.0
+    n = int(length_ms / 2 // dt_ms)
+    t = np.arange(-n, n + 1) * dt_ms / 1000.0  # odd length, a sample at t = 0 for any dt
     a = (np.pi * f_hz * t) ** 2
     return (1 - 2 * a) * np.exp(-a)
 

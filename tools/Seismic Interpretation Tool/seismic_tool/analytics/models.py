@@ -461,7 +461,7 @@ class KMeans(Model):
             C = [X[rng.integers(len(X))]]
             for _ in range(1, self.k):  # k-means++
                 d = np.min(((X[:, None] - np.array(C)[None]) ** 2).sum(-1), 1)
-                C.append(X[rng.choice(len(X), p=d / d.sum())])
+                C.append(X[rng.choice(len(X), p=d / d.sum())] if d.sum() > 0 else X[rng.integers(len(X))])
             C = np.array(C)
             for _ in range(self.max_iter):
                 lab = np.argmin(((X[:, None] - C[None]) ** 2).sum(-1), 1)
@@ -603,3 +603,6 @@ class _Wrap(Model):
 
     def get_params(self):
         return self.m.get_params()
+
+    def clone(self):  # xgboost / sklearn estimator: a fresh unfitted copy with the same parameters
+        return _Wrap(type(self.m)(**self.m.get_params()))

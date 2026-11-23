@@ -319,6 +319,8 @@ class Line2D:
         """(n_traces, ns) float32 as stored in the SEG-Y (no mistie correction), cached."""
         if self._raw is None:
             self._raw = self.f.traces()
+            if not np.isfinite(self._raw).all():  # corrupt samples would poison dips / RGT / FFTs
+                np.nan_to_num(self._raw, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         return self._raw
 
     def data(self):

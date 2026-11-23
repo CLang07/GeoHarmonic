@@ -91,6 +91,15 @@ def run(check, tmp):
     rv3 = S.RGTVolume(ed.folder)
     check(np.array_equal(np.asarray(rv3.arr), np.asarray(rv.arr)) if False else
           np.allclose(rv3.decode(rv3.arr[5]), rv.decode(rv.arr[5]), atol=0.2), "two undos restore the original model")
+    # a second, nearby edit keeps the first one (earlier points are re-applied in the local solve)
+    v0 = ed.value_at(20, 30, 600.0)
+    ed.add_point(20, 30, 600.0, v0 + 20.0)
+    v20 = ed.value_at(20, 30, 600.0)
+    ed.add_point(20, 34, 600.0, ed.value_at(20, 34, 600.0))
+    check(abs(v20 - (v0 + 20)) < 1.0 and abs(ed.value_at(20, 30, 600.0) - (v0 + 20)) < 2.0,
+          f"second edit nearby keeps the first ({ed.value_at(20, 30, 600.0) - v0:+.1f} of +20)")
+    ed.undo()
+    ed.undo()
 
     # 2D line edit
     p, G = geology_project(tmp, "edit2d", fault=False, lines=True)

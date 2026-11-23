@@ -139,7 +139,11 @@ def normalise_id(s):
     """Well id key: API/UWI digits without dashes (API-14 -> API-10 when the tail is zeros), else lower-case
     name without spaces/dashes."""
     s = str(s).strip()
+    if s.endswith(".0") and s[:-2].replace("-", "").isdigit():  # Excel turned the API into a float
+        s = s[:-2]
     digits = "".join(c for c in s if c.isdigit())
+    if len(digits) in (9, 11, 13) and len(digits) >= 0.8 * len(s.replace("-", "").replace(" ", "")):
+        digits = "0" + digits  # leading zero of the state code lost (Colorado 05, Alabama 01, ...)
     if len(digits) >= 10 and len(digits) >= 0.8 * len(s.replace("-", "").replace(" ", "")):
         if len(digits) in (12, 14) and set(digits[10:]) <= {"0"}:
             digits = digits[:10]

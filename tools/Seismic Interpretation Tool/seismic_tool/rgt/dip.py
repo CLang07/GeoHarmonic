@@ -68,13 +68,16 @@ def gradients(a, sigma_grad=1.0):
     return out
 
 
+MAX_DIP = 10.0  # samples per trace
+
+
 def dip_2d(sec, sigma_grad=1.0, sigma_x=3.0, sigma_t=4.0, eps=1e-12):
     """sec (n_traces, n_samples) -> (dip samples/trace, planarity) float32."""
     gx, gt = gradients(sec, sigma_grad)
     Ttt = gsmooth(gt * gt, (sigma_x, sigma_t))
     Ttx = gsmooth(gt * gx, (sigma_x, sigma_t))
     Txx = gsmooth(gx * gx, (sigma_x, sigma_t))
-    p = -Ttx / (Ttt + eps)
+    p = np.clip(-Ttx / (Ttt + eps), -MAX_DIP, MAX_DIP)  # Ttt ~ 0 (flat amplitude) gives meaningless huge dips
     resid = Txx + 2 * p * Ttx + p * p * Ttt
     plan = np.clip(1.0 - resid / (Ttt + Txx + eps), 0, 1)
     return p.astype(np.float32), plan.astype(np.float32)
@@ -87,8 +90,8 @@ def dip_3d_block(block, sigma_grad=1.0, sigma_s=2.0, sigma_t=4.0, eps=1e-12):
     Ttt = gsmooth(gt * gt, sig)
     Tti = gsmooth(gt * gi, sig)
     Ttj = gsmooth(gt * gj, sig)
-    pi_ = -Tti / (Ttt + eps)
-    pj_ = -Ttj / (Ttt + eps)
+    pi_ = np.clip(-Tti / (Ttt + eps), -MAX_DIP, MAX_DIP)
+    pj_ = np.clip(-Ttj / (Ttt + eps), -MAX_DIP, MAX_DIP)
     del Tti, Ttj
     Tii = gsmooth(gi * gi, sig)
     Tjj = gsmooth(gj * gj, sig)
@@ -107,7 +110,7 @@ def compute_dip_volume(vol, out_dir=None, sigma_grad=1.0, sigma_s=2.0, sigma_t=4
     names = ("dip_il", "dip_xl", "planarity")
     tmp = {n: np.lib.format.open_memmap(os.path.join(out_dir, n + ".tmp.npy"), mode="w+", dtype=np.float16,
                                         shape=shape) for n in names}
-    halo = int(np.ceil(3 * max(sigma_s, sigma_grad))) + 2
+    halo = int(np.ceil(3 * sigma_grad)) + int(np.ceil(3 * sigma_s)) + 1  # gradient + smoothing supports
     dt_ms = vol.dt * 1000.0
     for a in range(0, vol.nil, block):
         if cancel and cancel():

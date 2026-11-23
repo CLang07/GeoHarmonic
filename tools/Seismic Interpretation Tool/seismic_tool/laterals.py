@@ -262,7 +262,14 @@ def stats_table(trajs, attributes, zones=None, min_inc=80.0):
                 put(f"{a} {k}", i, s[k])
     for k, v in cols.items():
         tab.add(k, v)
-    tab.xy = np.array([[t.x[0], t.y[0]] for t in trajs]) if trajs else None
+    def mid(t):  # lateral midpoint (pad wells share a surface location, so the surface xy is no spacing measure)
+        m = t.lateral_mask() if hasattr(t, "lateral_mask") else None
+        if m is not None and np.any(m):
+            k = np.nonzero(m)[0]
+            k = k[len(k) // 2]
+            return [t.x[k], t.y[k]]
+        return [t.x[-1], t.y[-1]]
+    tab.xy = np.array([mid(t) for t in trajs]) if trajs else None
     tab.meta["wells"] = [t.name for t in trajs]
     return tab
 

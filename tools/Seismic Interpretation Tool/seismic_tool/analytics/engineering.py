@@ -4,6 +4,7 @@ Arps decline + EUR, FracFocus estimates, lease allocation, QC flags.  Everything
 columns keyed by normalised API / well name.
 """
 import csv
+import re
 import json
 
 import numpy as np
@@ -106,10 +107,12 @@ def _num(v):
 
 def _date(v):
     """'YYYY-MM-DD', 'MM/DD/YYYY', 'YYYYMM' -> months since 1900-01 (float) or NaN."""
-    s = str(v or "").strip()
+    s = str(v or "").strip().split("T")[0].split(" ")[0]  # ISO 'YYYY-MM-DDThh:mm:ss' / trailing time
     if not s:
         return np.nan
     try:
+        if "/" in s and len(s.split("/")[0]) == 4:  # YYYY/MM/DD
+            s = s.replace("/", "-")
         if "-" in s:
             p = s.split(" ")[0].split("-")
             return (int(p[0]) - 1900) * 12 + int(p[1]) - 1 + (int(p[2]) - 1) / 30.0 if len(p) > 2 else \
@@ -124,14 +127,22 @@ def _date(v):
     return np.nan
 
 
+_UNIT_TOKENS = (("t", {"t", "tonne", "tonnes", "mt"}), ("ton", {"ton", "tons"}),
+                ("lb", {"lb", "lbs", "pounds", "pound"}), ("m3", {"m3", "m^3"}), ("gal", {"gal", "gals", "gallons"}),
+                ("bbl", {"bbl", "bbls", "barrels", "bo", "bw"}), ("e3m3", {"e3m3", "103m3", "km3"}),
+                ("mcf", {"mcf"}), ("ft", {"ft", "feet", "foot"}), ("m", {"m", "metre", "metres", "meter", "meters"}))
+
+
 def detect_units(header, values):
-    """Unit of a column from its header (and magnitude as a fallback): 'lb'|'t', 'bbl'|'m3'|'gal', 'ft'|'m',
-    'mcf'|'e3m3'."""
-    h = header.lower()
-    for u, keys in (("t", ["_t", "(t)", "tonne", "tons"]), ("lb", ["lb", "lbs"]), ("m3", ["m3", "m^3"]),
-                    ("gal", ["gal"]), ("bbl", ["bbl"]), ("e3m3", ["e3m3", "103m3"]), ("mcf", ["mcf"]),
-                    ("ft", ["ft", "feet", "(ft)"]), ("m", ["_m", "(m)", "metre", "meter"])):
-        if any(k in h for k in keys):
+    """Unit of a column from its header: 'lb'|'t' (tonne)|'ton' (US short ton), 'bbl'|'m3'|'gal', 'ft'|'m',
+    'mcf'|'e3m3'. Whole tokens only ('Proppant_Total_LBS' is lb, not t). FracFocus base water volume is gallons."""
+    h = str(header)
+    if "basewatervolume" in h.lower().replace("_", "").replace(" ", ""):
+        return "gal"
+    h = re.sub(r"([a-z])([A-Z])", r"\1 \2", h).lower()
+    toks = set(t for t in re.split(r"[^a-z0-9^]+", h) if t)
+    for u, keys in _UNIT_TOKENS:
+        if toks & keys:
             return u
     return None
 
@@ -157,7 +168,7 @@ def completion_table(rows, mapping=None, preset=None, units=None):
     t = AttributeTable([r.get(mapping[idk], "") for r in rows])
     col = lambda k: np.array([_num(r.get(mapping[k])) for r in rows]) if k in mapping else np.full(len(rows), np.nan)  # noqa
     ll = col("lateral_length") * (FT_PER_M if units.get("lateral_length") == "m" else 1.0)
-    prop = col("proppant") * (LB_PER_TONNE if units.get("proppant") == "t" else 1.0)
+    prop = col("proppant") * {"t": LB_PER_TONNE, "ton": 2000.0}.get(units.get("proppant"), 1.0)
     fl = col("fluid")
     if units.get("fluid") == "m3":
         fl = fl * BBL_PER_M3
@@ -214,9 +225,19 @@ def qc_flags(t, max_prop_lb_ft=5000.0, max_fluid_bbl_ft=200.0):
 
 
 # ====================================================================== production
-def monthly_series(rows, mapping=None, preset=None):
-    """{id: dict(month (sorted months since 1900), oil, gas, water, days)} from monthly production rows."""
+def monthly_series(rows, mapping=None, preset=None, units=None, fill_gaps=True):
+    """{id: dict(month (sorted months since 1900), oil, gas, water, days)} from monthly production rows.
+    Volumes are converted to bbl / mcf (units {stream: 'm3'|'e3m3'|...} or detected from the headers); months
+    missing between the first and last reported month are filled with 0 (state data often omit zero months)."""
     mapping = mapping or auto_mapping(rows[0].keys(), preset) if rows else {}
+    units = dict(units or {})
+    for c in ("oil", "gas", "water"):
+        if c in mapping and c not in units:
+            units[c] = detect_units(mapping[c], None) or ("e3m3" if c == "gas" and mapping[c].lower().endswith("e3m3")
+                                                         else None)
+    fac = {c: (BBL_PER_M3 if units.get(c) == "m3" and c != "gas" else
+               MCF_PER_E3M3 if units.get(c) == "e3m3" else
+               MCF_PER_E3M3 / 1000.0 if (c == "gas" and units.get(c) == "m3") else 1.0) for c in ("oil", "gas", "water")}
     idk = "api" if "api" in mapping else "well"
     by = {}
     for r in rows:
@@ -230,13 +251,15 @@ def monthly_series(rows, mapping=None, preset=None):
             if c in mapping:
                 v = _num(r.get(mapping[c]))
                 if np.isfinite(v):
-                    e[j] += v
+                    e[j] += v * fac[c]
         if "days" in mapping:
             e[3] = _num(r.get(mapping["days"]))
     out = {}
     for k, d in by.items():
         ms = np.array(sorted(d))
-        a = np.array([d[m] for m in ms], float)
+        if fill_gaps and len(ms):
+            ms = np.arange(ms[0], ms[-1] + 1)
+        a = np.array([d.get(m, [0.0, 0.0, 0.0, np.nan]) for m in ms], float).reshape(-1, 4)
         out[k] = {"month": ms, "oil": a[:, 0], "gas": a[:, 1], "water": a[:, 2], "days": a[:, 3]}
     return out
 
@@ -283,12 +306,13 @@ def arps_rate(qi, di, b, t):
     return qi * np.exp(-di * t) if b == 0 else qi / (1 + b * di * t) ** (1.0 / b)
 
 
-def eur(series, fit, months_total=360, q_limit=0.0):
-    """Produced to date + Arps forecast to months_total (or until the rate drops below q_limit / month)."""
+def eur(series, fit, months_total=360, q_limit=0.0, peak=0):
+    """Produced to date + Arps forecast to months_total (or until the rate drops below q_limit / month).
+    The fit's t = 0 is the peak month (index `peak` in series)."""
     if fit is None:
         return np.nan
     n = len(series)
-    t = np.arange(n, months_total)
+    t = np.arange(n - peak, months_total - peak)
     q = arps_rate(fit["qi"], fit["di"], fit["b"], t)
     if q_limit > 0:
         q = q[q >= q_limit]
@@ -345,7 +369,7 @@ def production_features(series, lateral_ft=None, boe_ratio=6.0, skip_partial_fir
                 put("arps_di", i, ft["di"])
                 put("arps_b", i, ft["b"])
                 put("arps_r2", i, ft["r2"])
-                put("eur_boe", i, eur(b, ft, q_limit=0.0) if len(b) else np.nan)
+                put("eur_boe", i, eur(b, ft, q_limit=0.0, peak=pk) if len(b) else np.nan)
         if lateral_ft and np.isfinite(lateral_ft.get(k, np.nan)) and lateral_ft.get(k, 0) > 0:
             per = 1000.0 / lateral_ft[k]
             for n in months:

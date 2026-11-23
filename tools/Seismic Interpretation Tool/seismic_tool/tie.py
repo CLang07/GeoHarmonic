@@ -851,7 +851,7 @@ def batch_tie(ws, kind, survey, wells=None, wavelet=None, freq=30.0, max_shift_m
                 ts = survey.times
                 seis, _, _ = seismic_along_wellbore(traj, td, survey, ts)
             else:
-                ts, trs = ws.trace_at_well(kind, survey, n)
+                ts, trs = ws.trace_at_well(kind, survey, n, strict=True)
                 seis = trs[0]
             if not np.isfinite(seis).any():
                 raise ValueError("outside the survey")

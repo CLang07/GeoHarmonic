@@ -152,6 +152,8 @@ def conformal_intervals(model, X, y, Xnew, alpha=0.2, groups=None, seed=0):
     rng = np.random.default_rng(seed)
     g = np.asarray(groups) if groups is not None else np.arange(len(y))
     u = rng.permutation(np.unique(g))
+    if len(u) < 3:
+        raise ValueError("conformal intervals need at least 3 wells (groups): one third is held out for calibration")
     cal = np.isin(g, u[: len(u) // 3])
     m = model.clone().fit(X[~cal], y[~cal])
     res = np.abs(y[cal] - m.predict(X[cal]))

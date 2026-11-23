@@ -253,6 +253,8 @@ class Project:
                 md, inc, azi = s
                 tvd, dn, de = min_curvature(md, inc, azi)
                 w.tvd = np.interp(grid, md, tvd)
+                below = grid > md[-1]  # logs below the last station: straight on at the last inclination
+                w.tvd[below] = tvd[-1] + (grid[below] - md[-1]) * np.cos(np.radians(inc[-1]))
         w.loaded = True
         if cfile:
             os.makedirs(cdir, exist_ok=True)

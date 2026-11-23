@@ -104,8 +104,11 @@ def stratal_slice(vol, surface_ms):
     if not fin.any():
         return out
     idx = (surface_ms / 1000.0 - vol.t0) / vol.dt
-    k0 = int(max(0, np.floor(np.nanmin(idx))))
-    k1 = int(min(vol.ns - 1, np.ceil(np.nanmax(idx)) + 1))
+    fin = fin & (idx >= 0) & (idx <= vol.ns - 1)  # outside the record: NaN, not the edge sample
+    if not fin.any():
+        return out
+    k0 = int(max(0, np.floor(np.min(idx[fin]))))
+    k1 = int(min(vol.ns - 1, np.ceil(np.max(idx[fin])) + 1))
     slab = np.asarray(vol.tdata[k0:k1 + 1], np.float32) * vol.inv  # (nk, nil, nxl)
     rel = np.clip(np.where(fin, idx, k0) - k0, 0, slab.shape[0] - 1.000001)
     k = np.floor(rel).astype(np.int64)

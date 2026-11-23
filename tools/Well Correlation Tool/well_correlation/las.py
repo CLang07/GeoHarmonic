@@ -98,7 +98,9 @@ class LasFile:
             return
         null = self._float(self.well.get("NULL", ("-999.25",))[0], -999.25)
         wrap = self.version.get("WRAP", ("NO",))[0].upper().startswith("Y")
-        tokens = data_text.split()
+        dlm = self.version.get("DLM", ("SPACE",))[0].upper()
+        tokens = re.split(r"[\s,]+", data_text.strip()) if ("COMMA" in dlm or "," in data_text[:2000]) \
+            else data_text.split()
         n = len(self.curve_defs)
         try:
             vals = np.array(tokens, dtype=float)  # fast path
@@ -111,7 +113,7 @@ class LasFile:
         arr[np.isclose(arr, null)] = np.nan
         arr[arr <= -999.0] = np.nan  # common alternative nulls (-999, -9999)
         depth = arr[:, 0]
-        du = self.curve_defs[0][1].upper()
+        du = self.curve_defs[0][1].upper() or self.well.get("STRT", ("", ""))[1].upper()  # blank unit: STRT's
         if du in _FT:
             depth = depth * 0.3048
             self.depth_unit = "FT->M"

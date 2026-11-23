@@ -17,6 +17,20 @@ MODELS = ["gbm", "rf", "linear", "ridge", "lasso", "knn", "mlp"]
 CVS = ["leave one well out", "group 5-fold", "spatial blocks (2 km)", "random 5-fold (optimistic)"]
 
 
+def spatial_splits(xy, n):
+    """Spatial-block CV folds with the block size taken from the data extent (about 4 x 4 blocks); raises a clear
+    error when the wells have no coordinates or fall in a single block."""
+    xy = np.asarray(xy, float)
+    span = max(float(np.ptp(xy[:, 0])), float(np.ptp(xy[:, 1]))) if len(xy) else 0.0
+    if not span > 0:
+        raise ValueError("spatial CV needs well coordinates (x, y) - use group / leave-one-well-out CV instead")
+    block = span / 4.0
+    splits = [(tr, te) for tr, te in V.spatial_blocks(xy, block, min(5, max(2, n // 3))) if len(tr) and len(te)]
+    if len(splits) < 2:
+        raise ValueError("all wells fall in one spatial block - use group / leave-one-well-out CV instead")
+    return splits
+
+
 class AnalyticsWindow(QtWidgets.QDialog):
     def __init__(self, project, basemap=None, parent=None):
         super().__init__(parent)
@@ -167,7 +181,7 @@ class AnalyticsWindow(QtWidgets.QDialog):
         if kind.startswith("group"):
             return list(V.group_kfold(groups, min(5, len(np.unique(groups)))))
         if kind.startswith("spatial"):
-            return list(V.spatial_blocks(xy, 2000.0, min(5, max(2, n // 3))))
+            return spatial_splits(xy, n)
         return list(V.kfold(n, min(5, n)))
 
     def train(self, inputs, target, model_name="gbm", cv=CVS[0]):

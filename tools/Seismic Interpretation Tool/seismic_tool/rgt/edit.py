@@ -94,7 +94,7 @@ class RGTEditor3D:
         II, JJ = np.meshgrid(np.arange(nIw), np.arange(nJw), indexing="ij")
         border = ((II == 0) & (I0 > 0)) | ((II == nIw - 1) & (I1 < nI - 1)) | \
             ((JJ == 0) & (J0 > 0)) | ((JJ == nJw - 1) & (J1 < nJ - 1))
-        if not border.any() and not points and not horizons:
+        if not border.any() and not points and not horizons and not self.edits:
             border[:] = True
         cols = np.nonzero(border.ravel())[0]
         if len(cols):
@@ -103,8 +103,12 @@ class RGTEditor3D:
             sysm.eq.add([u], [np.ones(len(u))], vals, 100.0)
         if not len(cols):  # nothing fixed: keep the datum of the current model
             sysm.datum = True
-        # control points: bilinear over the 4 node columns around the trace, linear in time
-        for (i, j, t_ms, v) in points:
+        # control points: bilinear over the 4 node columns around the trace, linear in time. Earlier point edits
+        # inside the window are re-applied (slightly weaker, so the newest edit wins where they conflict) -
+        # otherwise every local re-solve from the links alone would erase them.
+        prior = [tuple(pt) for e in self.edits for pt in e.get("points", [])
+                 if Iw[0] <= pt[0] <= Iw[-1] and Jw[0] <= pt[1] <= Jw[-1]]
+        for (i, j, t_ms, v), wt in [(pt, 1e3) for pt in prior] + [(pt, 1e4) for pt in points]:
             ci = np.clip(np.searchsorted(Iw, i, "right"), 1, nIw - 1)
             cj = np.clip(np.searchsorted(Jw, j, "right"), 1, nJw - 1)
             wi = np.clip((i - Iw[ci - 1]) / max(1, Iw[ci] - Iw[ci - 1]), 0, 1)
@@ -119,7 +123,7 @@ class RGTEditor3D:
                     cl += [u0, u1]
                     cf += [w0 * wa * wb, w1 * wa * wb]
             if cl:
-                sysm.eq.add(cl, cf, np.array([v]), 1e4)  # near-hard constraint
+                sysm.eq.add(cl, cf, np.array([v]), wt)  # near-hard constraint
         for name, grid in horizons:
             sub = grid[np.ix_(Iw, Jw)].ravel()
             sysm.add_horizon(name, "3D", np.arange(nIw * nJw), sub)

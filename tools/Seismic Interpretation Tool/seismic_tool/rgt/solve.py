@@ -665,9 +665,9 @@ def build_2d(project, names, params, faults=None, horizons=None, dip_folder=None
         half = max(2, int(round(params.window_ms / dt_ms)))
         lag = max(1, int(round(params.search_ms / dt_ms)))
         tb, cc = refine_corr(S2, np.zeros(len(ta), np.int64), ta, np.ones(len(ta), np.int64),
-                             ta + (lb.t0 - la.t0) * 1000.0 / dt_ms, half, lag)
+                             ta + (la.t0 - lb.t0) * 1000.0 / dt_ms, half, lag)
         w = np.where(cc >= params.min_corr, 2.0 * cc * cc, 0.0)
-        tb_ms = tb * dt_ms + t0a
+        tb_ms = tb * dt_ms + lb.t0 * 1000.0  # sample index on line B -> ms on B's own time axis
         nlinks += sysm.add_links(ka, np.full(len(ta), ca), np.arange(len(ta)), kb, np.full(len(ta), cb), tb_ms, w)
     sysm.ties = ties
     sysm.nlinks = nlinks
