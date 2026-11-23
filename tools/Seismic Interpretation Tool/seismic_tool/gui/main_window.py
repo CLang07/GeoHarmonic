@@ -138,6 +138,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&Fault mode on/off", self.fault_dock.toggle_fault_mode, "F")
         self._act(m, "&End fault stick (Enter)", lambda: self.section.end_stick())
         m.addSeparator()
+        self._act(m, "Compute &dip field (current 3D volume)...", self.compute_dip)
+        m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
         self._act(m, "Next line / slice (PgDown)", lambda: self.section.step(1))
@@ -354,6 +356,69 @@ class MainWindow(QtWidgets.QMainWindow):
         timer.timeout.connect(poll)
         timer.start(250)
         th.start()
+
+    def run_job(self, label, fn, done=None):
+        """Run fn(progress, cancel) in a thread with the status-bar progress bar; done() on success."""
+        if self._job:
+            QtWidgets.QMessageBox.information(self, "Busy", "Another job is running.")
+            return False
+        state = {"frac": 0.0, "text": "Starting...", "done": False, "error": None, "cancel": False}
+
+        def work():
+            try:
+                fn(lambda f, t: state.update(frac=f, text=t), lambda: state["cancel"])
+            except Exception:
+                state["error"] = traceback.format_exc()
+            state["done"] = True
+
+        th = threading.Thread(target=work, daemon=True)
+        timer = QtCore.QTimer(self)
+        self._job = (th, timer, state)
+        self.progress.setRange(0, 1000)
+        self.progress.show()
+
+        def poll():
+            self.progress.setValue(int(state["frac"] * 1000))
+            self.statusBar().showMessage(f"{label}: {state['text']}")
+            if not state["done"]:
+                return
+            timer.stop()
+            self.progress.hide()
+            self._job = None
+            if state["error"]:
+                QtWidgets.QMessageBox.critical(self, f"{label} failed", state["error"][-2000:])
+                return
+            if done:
+                done()
+            self.statusBar().showMessage(f"{label}: finished", 8000)
+
+        timer.timeout.connect(poll)
+        timer.start(250)
+        th.start()
+        return True
+
+    def compute_dip(self):
+        src = self.section.source
+        if not src or src[0] != "3D":
+            QtWidgets.QMessageBox.information(self, "Dip field", "Show a 3D volume first. (2D lines: choose "
+                                              "'Inline dip' or 'Planarity' in the display box - computed on the fly.)")
+            return
+        from ..rgt.dip import compute_dip_volume
+        vol = self.project.volume(src[1])
+        gb = vol.nil * vol.nxl * vol.ns * 2 * 3 / 1e9
+        if QtWidgets.QMessageBox.question(self, "Dip field", f"Compute inline/crossline dip and planarity for "
+                                          f"{src[1]}?\nWrites ~{gb:.1f} GB next to the volume store.") \
+                != QtWidgets.QMessageBox.Yes:
+            return
+
+        def fn(progress, cancel):
+            compute_dip_volume(vol, progress=progress, cancel=cancel)
+
+        def done():
+            self.section.attr_combo.setCurrentText("Inline dip")
+            self.section.set_attr("Inline dip")
+
+        self.run_job(f"Dip field {src[1]}", fn, done)
 
     def closeEvent(self, ev):
         if self._job:

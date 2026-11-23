@@ -20,7 +20,7 @@ Kingdom-like interaction; large data.
    - Draw sticks on sections (click points, Enter ends stick, N new fault), assign to named faults,
      display on intersecting sections; triangulated fault surface per fault; horizon autotracker stops at
      faults. Tests: synthetic faulted volume - tracker does not jump across the fault.
-3. **RGT step A - dip field** - status: todo
+3. **RGT step A - dip field** - status: done (run 1, 2026-11-23; v0.4.0)
    - `rgt/dip.py`: local inline & crossline dip (ms/trace) from gradient structure tensor with Gaussian
      smoothing (separable numpy convolution), plus coherence/planarity; chunked over the memmap; store as
      float16 volumes. Tests: synthetic dips recovered within 5 %.

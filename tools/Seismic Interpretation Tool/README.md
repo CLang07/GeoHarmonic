@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.3: loading, viewing, horizons, faults
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.4: loading, viewing, horizons, faults, dip field
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -58,6 +58,16 @@ Starter projects:
 - **Tracker stops at faults** (Horizons panel, on by default): the autotracker does not link traces across
   a visible fault surface (also not by gap bridging). Hide a fault (untick) to track across it.
 - Saved inside the project file (sticks in map X, Y, TWT).
+
+## Dip field (relative geologic time, step A)
+- **Interpret > Compute dip field (current 3D volume)** runs in the background (progress bar) and writes
+  inline dip, crossline dip (ms per trace, + = deeper towards higher inline/crossline numbers) and
+  planarity (0-1, how plane-layered the data is; low in noise, chaos, at faults) as float16 volumes in
+  `<volume store>\rgt\` (~3x the size of one store copy).
+- The display box in the section toolbar switches between **Seismic**, **Inline dip**, **Crossline dip**,
+  **Planarity**. On 2D lines either dip choice shows the dip along the line, computed on the fly (a few
+  seconds per line) and cached in `<project>_seismic\rgt\`.
+- This dip field drives the RGT model (next steps).
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.

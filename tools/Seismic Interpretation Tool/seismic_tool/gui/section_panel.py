@@ -11,6 +11,7 @@ from .. import faults as flt  # noqa: E402
 from .. import horizons as hz  # noqa: E402
 
 MODES = ["Inline", "Crossline", "Time slice"]
+ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity"]  # 2D lines: either dip = dip along the line
 
 
 class PickViewBox(pg.ViewBox):
@@ -117,8 +118,13 @@ class SectionPanel(QtWidgets.QWidget):
         self.clip_spin.setSuffix(" %")
         self.clip_spin.setToolTip("Amplitude percentile mapped to the ends of the colour bar")
         self.rev_chk = QtWidgets.QCheckBox("Reverse polarity")
-        for w in (self.src_combo, self.mode_combo, self.num_spin, self.slider, self.step_spin, self.cmap_combo,
-                  self.clip_spin, self.rev_chk):
+        self.attr_combo = QtWidgets.QComboBox()
+        self.attr_combo.addItems(ATTRS)
+        self.attr_combo.setToolTip("What to display: seismic amplitude or a computed attribute "
+                                   "(Interpret > Compute dip field)")
+        self.attr = "Seismic"
+        for w in (self.src_combo, self.mode_combo, self.num_spin, self.slider, self.step_spin, self.attr_combo,
+                  self.cmap_combo, self.clip_spin, self.rev_chk):
             bar.addWidget(w)
         bar.addStretch(1)
         lay.addLayout(bar)
@@ -137,6 +143,7 @@ class SectionPanel(QtWidgets.QWidget):
         self.cmap_combo.currentTextChanged.connect(lambda *_: self._apply_colors())
         self.clip_spin.valueChanged.connect(lambda *_: self._apply_colors())
         self.rev_chk.toggled.connect(lambda *_: self._apply_colors())
+        self.attr_combo.currentTextChanged.connect(self.set_attr)
         from PySide6 import QtGui
         for key, d in (("PgUp", -1), ("PgDown", 1), ("Shift+PgUp", -10), ("Shift+PgDown", 10)):
             s = QtGui.QShortcut(QtGui.QKeySequence(key), self)
@@ -250,7 +257,9 @@ class SectionPanel(QtWidgets.QWidget):
             return
         kind, name = self.source
         try:
-            if kind == "3D":
+            if self.attr != "Seismic":
+                arr, x, y, xl, yl = self._attribute_section()
+            elif kind == "3D":
                 v = self.project.volume(name)
                 if self.mode == "Inline":
                     arr = v.inline(self.number).T  # (ns, nxl)
@@ -299,16 +308,53 @@ class SectionPanel(QtWidgets.QWidget):
         t = f"{name} - {self.mode} {self.number}" if kind == "3D" else f"2D line {name}"
         if self.mode == "Time slice" and kind == "3D":
             t += " ms"
+        if self.attr != "Seismic":
+            t += f"  [{self.attr}{' ms/trace' if 'dip' in self.attr else ''}]"
         self.plot.setTitle(t)
+
+    def set_attr(self, name):
+        self.attr = name if name in ATTRS else "Seismic"
+        self.redraw()
+
+    def _attribute_section(self):
+        """(array, x, y, xlabel, ylabel) of the selected attribute on the current section."""
+        from ..rgt.dip import DipField, line_dip
+        kind, name = self.source
+        if kind == "2D":
+            l = self.project.line(name)
+            dip, plan = line_dip(l, os.path.join(self.project.seismic_dir(), "rgt") if self.project.path else None)
+            arr = (plan if self.attr == "Planarity" else dip).T
+            return arr, l.cdp, l.times, "CDP", "TWT (ms)"
+        v = self.project.volume(name)
+        folder = os.path.join(v.store, "rgt")
+        if not DipField.exists(folder):
+            raise RuntimeError("no dip field for this volume yet - Interpret > Compute dip field")
+        df = DipField(folder)
+        key = {"Inline dip": "dip_il", "Crossline dip": "dip_xl", "Planarity": "planarity"}[self.attr]
+        arr = df.section(key, v, self.mode, self.number)
+        if self.mode == "Inline":
+            return arr, v.xlines, v.times, "Crossline", "TWT (ms)"
+        if self.mode == "Crossline":
+            return arr, v.inlines, v.times, "Inline", "TWT (ms)"
+        return arr, v.xlines, v.inlines, "Crossline", "Inline"
+
+    def color_levels(self):
+        """(lo, hi) display levels: symmetric percentile clip, or 0..1 for planarity."""
+        if self.attr == "Planarity":
+            return 0.0, 1.0
+        a = np.abs(self._data[np.isfinite(self._data)])
+        clip = float(np.percentile(a, self.clip_spin.value() or 99.0)) if a.size else 1.0
+        clip = clip or 1.0
+        return -clip, clip
 
     def _apply_colors(self):
         if self._img is None or self._data is None:
             return
-        a = np.abs(self._data[np.isfinite(self._data)])
-        clip = float(np.percentile(a, self.clip_spin.value())) if a.size else 1.0
-        clip = clip or 1.0
-        self._img.setLookupTable(colormaps.lut(self.cmap_combo.currentText(), self.rev_chk.isChecked()))
-        self._img.setLevels((-clip, clip))
+        cmap = self.cmap_combo.currentText()
+        if self.attr != "Seismic":
+            cmap = "Grey" if self.attr == "Planarity" else "Rainbow (attributes)"
+        self._img.setLookupTable(colormaps.lut(cmap, self.rev_chk.isChecked()))
+        self._img.setLevels(self.color_levels())
         if self.project:
             self.project.display.update(cmap_name=str(self.cmap_combo.currentText()), clip=float(self.clip_spin.value()),
                                         reverse=bool(self.rev_chk.isChecked()))

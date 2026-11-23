@@ -2,6 +2,14 @@
 
 Newest first. Each section: what it does, how to use it, what to test.
 
+## v0.4.0 - Dip field, RGT step A (PLAN item 3)
+- Interpret > Compute dip field: inline/crossline dip (ms/trace) + planarity volumes for the 3D volume
+  (background job with progress). Toolbar display box: Seismic / Inline dip / Crossline dip / Planarity,
+  also on 2D lines (computed on the fly, cached).
+- Synthetic: dips recovered within 0.6% (spec 5%). NPRA R-2: fold flanks clearly shown in the dip.
+- Known limits: ~3 us per sample, so a 1-billion-sample 3D takes ~45-60 min (multi-threading in item 15);
+  cancel works only via closing the app for now.
+
 ## v0.3.0 - Fault sticks + fault surfaces (PLAN item 2)
 - Faults panel + Interpret menu: N = new fault, F = fault mode; click points, Enter ends a stick, Esc
   cancels, Shift+click deletes a stick, Ctrl+Z undoes (shared with horizon edits, most recent first).

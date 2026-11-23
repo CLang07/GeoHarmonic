@@ -17,4 +17,7 @@
   section_panel fault mode/overlays, basemap fault traces, project saves faults, tracker barrier.
   Tests: --selftest 59 checks PASS (fault cut positions < 0.05 trace, tracker 0% across fault vs 100%
   without), --guitest PASS, other tools PASS.
-- Working on PLAN item 3 next.
+- Item 3 DONE - dip field (v0.4.0): rgt/dip.py, test_dip.py, section display box (dip/planarity),
+  Interpret > Compute dip field (threaded job). Tests: synthetic 3D dips within 0.6%, block == whole volume,
+  2D fold dip max err 0.034 ms/trace; --selftest/--guitest PASS; NPRA R-2 dip visually sensible (4.7 s).
+- Working on PLAN item 4 next.

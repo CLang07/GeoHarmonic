@@ -107,6 +107,9 @@ def run():
         # ---- faults: sticks, surfaces, section cuts, tracker barrier
         from . import test_faults
         test_faults.run(check, tmp)
+        # ---- RGT step A: dip field
+        from . import test_dip
+        test_dip.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -132,6 +135,8 @@ def run_gui():
         test_horizons.run_gui(check, tmp)
         from . import test_faults
         test_faults.run_gui(check, tmp)
+        from . import test_dip
+        test_dip.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

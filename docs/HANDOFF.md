@@ -63,6 +63,13 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `EdgeBarrier` + `barrier_3d` / `barrier_line` -> `blocked(grid_idx)` for `track_grid` (edges crossed by
   the fault cut on every inline/crossline, stored as time ranges). `Picker.track(..., faults=[...])`.
   `synth.faulted_cube` (throw = reflector spacing) + `test_faults.py`.
+- `rgt/dip.py` (v0.4): gradient structure tensor dips, closed form p = -<gt gx>/<gt gt> (no eigen solves),
+  planarity = 1 - residual/energy; separable `correlate1d`/`gsmooth`/`gradients` (derivative of Gaussian);
+  `dip_2d`, `dip_3d_block`, `compute_dip_volume(vol, block, progress, cancel)` (inline blocks with halo ->
+  `<store>/rgt/dip_il|dip_xl|planarity.npy` float16 ms/trace), `DipField.section(name, vol, mode, number)`,
+  `line_dip(line, folder)` (npz cache). Speed ~3 us/voxel 3D, 0.6 us/sample 2D. `test_dip.py`.
+  Panel `attr` / `set_attr` + toolbar combo (Seismic / Inline dip / Crossline dip / Planarity);
+  `MainWindow.run_job(label, fn(progress, cancel), done)` = generic threaded job with progress bar.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +
