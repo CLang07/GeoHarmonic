@@ -32,6 +32,17 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 9. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
    orientation (top row first).
 
+10. **Dynamic depth conversion (item 17, v0.22-v0.26)** - NZ well project + Maui horizons (3D) or NPRA:
+    a. Interpret > Velocity model: set V0 + kZ on a layer, Cross-plot of selected layer, Build; try Kriging;
+       Use for depth display; an inline in Depth.
+    b. View > Auto-update depth model; move a top in the Well Correlation Tool and save -> status line
+       "... top moved ... -> rebuilt layers ..." within ~2 s, depth section and misfit table update.
+    c. What-if pseudo-top (dialog bottom row) and Clear.
+    d. Interpret > Well prognosis: a Maui well, a planned vertical well; Set bit, Add drilled top.
+    e. Blind test, then P90 map on the basemap; prognosis shows +/- 1 sigma.
+    f. Depth-convert the Maui volume to SEG-Y (Cancel works) and load it in Kingdom/Petrel as depth (dz in the
+       header is in mm = 1 "ms" per m); a depth CPS-3 grid -> time.
+
 ## Known limits (all items)
 - Long jobs (RGT, stacks, attributes, import) have a Cancel button (new in v0.17 - test it);
   autotracking of a whole 3D runs in the GUI thread (wait cursor).
@@ -39,8 +50,25 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
   pinch to zero; 2D RGT edits do not propagate through ties.
 - Wells drawn vertical at the surface location; tie = one shift + one stretch.
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
+- Depth model (item 17): the what-if / drilled-top pseudo wells carry the model's own interval velocity below
+  their top; T-D-function layers ignore what-if wells; P10/P90 come from the blind-test spread (no Monte-Carlo on
+  V0/k); depth-to-time of a grid samples the model on a 1 ms TWT grid.
 
 ## Change log (newest first)
+
+## Seismic v0.26.0 - Dynamic depth conversion, part 5: scenarios + uncertainty (PLAN item 17e; item 17 done)
+- Velocity model dialog, new rows: **Save scenario** (name) keeps the current model settings in the project
+  (functions, gridding, guide, held-out wells); **Difference map vs scenario** shows current - scenario depth of the
+  selected layer on the basemap.
+- **Blind test (leave one well out)**: each well's tops are predicted by the model built without it (fast - only at
+  the wells). The info line gives per horizon: count, mean error, RMS, P10 / P90 of the error and how the error grows
+  with distance to the nearest well. The RMS becomes the +/- 1 sigma column of the well prognosis.
+- **P10 / P50 / P90 / 1 sigma** map of the selected layer: P50 = model depth, sigma = blind-test error model vs
+  distance to the nearest well (tapering to 0 at the wells when residual correction is on); P10 = shallow case,
+  P90 = deep case (+/- 1.28 sigma).
+- **Depth-convert volume to SEG-Y...**: whole 3D volume to depth (threaded, Cancel button, no partial file left);
+  IEEE float, inline/crossline in bytes 189/193 and 9/21, X/Y in 181/185, dz in the header in mm.
+- **Depth grid (CPS-3) -> time...**: converts a depth grid through the model and writes <name>_time.cps3.
 
 ## Seismic v0.25.0 - Dynamic depth conversion, part 4: well prognosis / geosteering (PLAN item 17d)
 - Interpret > **Well prognosis / geosteering**: pick a well of the linked well project (deviation survey used when

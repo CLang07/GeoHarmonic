@@ -167,5 +167,48 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - No code changed.
 - Next: PLAN item 17a.
 
-## 2026-11-23 - run 3 (scheduled, started 17:19 UTC) - in progress
-- 17a velocity functions done (v0.22.0); 17c dynamic update done (v0.23.0); 17b gridding + guide done (v0.24.0); 17d prognosis done (v0.25.0); continuing with 17e.
+## 2026-11-23 - run 3 (scheduled, 17:19-17:55 UTC) - PLAN item 17 finished (last open item)
+- Item 17 Dynamic depth conversion (Kingdom DDC-style), all five parts, in run order 17a -> 17c -> 17b -> 17d -> 17e:
+  - 17a (v0.22.0) velocity functions per layer: V0 (old default), V0 + kZ (exp form), V0 + kT, well T-D function
+    (IDW / nearest); k fitted over the wells or fixed; cross-plot (V_int vs mid depth / time, line, R2, 2-sigma
+    outliers); depth sections follow the function inside layers and land on the depth maps (also fixes a small
+    section/map disagreement with residual correction).
+  - 17c (v0.23.0) dynamic update: `ddc.DynamicDepthModel` rebuilds only layers at/below a changed top or horizon,
+    maps above bit-identical, unchanged deeper layers reuse their gridded velocities; View > Auto-update depth model
+    (file watcher + 1 s debounce + 2 s poll), status line "W-3 Top B top moved +4.0 m -> rebuilt layer 2 in 0.00 s";
+    what-if pseudo-tops kept in the seismic project, never in the well project.
+  - 17b (v0.24.0) gridding: IDW / thin-plate spline / simple kriging (fitted spherical or exponential variogram) for
+    V, V0 and residuals; seismic-velocity guide per layer (RMS volume -> Dix, or interval volume; ratio or
+    difference scaling to the wells).
+  - 17d (v0.25.0) Interpret > Well prognosis / geosteering: horizon crossings along project wells or a planned
+    vertical well (MD, TVDSS, X, Y, status, sigma, change), bit depth, drilled tops as what-if pseudo-tops with the
+    horizons ahead of the bit re-predicted, live update with auto-update, CSV.
+  - 17e (v0.26.0) named scenarios + difference maps, leave-one-well-out blind test (computed at points only),
+    P10/P50/P90/sigma maps, prognosis sigma from the blind test, depth SEG-Y of a whole volume (threaded,
+    cancellable), depth CPS-3 grid -> time.
+- Files: seismic_tool/velocity.py, ddc.py (new), vgrid.py (new), prognosis.py (new), scenarios.py (new),
+  test_ddc.py (new), selftest.py, gui/velocity_dialog.py, gui/main_window.py, gui/section_panel.py,
+  gui/prognosis_dialog.py (new), __init__.py; docs PLAN, HANDOFF, WHATS_NEW, RUNLOG.
+- Tests: seismic_tool --selftest PASS (413 checks, ~70 new), --guitest under the Qt mock PASS, well_correlation
+  --selftest PASS, mistie_tool --selftest PASS. Key results: k recovered within 0.02% (V0 + kZ) and exactly (V0 + kT);
+  V0 + kZ depth maps within 0.02 m vs 21 m for constant V; incremental rebuild == full rebuild (0 m); 50 wells on a
+  300 x 300 map rebuild in 0.07 s; seismic guide cuts the east-side depth error from 292 m to 1 m with all wells in
+  the west; blind test V0 + kZ RMS 0.01 m vs 15 m constant V; depth SEG-Y reflector within one 4 m sample of the map.
+- Known limitations: no real Qt window opened (guitest with PySide6 on the PC is the first check); no real-data test
+  (the Maui 3D is not imported in the repo and the Maui checkshot LAS files hold no T-D) - all checks are
+  synthetic; on a full 1000 x 1500-node map each layer whose well values change costs ~0.5 s (IDW), so a top
+  change in the shallowest of 6 layers may take ~3 s; what-if / drilled-top wells use the model's interval
+  velocity below their top and are ignored by T-D-function layers; P10/P90 from the blind-test spread only (no
+  Monte-Carlo on V0/k); depth->time of grids on a 1 ms TWT sampling; the depth SEG-Y header carries dz in mm (the
+  common convention - check Kingdom/Petrel read it as metres).
+- What Chris should test first:
+  1. Pull dev; `python -m seismic_tool --selftest` and `--guitest` with real PySide6.
+  2. Interpret > Velocity model on Maui (or NPRA) horizons + NZ wells: new columns (function, k, seismic guide),
+     gridding row, Cross-plot button, Build, Use for depth display, inline in Depth.
+  3. View > Auto-update depth model, then move a Maui top in the Well Correlation Tool and save: status-bar line
+     and depth section/misfit update within ~2 s.
+  4. Interpret > Well prognosis: a Maui well and a planned vertical well; Set bit, Add drilled top, Export CSV.
+  5. Blind test -> P90 map; Save scenario + Difference map.
+  6. Depth-convert a (small) volume to SEG-Y, Cancel once, then load the file in Kingdom/Petrel as depth.
+- Next: PLAN has no todo/partial items left. "Later (Chris back)" items remain (PC benchmark, Maui 3D subset,
+  mistie with 2D lines, Tui-1/Amokura-1 wells) plus the optional item-17 follow-ups noted in PLAN.

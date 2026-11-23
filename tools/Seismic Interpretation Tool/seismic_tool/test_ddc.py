@@ -600,3 +600,139 @@ def run_gui_prognosis(check, tmp):
     check(os.path.exists(p), "17d GUI: export CSV")
     w.set_ddc(False)
     return True
+
+
+def run_scenarios(check, tmp):
+    """17e: scenarios, difference maps, leave-one-out blind test, P10/P50/P90, depth SEG-Y, depth -> time."""
+    from .scenarios import (blind_test, delete_scenario, depth_convert_volume, depth_to_time_grid, difference_grid,
+                            interp_rows, load_scenario, probability_maps, save_scenario, scenario_names,
+                            sigma_by_horizon)
+    from .velocity import VelocityModel
+    from .maps import write_cps3, read_cps3
+    from .segy import SegyFile
+    rng = np.random.default_rng(5)
+    XP = np.sort(rng.uniform(0, 100, (7, 30)), axis=1)
+    XP[2, 10:14] = XP[2, 10]  # plateau
+    XP[4, 3] = np.nan
+    FP = rng.normal(0, 1, (7, 30))
+    xq = np.linspace(-5, 105, 57)
+    got = interp_rows(xq, XP, FP)
+    ref = np.array([np.interp(xq, XP[i], FP[i], left=np.nan, right=np.nan) for i in range(7)])
+    ok_rows = [i for i in range(7) if i not in (2, 4)]
+    check(np.allclose(got[ok_rows], ref[ok_rows], equal_nan=True) and np.all(np.isnan(got[4])),
+          "17e: vectorised row interpolation == np.interp")
+    sp, T = ddc_case(tmp, "scen", kz_earth)
+    a = VelocityModel(sp, "3D:V", LAYERS).build()
+    b = VelocityModel(sp, "3D:V", LAYERS, functions=[{"func": "v0kz"}, {"func": "v0kz"}]).build()
+    save_scenario(sp, "constant V", a)
+    save_scenario(sp, "V0+kZ", b)
+    check(scenario_names(sp) == ["constant V", "V0+kZ"] and load_scenario(sp, "V0+kZ").functions == b.functions,
+          "17e: named scenarios saved in the project")
+    dg = difference_grid(a, b, 1)
+    d0 = difference_grid(b, load_scenario(sp, "V0+kZ").build(), 1)
+    check(np.nanmax(np.abs(dg.z)) > 5 and np.nanmax(np.abs(d0.z)) < 1e-9,
+          f"17e: difference map between scenarios (max {np.nanmax(np.abs(dg.z)):.1f} m; same model 0)")
+    delete_scenario(sp, "constant V")
+    check(scenario_names(sp) == ["V0+kZ"], "17e: delete scenario")
+    ex = VelocityModel(sp, "3D:V", LAYERS, exclude=["W-3"]).build()
+    check(len(ex.grids()["wells"]) == 5 and VelocityModel.from_dict(sp, ex.to_dict()).exclude == ["W-3"],
+          "17e: scenario with wells held out")
+    # blind test
+    bt_a = blind_test(a)
+    bt_b = blind_test(b)
+    ra, rb = bt_a["summary"]["H2"]["rms"], bt_b["summary"]["H2"]["rms"]
+    check(len(bt_b["rows"]) == 12 and rb < 1.0 and ra > 3 * rb,
+          f"17e: leave-one-out blind test: V0+kZ RMS {rb:.2f} m vs constant V {ra:.1f} m (12 predictions)")
+    w = "W-3"
+    full = VelocityModel(sp, "3D:V", LAYERS, exclude=[w]).build()
+    r3 = [r for r in a.grids()["wells"] if r["well"] == w][0]
+    zg = float(full.depth_grid(1).sample([r3["x"]], [r3["y"]])[0])
+    zp = [r for r in bt_a["rows"] if r["well"] == w and r["horizon"] == "H2"][0]["predicted"]
+    check(abs(zg - zp) < 0.5, f"17e: point-only blind test == full map without the well ({zp:.2f} vs {zg:.2f} m)")
+    s = bt_a["summary"]["H2"]
+    check(all(k in s for k in ("mean", "std", "p10", "p90", "a", "b")) and s["b"] >= 0 and s["a"] >= 0,
+          f"17e: error summary H2: mean {s['mean']:+.1f}, std {s['std']:.1f}, P10 {s['p10']:+.1f}, P90 {s['p90']:+.1f} m;"
+          f" sigma = {s['a']:.1f} + {s['b'] * 1000:.2f}/km")
+    sg = sigma_by_horizon(bt_a)
+    check(set(sg) == {"H1", "H2"}, "17e: 1-sigma per horizon for the prognosis")
+    pm = probability_maps(a, 1, bt_a)
+    fin = np.isfinite(pm["sigma"].z)
+    check(np.all(pm["p10"].z[fin] <= pm["p50"].z[fin]) and np.all(pm["p90"].z[fin] >= pm["p50"].z[fin])
+          and np.nanmax(pm["sigma"].z) > np.nanmin(pm["sigma"].z),
+          f"17e: P10 <= P50 <= P90, sigma {np.nanmin(pm['sigma'].z):.1f}-{np.nanmax(pm['sigma'].z):.1f} m")
+    ar = VelocityModel(sp, "3D:V", LAYERS, residual_correction=True).build()
+    pr = probability_maps(ar, 1, blind_test(ar))
+    rw = ar.grids()["wells"][0]
+    sw = float(pr["sigma"].sample([rw["x"]], [rw["y"]])[0])
+    check(sw < 0.25 * np.nanmax(pr["sigma"].z), f"17e: residual-corrected model: sigma ~0 at a well ({sw:.2f} m)")
+    # depth SEG-Y
+    vol = sp.volume("V")
+    out = os.path.join(tmp, "scen_depth.sgy")
+    seen = []
+    z = depth_convert_volume(b, vol, out, dz=4.0, progress=lambda f, t: seen.append(f))
+    f = SegyFile(out)
+    jj = 12
+    il = int(vol.inlines[20])
+    k = 20 * vol.nxl + jj
+    tr = f.traces(k, k + 1)[0]
+    zt2 = float(b.depth_grid(1).sample(*[[c] for c in vol.xy(il, int(vol.xlines[jj]))])[0])
+    ztr = z[int(np.argmin(tr))]
+    hil = int(f.header(189, 4, k, k + 1)[0])
+    hxl = int(f.header(193, 4, k, k + 1)[0])
+    check(f.ns == len(z) and abs(f.dt - 0.004) < 1e-9 and hil == il and hxl == int(vol.xlines[jj]) and
+          abs(ztr - zt2) <= 8.0 and seen and seen[-1] == 1.0,
+          f"17e: depth SEG-Y: {f.ns} samples x 4 m, H2 trough at {ztr:.0f} m (model {zt2:.0f} m), headers ok")
+    del f
+    try:
+        depth_convert_volume(b, vol, os.path.join(tmp, "cancel.sgy"), cancel=lambda: True)
+        cancelled = False
+    except RuntimeError as e:
+        cancelled = "cancelled" in str(e)
+    check(cancelled and not os.path.exists(os.path.join(tmp, "cancel.sgy")) and
+          not os.path.exists(os.path.join(tmp, "cancel.sgy.part")), "17e: depth conversion cancellable, no partial file")
+    # depth -> time for grids
+    tgr = depth_to_time_grid(b, b.depth_grid(1))
+    et = np.nanmax(np.abs(tgr.z - T["t2"]))
+    check(et < 0.5, f"17e: depth grid -> time recovers H2 times (max {et:.2f} ms)")
+    cp = os.path.join(tmp, "h2_depth.cps3")
+    write_cps3(b.depth_grid(1), cp)
+    gx = read_cps3(cp)
+    tx = depth_to_time_grid(b, gx)
+    X, Y = gx.node_xy()
+    tref = a.grids()["t"][1].sample(X.ravel(), Y.ravel()).reshape(gx.z.shape)
+    e2 = np.nanmedian(np.abs(tx.z - tref))
+    check(np.isfinite(tx.z).sum() > 100 and e2 < 2.0, f"17e: CPS-3 depth grid -> time (median {e2:.2f} ms)")
+    return sp
+
+
+def run_gui_scenarios(check, tmp):
+    """17e in the velocity dialog + the prognosis sigma column."""
+    from .gui.main_window import MainWindow
+    from .maps import write_cps3
+    sp, T = ddc_case(tmp, "scengui", kz_earth)
+    w = MainWindow(sp.path)
+    dlg = w.velocity_model()
+    dlg.build("3D:V", LAYERS, False)
+    dlg.save_scenario("constant V")
+    dlg.build("3D:V", LAYERS, False, functions=[{"func": "v0kz"}, {"func": "v0kz"}])
+    g = dlg.difference("constant V", 1)
+    check(g.unit == "m" and np.nanmax(np.abs(g.z)) > 5, "17e dialog: scenario saved + difference map")
+    bt = dlg.run_blind_test()
+    check(len(bt["rows"]) == 12 and set(w.project.display["ddc_blind"]["sigma"]) == {"H1", "H2"},
+          "17e dialog: blind test stored for the prognosis")
+    p90 = dlg.probability_map(1, "p90")
+    check(p90.unit == "m" and np.nanmin(p90.z - dlg.model.depth_grid(1).z) >= 0, "17e dialog: P90 map")
+    out = os.path.join(tmp, "dg.sgy")
+    z = dlg.depth_convert("V", out)
+    check(os.path.exists(out) and len(z) > 10, "17e dialog: depth SEG-Y written")
+    cp = os.path.join(tmp, "d.cps3")
+    write_cps3(dlg.model.depth_grid(0), cp)
+    po = dlg.depth_grid_to_time(cp)
+    check(os.path.exists(po) and po.endswith("_time.cps3"), "17e dialog: depth grid -> time CPS-3")
+    dlg.use()
+    pd = w.prognosis()
+    prog = pd.set_well("W-2")
+    check(prog.rows and prog.rows[0]["sigma"] is not None and abs(prog.rows[0]["sigma"] -
+                                                                   bt["summary"]["H1"]["rms"]) < 1e-9,
+          "17e: prognosis +/- 1 sigma from the blind test")
+    return True

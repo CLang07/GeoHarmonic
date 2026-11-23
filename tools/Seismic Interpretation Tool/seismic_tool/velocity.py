@@ -149,13 +149,14 @@ def fit_line(x, y, nsigma=2.0):
 
 class VelocityModel:
     def __init__(self, project, survey_key, layers, residual_correction=False, cell=100.0, below_velocity=None,
-                 functions=None, gridding=None):
+                 functions=None, gridding=None, exclude=None):
         """layers: [(horizon name, formation name or None)] top to bottom.
         functions: per layer None or {"func": "v0"|"v0kz"|"v0kt"|"td", "k": float|None (None = fit over the wells),
         "blend": "idw"|"nearest" (td), "guide": {"volume": name, "kind": "rms"|"interval", "mode": "ratio"|"difference"}
         (seismic-velocity trend for v0 / v0kz / v0kt)}; missing = "v0" (item-12 behaviour).
         gridding: {"method": "idw"|"tps"|"kriging", "variogram": "spherical"|"exponential", "range": m|None,
-        "smooth": float} for the gridded well values and residuals (default IDW)."""
+        "smooth": float} for the gridded well values and residuals (default IDW).
+        exclude: well names left out of the model (scenarios / blind tests)."""
         self.project = project
         self.key = survey_key
         self.layers = list(layers)
@@ -170,6 +171,7 @@ class VelocityModel:
             f.setdefault("func", "v0")
         self.gridding = dict(gridding or {"method": "idw"})
         self.gridding.setdefault("method", "idw")
+        self.exclude = sorted(exclude or [])
         self._grids = None
 
     # -------------------------------------------------------------- inputs
@@ -213,7 +215,10 @@ class VelocityModel:
         ws = self.project.wellset()
         tg = tg if tg is not None else self.time_grids()
         rows = []
+        skip = set(self.exclude)
         for n in ws.names:
+            if n in skip:
+                continue
             r = self.well_row(n, tg)
             if r is not None:
                 rows.append(r)
@@ -381,8 +386,7 @@ class VelocityModel:
             z = zraw[k]
             if self.residual_correction:
                 use = [i for i, r in enumerate(wt) if r.get("from_layer", 0) <= k]
-                dg = MapGrid(z, tg[k].kind, "m", "", tg[k].vol, tg[k].x0, tg[k].y0, tg[k].dx, tg[k].dy)
-                res = np.array([wt[i]["z"][k] for i in use]) - dg.sample(px_all[use], py_all[use])
+                res = np.array([wt[i]["z"][k] for i in use]) - _grid_like(tg[k], z).sample(px_all[use], py_all[use])
                 ok = np.isfinite(res)
                 if ok.any():
                     z = z + grid_values(X, Y, px_all[use][ok], py_all[use][ok], res[ok], gm, self.gridding)
@@ -584,12 +588,39 @@ class VelocityModel:
             d["functions"] = [dict(f) for f in self.functions]
         if self.gridding.get("method", "idw") != "idw":
             d["gridding"] = dict(self.gridding)
+        if self.exclude:
+            d["exclude"] = list(self.exclude)
         return d
 
     @classmethod
     def from_dict(cls, project, d):
         return cls(project, d["survey"], [tuple(l) for l in d["layers"]], d.get("residual_correction", False),
-                   d.get("cell", 100.0), d.get("below_velocity"), d.get("functions"), d.get("gridding"))
+                   d.get("cell", 100.0), d.get("below_velocity"), d.get("functions"), d.get("gridding"),
+                   d.get("exclude"))
+
+
+class PointGrid:
+    """Values at scattered map points (x, y) - the build() of a model at a few points only (blind tests)."""
+    kind = "points"
+
+    def __init__(self, x, y, z):
+        self.x, self.y = np.asarray(x, float), np.asarray(y, float)
+        self.z = np.asarray(z, float)
+
+    def node_xy(self):
+        return self.x, self.y
+
+    def sample(self, x, y):
+        x, y = np.atleast_1d(np.asarray(x, float)), np.atleast_1d(np.asarray(y, float))
+        d = (x[:, None] - self.x[None, :]) ** 2 + (y[:, None] - self.y[None, :]) ** 2
+        i = np.argmin(d, axis=1)
+        return np.where(d[np.arange(len(x)), i] < 1.0, self.z[i], np.nan)
+
+
+def _grid_like(g, z):
+    if isinstance(g, PointGrid):
+        return PointGrid(g.x, g.y, z)
+    return MapGrid(z, g.kind, "m", "", g.vol, g.x0, g.y0, g.dx, g.dy)
 
 
 def _sig(*parts):

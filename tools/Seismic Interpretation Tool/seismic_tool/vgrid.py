@@ -227,6 +227,10 @@ def guided_grid(X, Y, px, py, v, trend, mode="ratio", method="idw", opts=None):
 def _sample_nodes(X, Y, Z, px, py):
     """Bilinear sample of a node grid (X, Y regular in index space, possibly rotated) at points."""
     X, Y, Z = np.asarray(X, float), np.asarray(Y, float), np.asarray(Z, float)
+    if Z.ndim == 1:  # scattered points (blind test): the value at the matching point
+        d = (np.asarray(px, float)[:, None] - X[None, :]) ** 2 + (np.asarray(py, float)[:, None] - Y[None, :]) ** 2
+        i = np.argmin(d, axis=1)
+        return np.where(d[np.arange(len(i)), i] < 1.0, Z[i], np.nan)
     ny, nx = Z.shape
     if ny < 2 or nx < 2:
         return np.full(len(px), float(Z.ravel()[0]) if Z.size else np.nan)

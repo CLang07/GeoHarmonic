@@ -98,6 +98,9 @@ class PrognosisDialog(QtWidgets.QDialog):
 
     def _start(self, traj):
         dm = self._dm()
+        bl = (self.project.display or {}).get("ddc_blind") or {}
+        if not self.uncertainty and bl.get("survey") == dm.vm.key:
+            self.uncertainty = dict(bl.get("sigma") or {})
         self.prog = Prognosis(dm, traj, self.uncertainty)
         self.top_h.clear()
         self.top_h.addItems([h for h, _ in dm.vm.layers])

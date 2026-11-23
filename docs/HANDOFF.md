@@ -176,6 +176,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   previous) / set_bit / add_top (what-if "drilling <well>: <key>" at the wellbore point) / clear_tops / write_csv;
   `vertical_trajectory`. `gui/prognosis_dialog.PrognosisDialog(project, depth_model_fn, parent, on_change)`;
   MainWindow.prognosis, ddc_tick updates it. Tests: `run_prognosis`, `run_gui_prognosis`.
+  v0.26 (17e): `VelocityModel(exclude=[wells])`, `velocity.PointGrid` (build at scattered points; `_grid_like`).
+  `scenarios.py`: save/load/delete_scenario (display["velocity_scenarios"]), difference_grid, blind_test (LOO at
+  points: test well + training wells), summarise (mean/std/rms/p10/p90, sigma = a + b d), sigma_by_horizon,
+  probability_maps (P10 shallow / P90 deep, 1.2816 sigma), interp_rows (row-wise interp, one searchsorted, per-row
+  queries allowed), depth_axis, depth_convert_volume (streams inlines to <path>.part, cancel -> removed; dz in mm),
+  depth_to_time_grid. display["ddc_blind"] {survey, sigma, summary} -> PrognosisDialog sigma column. Dialog:
+  save_scenario, difference, run_blind_test, probability_map, depth_convert, depth_grid_to_time.
+  Tests: `run_scenarios`, `run_gui_scenarios`.
 - `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
   (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
   Correlation zones)), `engineering` (13a+: ALIASES/PRESETS column mapping + prefix fallback, unit detection

@@ -93,6 +93,38 @@ class VelocityDialog(QtWidgets.QDialog):
                    QtWidgets.QLabel("depth"), self.wi_z, self.b_wi_add, self.b_wi_clear):
             wrow.addWidget(w_)
         lay.addLayout(wrow)
+        srow = QtWidgets.QHBoxLayout()
+        self.sc_name = QtWidgets.QLineEdit("")
+        self.sc_name.setPlaceholderText("scenario name")
+        self.b_sc_save = QtWidgets.QPushButton("Save scenario")
+        self.sc_combo = QtWidgets.QComboBox()
+        self.b_sc_diff = QtWidgets.QPushButton("Difference map vs scenario")
+        self.b_blind = QtWidgets.QPushButton("Blind test (leave one well out)")
+        self.p_combo = QtWidgets.QComboBox()
+        self.p_combo.addItems(["P10 (shallow)", "P50", "P90 (deep)", "1 sigma"])
+        self.b_pmap = QtWidgets.QPushButton("Show")
+        for w_ in (self.sc_name, self.b_sc_save, self.sc_combo, self.b_sc_diff, self.b_blind, self.p_combo,
+                   self.b_pmap):
+            srow.addWidget(w_)
+        lay.addLayout(srow)
+        crow = QtWidgets.QHBoxLayout()
+        self.b_segy = QtWidgets.QPushButton("Depth-convert volume to SEG-Y...")
+        self.b_d2t = QtWidgets.QPushButton("Depth grid (CPS-3) -> time...")
+        crow.addWidget(self.b_segy)
+        crow.addWidget(self.b_d2t)
+        crow.addStretch(1)
+        lay.addLayout(crow)
+        self.blind = None
+        self._fill_scenarios()
+        self.b_sc_save.clicked.connect(lambda *_: self._safe(lambda: self.save_scenario(self.sc_name.text())))
+        self.b_sc_diff.clicked.connect(lambda *_: self._safe(lambda: self.difference(
+            self.sc_combo.currentText(), self.layer_index_of_row(max(0, self.table.currentRow())))))
+        self.b_blind.clicked.connect(lambda *_: self._safe(self.run_blind_test))
+        self.b_pmap.clicked.connect(lambda *_: self._safe(lambda: self.probability_map(
+            self.layer_index_of_row(max(0, self.table.currentRow())), ["p10", "p50", "p90", "sigma"][
+                max(0, self.p_combo.currentIndex())])))
+        self.b_segy.clicked.connect(lambda *_: self._safe(self._segy_dialog))
+        self.b_d2t.clicked.connect(lambda *_: self._safe(self._d2t_dialog))
         self.info = QtWidgets.QLabel("")
         self.info.setWordWrap(True)
         lay.addWidget(self.info)
@@ -411,6 +443,116 @@ class VelocityDialog(QtWidgets.QDialog):
             for row in self.model.misfit_table():
                 w.writerow([row[0], row[1], row[2], f"{row[3]:.2f}", f"{row[4]:.2f}", f"{row[5]:.2f}"])
         return path
+
+    # ------------------------------------------------------------ scenarios / uncertainty (17e)
+    def _fill_scenarios(self):
+        from ..scenarios import scenario_names
+        self.sc_combo.clear()
+        self.sc_combo.addItems(scenario_names(self.project))
+
+    def save_scenario(self, name):
+        from ..scenarios import save_scenario
+        name = str(name).strip()
+        if not name:
+            raise ValueError("type a scenario name")
+        if self.model is None:
+            self.build()
+        save_scenario(self.project, name, self.model)
+        self._fill_scenarios()
+        self._set_text(f"Scenario '{name}' saved")
+        return name
+
+    def difference(self, name, k):
+        """Depth map of layer k: current model - scenario (shown on the basemap)."""
+        from ..scenarios import difference_grid, load_scenario
+        if self.model is None:
+            self.build()
+        other = load_scenario(self.project, name).build()
+        g = difference_grid(self.model, other, k, f"{self.model.layers[k][0]}: current - {name}")
+        if self.basemap is not None:
+            self.basemap.show_grid(g)
+        fin = g.z[np.isfinite(g.z)]
+        self._set_text(f"Difference current - {name}: {fin.min():+.1f} .. {fin.max():+.1f} m" if fin.size else
+                       "No overlap")
+        return g
+
+    def run_blind_test(self):
+        """Leave-one-well-out blind test of the current model; the RMS error per horizon becomes the 1-sigma of the
+        well prognosis (stored in the project)."""
+        from ..scenarios import blind_test, sigma_by_horizon
+        if self.model is None:
+            self.build()
+        self.blind = blind_test(self.model)
+        self.project.display["ddc_blind"] = {"survey": self.model.key, "sigma": sigma_by_horizon(self.blind),
+                                             "summary": self.blind["summary"]}
+        if self.project.path:
+            self.project.save()
+        lines = [f"{h}: n {v['n']}, mean {v['mean']:+.1f} m, RMS {v['rms']:.1f} m, P10 {v['p10']:+.1f} / P90 "
+                 f"{v['p90']:+.1f} m, sigma {v['a']:.1f} + {v['b'] * 1000:.1f} m/km" for h, v in
+                 self.blind["summary"].items()]
+        self._set_text("Blind test (actual - predicted):\n" + "\n".join(lines))
+        return self.blind
+
+    def probability_map(self, k, which="p90"):
+        from ..scenarios import probability_maps
+        if self.blind is None:
+            self.run_blind_test()
+        g = probability_maps(self.model, k, self.blind)[which]
+        self._shown_layer = None
+        if self.basemap is not None:
+            self.basemap.show_grid(g)
+        return g
+
+    def depth_convert(self, vol_name, path, progress=None, cancel=None):
+        from ..scenarios import depth_convert_volume
+        if self.model is None:
+            self.build()
+        if not self.model.key.startswith("3D:"):
+            raise ValueError("depth conversion of a volume needs a 3D model")
+        return depth_convert_volume(self.model, self.project.volume(vol_name), path, progress=progress, cancel=cancel,
+                                    name=vol_name)
+
+    def depth_grid_to_time(self, path_in, path_out=None):
+        from ..maps import read_cps3, write_cps3
+        from ..scenarios import depth_to_time_grid
+        if self.model is None:
+            self.build()
+        g = depth_to_time_grid(self.model, read_cps3(path_in))
+        g.label = os.path.splitext(os.path.basename(path_in))[0] + " in time"
+        path_out = path_out or os.path.splitext(path_in)[0] + "_time.cps3"
+        write_cps3(g, path_out)
+        if self.basemap is not None:
+            self.basemap.show_grid(g)
+        self._set_text(f"Time grid written: {path_out}")
+        return path_out
+
+    def _set_text(self, txt):
+        self._info_text = txt
+        self.info.setText(txt)
+
+    def _segy_dialog(self):
+        vols = [v["name"] for v in self.project.volumes]
+        if not vols:
+            raise ValueError("no 3D volume in the project")
+        name, ok = QtWidgets.QInputDialog.getItem(self, "Depth conversion", "Volume", vols, 0, False)
+        if not ok:
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Depth SEG-Y", os.path.join(
+            self.project.base(), f"{name}_depth.sgy"), "SEG-Y (*.sgy *.segy)")
+        if not path:
+            return
+        parent = self.parent()
+        if parent is not None and hasattr(type(parent), "run_job"):
+            parent.run_job(f"Depth conversion {name}", lambda progress, cancel: self.depth_convert(
+                name, path, progress, cancel))
+        else:
+            self.depth_convert(name, path)
+
+    def _d2t_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Depth grid (CPS-3)", self.project.base(),
+                                                        "CPS-3 grid (*.cps3 *.cps *.grd *.dat);;All files (*)")
+        if path:
+            self.depth_grid_to_time(path)
 
     def _csv(self):
         if self.model is None:
