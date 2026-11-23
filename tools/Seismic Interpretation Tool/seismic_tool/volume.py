@@ -3,6 +3,8 @@
 3D SEG-Y is imported once into a 'store' folder holding two float16 copies of the data:
     data_ilxl.npy  shape (n_inline, n_xline, n_samples)   -> fast inlines and crosslines
     data_t.npy     shape (n_samples, n_inline, n_xline)   -> fast time slices / horizon extraction
+    data_xl.npy    shape (n_xline, n_inline, n_samples)   -> fast crosslines (optional; +50% disk; older
+                   stores without it read crosslines from data_ilxl, slower; add it with --xlstore STORE)
 float16 halves the size; amplitudes are scaled so the 99.9th percentile is ~1000 (the scale is
 stored and undone on read).  Together the two copies are about the size of a float32 SEG-Y.
 Both are memory-mapped, so a 10 GB survey opens instantly and slices come straight off disk.
@@ -46,16 +48,16 @@ def _fix_degenerate(cx, cy, nil, nxl, il_step, xl_step, il0, xl0):
 
 
 def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_byte=185, scalar_byte=71,
-              chunk=20000, progress=None, cancel=None, workers=None):
+              chunk=20000, progress=None, cancel=None, workers=None, xline_store=True):
     """Scan headers, then write the two float16 stores. progress(fraction, text) and cancel() -> bool are
     optional; a cancelled import removes its partial store and raises RuntimeError('cancelled').
     workers: threads for the trace conversion and the time-slice copy (None = up to 4, 1 = serial)."""
     try:
         return _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel,
-                          workers)
+                          workers, xline_store)
     except RuntimeError as e:
         if str(e) == "cancelled":
-            for fn in ("data_ilxl.npy", "data_t.npy", "filled.npy", "meta.json"):
+            for fn in ("data_ilxl.npy", "data_t.npy", "data_xl.npy", "filled.npy", "meta.json"):
                 try:
                     os.remove(os.path.join(store_dir, fn))
                 except OSError:
@@ -75,7 +77,7 @@ def _workers(w):
 
 
 def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel,
-               workers=None):
+               workers=None, xline_store=True):
     f = SegyFile(segy_path)
     if il_byte is None or xl_byte is None:
         g = f.guess_il_xl()
@@ -111,6 +113,8 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
                                      shape=(nil, nxl, ns))
     filled = np.zeros((nil, nxl), bool)
     workers = _workers(workers)
+    flat = ilxl.reshape(nil * nxl, ns)  # view on the same memmap
+    lin = ii * nxl + jj  # trace position in the store
 
     def write_chunk(s, e):
         tr = f.traces(s, e)
@@ -119,7 +123,11 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
         if bad.any():
             tr[bad] = 0.0
         np.clip(tr, -60000, 60000, out=tr)
-        ilxl[ii[s:e], jj[s:e], :] = tr.astype(np.float16)
+        k = lin[s:e]
+        if e - s > 1 and k[-1] - k[0] == e - s - 1 and np.all(np.diff(k) == 1):
+            flat[k[0]:k[-1] + 1] = tr  # sorted survey: one contiguous block write (casts to float16 in place)
+        else:
+            ilxl[ii[s:e], jj[s:e], :] = tr.astype(np.float16)  # unsorted / irregular: scattered write
         filled[ii[s:e], jj[s:e]] = True
         return e
 
@@ -171,18 +179,26 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
     # time-major copy, built from blocks of inlines (contiguous reads, contiguous writes)
     tm = np.lib.format.open_memmap(os.path.join(store_dir, "data_t.npy"), mode="w+", dtype=np.float16,
                                    shape=(ns, nil, nxl))
+    xm = np.lib.format.open_memmap(os.path.join(store_dir, "data_xl.npy"), mode="w+", dtype=np.float16,
+                                   shape=(nxl, nil, ns)) if xline_store else None
     blk = max(1, int(64e6 // max(1, nxl * ns * 2)))
 
     def transpose_block(a, b):
-        tm[:, a:b, :] = np.transpose(np.asarray(ilxl[a:b]), (2, 0, 1))
+        block = np.asarray(ilxl[a:b])  # one contiguous read serves both copies
+        tm[:, a:b, :] = np.transpose(block, (2, 0, 1))
+        if xm is not None:
+            xm[:, a:b, :] = np.transpose(block, (1, 0, 2))
 
     try:
         run_parallel([(a, min(nil, a + blk)) for a in range(0, nil, blk)], transpose_block, 0.7, 1.0,
                      lambda d, t: f"Building time slices {d}/{t} blocks")
     except RuntimeError:
-        del tm, ilxl
+        del tm, ilxl, xm
         raise
     tm.flush()
+    if xm is not None:
+        xm.flush()
+        del xm
     # coordinates
     x, y = f.coordinates(x_byte, y_byte, scalar_byte, 0, n)
     sel = np.linspace(0, n - 1, min(n, 20000)).astype(int)
@@ -195,11 +211,46 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
     meta = {"version": STORE_VERSION, "segy": os.path.abspath(segy_path), "il_byte": il_byte, "xl_byte": xl_byte,
             "il0": il0, "il_step": il_step, "nil": nil, "xl0": xl0, "xl_step": xl_step, "nxl": nxl,
             "ns": ns, "dt": f.dt, "t0": f.t0, "scale": scale, "affine_x": cx, "affine_y": cy,
-            "ntraces": int(n), "fill_fraction": float(filled.mean()),
+            "ntraces": int(n), "fill_fraction": float(filled.mean()), "xline_store": bool(xline_store),
             "imported": time.strftime("%Y-%m-%d %H:%M"), "text_header": f.text_header[:3200]}
     with open(os.path.join(store_dir, "meta.json"), "w") as fh:
         json.dump(meta, fh, indent=1)
     return Volume3D(store_dir)
+
+
+def build_xline_store(store_dir, progress=None, cancel=None):
+    """Add the crossline-major copy (data_xl.npy) to an existing store, so crosslines read as fast as inlines.
+    Returns the path.  A cancelled build removes the partial file."""
+    with open(os.path.join(store_dir, "meta.json")) as fh:
+        m = json.load(fh)
+    nil, nxl, ns = m["nil"], m["nxl"], m["ns"]
+    ilxl = np.load(os.path.join(store_dir, "data_ilxl.npy"), mmap_mode="r")
+    path = os.path.join(store_dir, "data_xl.npy")
+    tmp = path + ".part.npy"
+    xm = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float16, shape=(nxl, nil, ns))
+    blk = max(1, int(64e6 // max(1, nxl * ns * 2)))
+    try:
+        for a in range(0, nil, blk):
+            b = min(nil, a + blk)
+            xm[:, a:b, :] = np.transpose(np.asarray(ilxl[a:b]), (1, 0, 2))
+            if cancel and cancel():
+                raise RuntimeError("cancelled")
+            if progress:
+                progress(b / nil, f"Crossline copy {b}/{nil} inlines")
+        xm.flush()
+    except BaseException:
+        del xm
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    del xm, ilxl
+    os.replace(tmp, path)
+    m["xline_store"] = True
+    with open(os.path.join(store_dir, "meta.json"), "w") as fh:
+        json.dump(m, fh, indent=1)
+    return path
 
 
 class Volume3D:
@@ -211,6 +262,8 @@ class Volume3D:
             self.meta = m = json.load(fh)
         self.ilxl = np.load(os.path.join(store_dir, "data_ilxl.npy"), mmap_mode="r")
         self.tdata = np.load(os.path.join(store_dir, "data_t.npy"), mmap_mode="r")
+        xp = os.path.join(store_dir, "data_xl.npy")
+        self.xldata = np.load(xp, mmap_mode="r") if os.path.exists(xp) else None
         self.il0, self.il_step, self.nil = m["il0"], m["il_step"], m["nil"]
         self.xl0, self.xl_step, self.nxl = m["xl0"], m["xl_step"], m["nxl"]
         self.ns, self.dt, self.t0 = m["ns"], m["dt"], m.get("t0", 0.0)
@@ -263,6 +316,8 @@ class Volume3D:
         return np.asarray(self.ilxl[self.il_index(il)], np.float32) * self.inv
 
     def xline(self, xl):
+        if self.xldata is not None:  # crossline-major copy: one contiguous read
+            return np.asarray(self.xldata[self.xl_index(xl)], np.float32) * self.inv
         return np.asarray(self.ilxl[:, self.xl_index(xl), :], np.float32) * self.inv
 
     def time_slice(self, t_ms):

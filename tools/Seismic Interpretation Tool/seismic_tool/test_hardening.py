@@ -49,6 +49,7 @@ def run(check, tmp):
     wellindex_checks(check, d)
     welllayer_checks(check)
     parallel_import_checks(check, d)
+    xline_store_checks(check, d)
     review_checks(check, d)
     review2_checks(check, d)
     return v
@@ -79,6 +80,43 @@ def parallel_import_checks(check, d):
     except RuntimeError as e:
         ok = str(e) == "cancelled"
     check(ok and not os.path.exists(os.path.join(store, "data_ilxl.npy")), "parallel import cancelled cleanly")
+
+
+def xline_store_checks(check, d):
+    """Crossline-major copy: written at import, equal to the inline-major store, added later to old stores;
+    sorted surveys take the contiguous block write and match a shuffled (scattered-write) import exactly."""
+    from .synth import write_3d, traces_from_surfaces, folded_surfaces
+    from .selftest import write_segy
+    from .volume import import_3d, build_xline_store, Volume3D
+    top, deep = folded_surfaces(19, 27)
+    cube = traces_from_surfaces([top, deep], [1.0, -0.7], 120, 0.004, noise=0.05)
+    sgy = os.path.join(d, "xl.sgy")
+    write_3d(sgy, cube)
+    v = import_3d(sgy, os.path.join(d, "xl_new"), chunk=64, workers=2)
+    ref = np.asarray(v.ilxl)
+    check(v.xldata is not None and v.meta.get("xline_store") and np.array_equal(np.asarray(v.xldata),
+          np.transpose(ref, (1, 0, 2))), "import writes the crossline copy (= inline store transposed)")
+    ok = all(np.array_equal(v.xline(int(x)), np.asarray(ref[:, k, :], np.float32) * v.inv)
+             for k, x in enumerate(v.xlines))
+    check(ok, "crossline read from the crossline copy == read from the inline store")
+    old = import_3d(sgy, os.path.join(d, "xl_old"), chunk=64, xline_store=False)
+    check(old.xldata is None and np.array_equal(old.xline(int(old.xlines[5])), v.xline(int(v.xlines[5]))),
+          "store without the crossline copy still reads crosslines")
+    build_xline_store(old.store)
+    re = Volume3D(old.store)
+    check(re.xldata is not None and np.array_equal(np.asarray(re.xldata), np.asarray(v.xldata))
+          and re.meta.get("xline_store"), "--xlstore adds the crossline copy to an old store")
+    nil, nxl, ns = cube.shape
+    il = np.repeat(np.arange(1001, 1001 + nil), nxl)
+    xl = np.tile(np.arange(2001, 2001 + nxl), nil)
+    perm = np.random.default_rng(3).permutation(nil * nxl)
+    shp = os.path.join(d, "xl_shuf.sgy")
+    write_segy(shp, cube.reshape(-1, ns)[perm], {189: il[perm], 193: xl[perm],
+                                                 181: (500000 + 25 * (xl[perm] - 2001)).astype(np.int64),
+                                                 185: (6000000 + 25 * (il[perm] - 1001)).astype(np.int64)})
+    sh = import_3d(shp, os.path.join(d, "xl_shuf"), chunk=64, workers=2)
+    check(np.array_equal(np.asarray(sh.ilxl), ref) and np.array_equal(np.asarray(sh.xldata), np.asarray(v.xldata)),
+          "unsorted SEG-Y (scattered writes) == sorted SEG-Y (block writes)")
 
 
 def welllayer_checks(check):

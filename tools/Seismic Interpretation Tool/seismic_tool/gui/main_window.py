@@ -209,6 +209,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&Fault mode on/off", self.fault_dock.toggle_fault_mode, "F")
         self._act(m, "&End fault stick (Enter)", lambda: self.section.end_stick())
         m.addSeparator()
+        self._act(m, "Fast &crosslines for current 3D volume (adds a crossline copy)...", self.add_xline_store)
         self._act(m, "Compute &dip field (current 3D volume)...", self.compute_dip)
         self._act(m, "Compute attri&bute volume (current 3D volume)...", self.compute_attribute_volume)
         self._act(m, "Compute &RGT (current 3D volume)...", self.compute_rgt_3d)
@@ -520,6 +521,31 @@ class MainWindow(QtWidgets.QMainWindow):
         timer.start(250)
         th.start()
         return True
+
+    def add_xline_store(self):
+        """Older stores read crosslines from the inline-major copy (slow on big surveys); add the crossline copy."""
+        src = self.section.source
+        if not src or src[0] != "3D":
+            QtWidgets.QMessageBox.information(self, "Fast crosslines", "Show a 3D volume first.")
+            return False
+        vol = self.project.volume(src[1])
+        if vol.xldata is not None:
+            QtWidgets.QMessageBox.information(self, "Fast crosslines", f"{src[1]} already has the crossline copy.")
+            return False
+        gb = vol.nil * vol.nxl * vol.ns * 2 / 1e9
+        if QtWidgets.QMessageBox.question(self, "Fast crosslines", f"Write a crossline copy of {src[1]} "
+                                          f"(~{gb:.1f} GB next to the volume store)?") != QtWidgets.QMessageBox.Yes:
+            return False
+        from ..volume import build_xline_store
+
+        def fn(progress, cancel):
+            build_xline_store(vol.store, progress, cancel)
+
+        def done():
+            self.project._vol_cache.pop(src[1], None)  # reopen with the new copy
+            self.section.redraw()
+
+        return self.run_job(f"Crossline copy {src[1]}", fn, done)
 
     def compute_dip(self):
         src = self.section.source

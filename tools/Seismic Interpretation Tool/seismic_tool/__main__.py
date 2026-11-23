@@ -1,4 +1,4 @@
-"""python -m seismic_tool [project.seisproj.json] | --selftest | --guitest | --check-ml | --info FILE.sgy | --png PROJECT OUT.png"""
+"""python -m seismic_tool [project.seisproj.json] | --selftest | --guitest | --check-ml | --info FILE.sgy | --png PROJECT OUT.png | --xlstore STORE_DIR"""
 import os
 import sys
 
@@ -63,6 +63,11 @@ def main(argv=None):
     if argv and argv[0] == "--info":
         for a in argv[1:]:
             _info(a)
+        return
+    if argv and argv[0] == "--xlstore":  # add the fast crossline copy to existing store folder(s)
+        from .volume import build_xline_store
+        for a in argv[1:]:
+            print("wrote", build_xline_store(a, lambda f, t: print(f"\r{t}", end="")))
         return
     if argv and argv[0] == "--png":
         if len(argv) < 3:

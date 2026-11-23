@@ -212,7 +212,9 @@ Kingdom-like interaction; large data.
    access is strided - add an xline-major store or 64x64xns bricks, opt-in at import if disk allows), import 48 MB/s
    (50 GB ~18 min; Chris's C: is a Toshiba XG5 NVMe SSD (KXG50ZNV512G, GB/s class) -> import is CPU-bound:
    fuse the per-chunk conversions, write sorted traces as contiguous slabs instead of fancy-index scatter, thread
-   the chunks, faster time-major transpose; target >= 150 MB/s on his PC), well index / laterals fine. Windows RAM probe fixed.
+   the chunks, faster time-major transpose; target >= 150 MB/s on his PC)
+   Done 2026-11-23 (interactive, v0.21.0): crossline copy at import + --xlstore / menu for old stores, contiguous slab
+   writes for sorted SEG-Y, one block read feeds both copies, bench reports raw disk + import phases. Re-bench on PC., well index / laterals fine. Windows RAM probe fixed.
    - Scale targets (Chris wants big datasets): 3D volume 20-50 GB SEG-Y, 1,000+ 2D lines, 10,000 wells,
      1,000 laterals on the dashboard, all responsive on a 16-32 GB RAM PC.
    - Seismic: import in parallel (threads over trace chunks; numpy releases the GIL in I/O/copy), bricked

@@ -103,9 +103,35 @@ def main():
         t, _ = timed(write_big_segy, sgy, nil, nxl, ns)
         size = os.path.getsize(sgy) / 1e9
         res.append(("write synthetic SEG-Y", f"{size:.2f} GB, {nil} x {nxl} x {ns}", t))
+        # raw disk speed (plain sequential file I/O) - tells whether the import is disk- or CPU-bound
+        raw = os.path.join(work, "raw.bin")
+        buf = np.ones(64 * 2 ** 20, np.uint8)
+        t0 = time.perf_counter()
+        with open(raw, "wb") as fh:
+            for _ in range(16):
+                fh.write(buf)
+            fh.flush()
+            os.fsync(fh.fileno())
+        tw = time.perf_counter() - t0
+        res.append(("raw disk write 1 GB (sequential)", f"{1024 / tw:.0f} MB/s", tw))
+        t0 = time.perf_counter()
+        with open(sgy, "rb") as fh:
+            while fh.read(64 * 2 ** 20):
+                pass
+        tr = time.perf_counter() - t0
+        res.append(("raw read of the SEG-Y (may be cached)", f"{size * 1000 / tr:.0f} MB/s", tr))
+        os.remove(raw)
         from seismic_tool.volume import import_3d
-        t, vol = timed(import_3d, sgy, os.path.join(work, "store"))
-        res.append(("import 3D (two float16 stores)", f"{size / t * 1000:.0f} MB/s", t))
+        stamps = []
+        t0 = time.perf_counter()
+        vol = import_3d(sgy, os.path.join(work, "store"),
+                        progress=lambda f, txt: stamps.append((f, time.perf_counter() - t0)))
+        t = time.perf_counter() - t0
+        at = lambda f: next((s_ for f_, s_ in stamps if f_ >= f), t)  # noqa: E731
+        res.append(("import 3D (three float16 stores)", f"{size / t * 1000:.0f} MB/s", t))
+        res.append(("  - headers", "", at(0.1)))
+        res.append(("  - traces -> inline store", "", at(0.7) - at(0.1)))
+        res.append(("  - time-slice + crossline copies", "", t - at(0.7)))
         rng = np.random.default_rng(0)
         t, _ = timed(lambda: [vol.inline(int(vol.inlines[k])) for k in rng.integers(0, vol.nil, 10)])
         res.append(("inline section (random, x10)", f"{t / 10 * 1000:.1f} ms each", t))

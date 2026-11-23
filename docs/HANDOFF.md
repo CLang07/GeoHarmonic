@@ -194,6 +194,9 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `laterals.wellbore_section`, `strip_data`; `gui/well_strip.WellStrip.show_data`; dashboard `well_logs`,
   `log_names` (<= 300 wells), `strip_for`, `open_strip`.
   Tests: `test_laterals.py` (run + run_gui).
+- `volume.py` stores (v0.21.0): data_ilxl + data_t + optional data_xl (nxl, nil, ns; `Volume3D.xldata`, used by
+  `xline()` when present; `build_xline_store(store)`, CLI `--xlstore`, menu 'Fast crosslines'); import writes sorted
+  chunks as one contiguous slab (`flat[k0:k1]`), scattered write only for unsorted/irregular traces.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

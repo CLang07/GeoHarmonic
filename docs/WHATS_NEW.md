@@ -42,6 +42,14 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.21.0 - fast crosslines + faster import (from Chris's PC benchmark)
+- New imports write a third copy laid out by crossline (`data_xl.npy`, +50% disk): crosslines read as one
+  contiguous block instead of ~1,000 small reads (Chris's PC: 95 ms per crossline before).
+- Existing volumes: Interpret > "Fast crosslines for current 3D volume" (or `--xlstore STORE_DIR`) adds the copy.
+- Sorted SEG-Y traces are written as one block per chunk instead of trace by trace; one inline-block read now
+  feeds both the time-slice and the crossline copies.
+- `dev/bench.py` now reports raw disk speed and the import broken into phases.
+
 ## Seismic v0.20.4 / Mistie Tool - third review round (run 2)
 Seismic:
 - Well strip: the seismic along the wellbore was drawn transposed (MD on the time axis) - fixed.
