@@ -171,6 +171,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.b_cancel.clicked.connect(lambda *_: self.cancel_job())
         self.statusBar().addPermanentWidget(self.b_cancel)
         self._job = None
+        self._velocity_dialog = None
+        # dynamic depth conversion (View > Auto-update depth model): file watcher + 1 s debounce + 2 s poll
+        self.ddc_auto = False
+        self._ddc_debounce = QtCore.QTimer(self)
+        self._ddc_debounce.setSingleShot(True)
+        self._ddc_debounce.setInterval(1000)
+        self._ddc_debounce.timeout.connect(lambda *_: self.ddc_tick())
+        self._ddc_poll = QtCore.QTimer(self)
+        self._ddc_poll.setInterval(2000)
+        self._ddc_poll.timeout.connect(lambda *_: self.ddc_tick())
+        self._ddc_watch = QtCore.QFileSystemWatcher(self)
+        self._ddc_watch.fileChanged.connect(lambda *_: self._ddc_debounce.start())
+        self._ddc_watched = []
 
         self.section.cursorInfo.connect(lambda s: self.statusBar().showMessage(s))
         self.section.positionChanged.connect(lambda: self.basemap.show_current(self.section.current_trace_line()))
@@ -237,6 +250,9 @@ class MainWindow(QtWidgets.QMainWindow):
         m.addAction(self.dock_basemap.toggleViewAction())
         m.addAction(self.dock_horizons.toggleViewAction())
         m.addAction(self.dock_faults.toggleViewAction())
+        m.addSeparator()
+        self.act_ddc = self._act(m, "&Auto-update depth model (dynamic depth conversion)", self.toggle_ddc)
+        self.act_ddc.setCheckable(True)
         m = mb.addMenu("&Help")
         self._act(m, "About", lambda: QtWidgets.QMessageBox.information(
             self, "Seismic Interpretation Tool",
@@ -245,6 +261,55 @@ class MainWindow(QtWidgets.QMainWindow):
             "right-click > View all resets.\n\nHorizons: P = pick mode (click = seed, drag = manual line, "
             "Shift = erase), T = track from seeds, Ctrl+Z = undo.\nFaults: F = fault mode (click points, Enter ends "
             "the stick, Esc cancels), N = new fault, Shift+click deletes a stick."))
+
+    # ------------------------------------------------------------ dynamic depth conversion
+    def toggle_ddc(self):
+        self.set_ddc(not self.ddc_auto)
+
+    def set_ddc(self, on):
+        """Auto-update the depth model when well tops (linked .wcproj.json), horizons or what-if wells change."""
+        self.ddc_auto = bool(on)
+        self.act_ddc.setChecked(self.ddc_auto)
+        self._ddc_watch_paths()
+        if self.ddc_auto:
+            self._ddc_poll.start()
+            if self.project.display.get("velocity_model"):
+                self.statusBar().showMessage("Auto-update depth model on - watching the well tops and horizons", 6000)
+            else:
+                self.statusBar().showMessage("Auto-update depth model on - define a model in Interpret > Velocity "
+                                             "model (Use for depth display)", 8000)
+        else:
+            self._ddc_poll.stop()
+            self.statusBar().showMessage("Auto-update depth model off", 4000)
+
+    def _ddc_watch_paths(self):
+        if self._ddc_watched:
+            self._ddc_watch.removePaths(self._ddc_watched)
+            self._ddc_watched = []
+        p = self.project.well_project
+        if self.ddc_auto and p and os.path.exists(p):
+            self._ddc_watch.addPath(p)  # editors that replace the file drop the watch: re-added after every tick
+            self._ddc_watched = [p]
+
+    def ddc_tick(self):
+        """One dynamic-update check (debounced file change, horizon edit or poll). Returns the report or None."""
+        if not self.ddc_auto:
+            return None
+        try:
+            rep = self.section.ddc_refresh()
+        except Exception as e:
+            self.statusBar().showMessage(f"Depth model update failed: {e}", 10000)
+            return None
+        self._ddc_watch_paths()
+        if rep:
+            self.statusBar().showMessage(rep["message"], 15000)
+            dlg = self._velocity_dialog
+            if dlg is not None and dlg.ddm is not None:
+                if dlg.ddm is self.section.depth_model():
+                    dlg.model_refreshed(rep)
+                elif dlg.ddm.refresh():
+                    dlg.model_refreshed(dlg.ddm.last)
+        return rep
 
     def _act(self, menu, text, fn, key=None):
         a = QtGui.QAction(text, self)
@@ -257,6 +322,7 @@ class MainWindow(QtWidgets.QMainWindow):
     # ------------------------------------------------------------ project
     def _refresh(self):
         p = self.project
+        self._ddc_watch_paths()
         self.setWindowTitle(f"Seismic Interpretation Tool - {p.name}" + (f"  [{p.path}]" if p.path else ""))
         self.tree.clear()
         r3 = QtWidgets.QTreeWidgetItem(self.tree, [f"3D volumes ({len(p.volumes)})"])
@@ -283,6 +349,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.basemap.draw_faults()
 
     def _horizons_changed(self):
+        if self.ddc_auto:
+            self._ddc_debounce.start()
         self.section.draw_horizons()
         self.basemap.show_horizon(self.horizon_dock.active() if self.horizon_dock.map_chk.isChecked() else None)
         self.basemap.show_current(self.section.current_trace_line())
@@ -701,7 +769,10 @@ class MainWindow(QtWidgets.QMainWindow):
                                               "(with tops or time-depth).")
             return None
         from .velocity_dialog import VelocityDialog
-        dlg = VelocityDialog(self.project, self.basemap, self, lambda: self.section.redraw())
+        def changed():
+            self.section.adopt_depth_model(dlg.ddm)
+            self.section.redraw()
+        dlg = VelocityDialog(self.project, self.basemap, self, changed)
         dlg.show()
         self._velocity_dialog = dlg
         return dlg

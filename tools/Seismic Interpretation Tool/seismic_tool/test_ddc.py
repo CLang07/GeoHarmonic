@@ -40,8 +40,9 @@ def kt_earth(t1, t2):
     return z1, z2
 
 
-def ddc_case(tmp, name, earth, wells=None):
-    """3D survey (41 x 41, 25 m) with two horizons and wells whose tops follow `earth(t1, t2) -> (z1, z2)`."""
+def ddc_case(tmp, name, earth, wells=None, n=None, ns=250):
+    """3D survey (41 x 41, 25 m) with two horizons and wells whose tops follow `earth(t1, t2) -> (z1, z2)`.
+    n = survey size (n x n) for speed tests (ns small: the traces do not matter to the velocity model)."""
     from .welltie import wc
     wc()
     from well_correlation.geo import tm_forward
@@ -53,7 +54,8 @@ def ddc_case(tmp, name, earth, wells=None):
     os.makedirs(os.path.join(d, "wells_data"))
     x0, y0 = tm_forward(LAT, LON)
     x0, y0 = round(x0), round(y0)
-    i, j = np.meshgrid(np.arange(NIL), np.arange(NXL), indexing="ij")
+    nil = nxl = n or NIL
+    i, j = np.meshgrid(np.arange(nil), np.arange(nxl), indexing="ij")
     X, Y = x0 + DX * j, y0 + DX * i
     t1, t2 = t_surfaces(X, Y, x0, y0)
     z1, z2 = earth(t1, t2)
@@ -79,7 +81,6 @@ def ddc_case(tmp, name, earth, wells=None):
     wp.formations = [{"name": "Top A", "color": "#ff0000"}, {"name": "Top B", "color": "#0000ff"}]
     wpath = os.path.join(d, "wells_data", f"{name}.wcproj.json")
     wp.save(wpath)
-    ns = 250
     cube = traces_from_surfaces([t1, t2], [1.0, -1.0], ns, 0.008, noise=0.0)
     write_3d(os.path.join(d, "v.sgy"), cube, dt_us=8000, x0=x0, y0=y0)
     store = os.path.join(d, "v_seismic", "V")
@@ -205,6 +206,97 @@ def run(check, tmp):
     return sp
 
 
+def _bump_mtime(path):
+    st = os.stat(path)
+    os.utime(path, (st.st_atime, st.st_mtime + 5))
+
+
+def _edit_tops(path, fn):
+    import json
+    with open(path) as fh:
+        d = json.load(fh)
+    fn(d["tops"])
+    with open(path, "w") as fh:
+        json.dump(d, fh)
+    _bump_mtime(path)
+
+
+def run_dynamic(check, tmp):
+    """17c: dynamic update - only layers at/below a change are rebuilt; incremental == full; what-if wells."""
+    import time
+    from .ddc import DynamicDepthModel
+    from .velocity import VelocityModel
+    sp, T = ddc_case(tmp, "dyn", kz_earth)
+    md = VelocityModel(sp, "3D:V", LAYERS, functions=[{"func": "v0kz"}, {"func": "v0"}]).to_dict()
+    dm = DynamicDepthModel(sp, md).build()
+    check(dm.refresh() is None, "17c: no change -> no rebuild")
+    z0 = [a.copy() for a in dm.vm.grids()["z"]]
+    wpath = sp.well_project
+    _edit_tops(wpath, lambda t: t["W-3"].__setitem__("Top B", t["W-3"]["Top B"] + 4.0))
+    rep = dm.refresh()
+    z1 = dm.vm.grids()["z"]
+    check(rep is not None and rep["from_layer"] == 1 and "W-3 Top B top moved +4.0 m" in rep["message"]
+          and "rebuilt layer 2" in rep["message"], f"17c: top change detected: {rep and rep['message']}")
+    check(np.array_equal(z1[0], z0[0]), "17c: map above the changed top is bit-identical")
+    d = np.abs(z1[1] - z0[1])
+    check(d.max() > 1.0 and d.max() < 6.0, f"17c: map of the changed layer moves (max {d.max():.2f} m)")
+    full = DynamicDepthModel(sp, md).build()
+    dd = max(np.nanmax(np.abs(full.vm.grids()["z"][k] - z1[k])) for k in range(2))
+    check(dd < 1e-9, f"17c: incremental rebuild == full rebuild ({dd:.1e} m)")
+    mt = {r[0] + r[1]: r[5] for r in dm.vm.misfit_table()}
+    check(abs(mt["W-3H2"]) < 4.0, "17c: misfit table follows the moved top")
+    _edit_tops(wpath, lambda t: t["W-1"].__setitem__("Top A", t["W-1"]["Top A"] - 3.0))
+    rep = dm.refresh()
+    check(rep["from_layer"] == 0 and not np.array_equal(dm.vm.grids()["z"][0], z0[0]),
+          f"17c: shallower top -> all layers rebuilt ({rep['message']})")
+    # horizon edit (in memory, as the picker does)
+    z2 = [a.copy() for a in dm.vm.grids()["z"]]
+    h = sp.horizons.get("H2")
+    h.data["3D:V"][24:30, 8:14] += 10.0  # away from the wells (a well top pins its depth)
+    rep = dm.refresh()
+    z3 = dm.vm.grids()["z"]
+    check(rep is not None and rep["from_layer"] == 1 and "horizon H2 changed" in rep["message"]
+          and np.array_equal(z3[0], z2[0]) and np.nanmax(z3[1] - z2[1]) > 3.0,
+          f"17c: horizon edit -> layer 2 rebuilt, layer 1 identical ({rep and rep['message']})")
+    h.data["3D:V"][24:30, 8:14] -= 10.0
+    dm.refresh()
+    # what-if well
+    zb = [a.copy() for a in dm.vm.grids()["z"]]
+    x, y = float(T["X"][20, 30]), float(T["Y"][20, 30])
+    zm = float(dm.vm.depth_grid(1).sample([x], [y])[0])
+    rep = dm.add_what_if("P-1", x, y, {"Top B": zm + 30.0})
+    za = dm.vm.grids()["z"]
+    zn = float(dm.vm.depth_grid(1).sample([x], [y])[0])
+    check(np.array_equal(za[0], zb[0]) and abs(zn - (zm + 30.0)) < 3.0,
+          f"17c: what-if top pulls layer 2 ({zm:.1f} -> {zn:.1f} m, target {zm + 30:.1f}); layer 1 identical")
+    check(sp.display.get("ddc_what_if", {}).get("wells", {}).get("P-1") is not None and
+          any(r[0] == "what-if: P-1" for r in dm.vm.misfit_table()), "17c: what-if well saved in the seismic project "
+                                                                      "+ in the misfit table")
+    import json
+    with open(wpath) as fh:
+        check("P-1" not in json.load(fh)["tops"], "17c: well project untouched by the what-if well")
+    dm2 = DynamicDepthModel(sp, md).build()
+    check(np.allclose(dm2.vm.grids()["z"][1], za[1]), "17c: what-if well reloaded with the project")
+    dm.remove_what_if("P-1")
+    check(np.allclose(dm.vm.grids()["z"][1], zb[1]) and "ddc_what_if" not in sp.display,
+          "17c: removing the what-if well restores the model")
+    # speed: 50 wells, 300 x 300 map
+    rng = np.random.default_rng(3)
+    wells = {f"S-{i}": (int(a), int(b)) for i, (a, b) in enumerate(rng.integers(5, 295, (50, 2)))}
+    spb, _ = ddc_case(tmp, "big", kz_earth, wells=wells, n=300, ns=8)
+    mdb = VelocityModel(spb, "3D:V", LAYERS, functions=[{"func": "v0kz"}, {"func": "v0kz"}]).to_dict()
+    t0 = time.perf_counter()
+    dmb = DynamicDepthModel(spb, mdb).build()
+    tb = time.perf_counter() - t0
+    _edit_tops(spb.well_project, lambda t: t["S-7"].__setitem__("Top A", t["S-7"]["Top A"] + 5.0))
+    t0 = time.perf_counter()
+    rep = dmb.refresh()
+    tr = time.perf_counter() - t0
+    check(rep is not None and rep["from_layer"] == 0 and tr < 2.0,
+          f"17c: 50 wells, 300 x 300 map: full build {tb:.2f} s, rebuild after a top change {tr:.2f} s (< 2 s)")
+    return sp
+
+
 def run_gui(check, tmp):
     from .gui.velocity_dialog import VelocityDialog
     sp, T = ddc_case(tmp, "kzgui", kz_earth)
@@ -221,4 +313,49 @@ def run_gui(check, tmp):
     dlg.use()
     d = sp.display.get("velocity_model", {})
     check(d.get("functions", [{}])[1].get("k") == 0.35, "17a dialog: functions stored for the depth display")
+    return True
+
+
+def run_gui_dynamic(check, tmp):
+    """17c in the main window: View > Auto-update depth model, watcher tick, shared model with the dialog, what-if."""
+    from .gui.main_window import MainWindow
+    sp, T = ddc_case(tmp, "dyngui", kz_earth)
+    w = MainWindow(sp.path)
+    dlg = w.velocity_model()
+    dlg.build("3D:V", LAYERS, False, functions=[{"func": "v0kz"}, {"func": "v0"}])
+    dlg.use()
+    check(w.section.depth_model() is dlg.ddm, "17c GUI: 'Use' shares the dialog's dynamic model with the section")
+    check(w.ddc_tick() is None, "17c GUI: auto-update off -> tick does nothing")
+    w.set_ddc(True)
+    check(w.ddc_auto and w._ddc_watched == [w.project.well_project], "17c GUI: auto-update on watches the well project")
+    check(w.ddc_tick() is None, "17c GUI: nothing changed -> no rebuild")
+    z0 = dlg.model.grids()["z"][0].copy()
+    _edit_tops(w.project.well_project, lambda t: t["W-2"].__setitem__("Top B", t["W-2"]["Top B"] - 6.0))
+    rep = w.ddc_tick()
+    check(rep is not None and "W-2 Top B top moved -6.0 m" in rep["message"] and
+          np.array_equal(dlg.model.grids()["z"][0], z0), f"17c GUI: tick rebuilds after a top edit ({rep and rep['message']})")
+    vol = w.project.volume("V")
+    p = w.section
+    p.source = ("3D", "V")
+    p.mode = "Inline"
+    p.number = int(vol.inlines[20])
+    p.domain = "Depth"
+    p.redraw()
+    check(p._data is not None and p._yaxis[-1] > 1000, "17c GUI: depth section drawn from the dynamic model")
+    x, y = float(T["X"][20, 30]), float(T["Y"][20, 30])
+    zm = float(dlg.model.depth_grid(1).sample([x], [y])[0])
+    rep = dlg.add_what_if("P-1", x, y, "H2", zm + 20.0)
+    check(rep is not None and "what-if P-1 added" in rep["message"] and
+          abs(float(w.section.velocity_model().depth_grid(1).sample([x], [y])[0]) - zm - 20.0) < 2.0,
+          "17c GUI: what-if pseudo-top from the dialog reaches the depth display")
+    check(w.ddc_tick() is None, "17c GUI: the what-if change is not rebuilt twice")
+    rep = dlg.clear_what_if()
+    check(rep is not None and "ddc_what_if" not in w.project.display, "17c GUI: clear what-if wells")
+    h = w.project.horizons.get("H1")
+    h.data["3D:V"][0:5, 0:5] += 4.0
+    w._horizons_changed()
+    rep = w.ddc_tick()
+    check(rep is not None and rep["from_layer"] == 0, "17c GUI: horizon edit picked up by the tick")
+    w.set_ddc(False)
+    check(not w.ddc_auto and w._ddc_watched == [], "17c GUI: auto-update off")
     return True

@@ -139,6 +139,7 @@ def run():
         from . import test_ddc
         os.makedirs(os.path.join(tmp, "ddc"))
         test_ddc.run(check, os.path.join(tmp, "ddc"))
+        test_ddc.run_dynamic(check, os.path.join(tmp, "ddc"))
         # ---- analytics
         from . import test_analytics
         test_analytics.run(check, tmp)
@@ -204,6 +205,7 @@ def run_gui():
         from . import test_ddc
         os.makedirs(os.path.join(tmp, "ddcgui"))
         test_ddc.run_gui(check, os.path.join(tmp, "ddcgui"))
+        test_ddc.run_gui_dynamic(check, os.path.join(tmp, "ddcgui"))
         from . import test_explain
         os.makedirs(os.path.join(tmp, "angui"))
         test_explain.run_gui(check, os.path.join(tmp, "angui"))

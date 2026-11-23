@@ -15,6 +15,9 @@ class VelocityDialog(QtWidgets.QDialog):
         self.setWindowTitle("Velocity model and depth conversion")
         self.project, self.basemap, self.on_change = project, basemap, on_change
         self.model = None
+        self.ddm = None  # ddc.DynamicDepthModel around self.model
+        self._shown_layer = None
+        self._info_text = ""
         lay = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
         self.survey = QtWidgets.QComboBox()
@@ -47,9 +50,27 @@ class VelocityDialog(QtWidgets.QDialog):
         for b in (self.b_build, self.b_map, self.b_xplot, self.b_use, self.b_csv):
             row.addWidget(b)
         lay.addLayout(row)
+        wrow = QtWidgets.QHBoxLayout()
+        wrow.addWidget(QtWidgets.QLabel("What-if well:  X"))
+        self.wi_x = QtWidgets.QLineEdit("")
+        self.wi_y = QtWidgets.QLineEdit("")
+        self.wi_layer = QtWidgets.QComboBox()
+        self.wi_layer.addItems([h.name for h in project.horizons.items])
+        self.wi_z = QtWidgets.QLineEdit("")
+        self.wi_z.setPlaceholderText("TVDSS m")
+        self.b_wi_add = QtWidgets.QPushButton("Add pseudo-top")
+        self.b_wi_clear = QtWidgets.QPushButton("Clear what-if wells")
+        for w_ in (self.wi_x, QtWidgets.QLabel("Y"), self.wi_y, QtWidgets.QLabel("horizon"), self.wi_layer,
+                   QtWidgets.QLabel("depth"), self.wi_z, self.b_wi_add, self.b_wi_clear):
+            wrow.addWidget(w_)
+        lay.addLayout(wrow)
         self.info = QtWidgets.QLabel("")
         self.info.setWordWrap(True)
         lay.addWidget(self.info)
+        self.b_wi_add.clicked.connect(lambda *_: self._safe(lambda: self.add_what_if(
+            None, float(self.wi_x.text()), float(self.wi_y.text()), self.wi_layer.currentText(),
+            float(self.wi_z.text()))))
+        self.b_wi_clear.clicked.connect(lambda *_: self._safe(self.clear_what_if))
         self.resize(820, 640)
         self.b_build.clicked.connect(lambda: self._build())
         self.b_map.clicked.connect(lambda: self._safe(lambda: self.show_depth_map(self.layer_index_of_row(
@@ -149,7 +170,13 @@ class VelocityDialog(QtWidgets.QDialog):
             if functions is None:
                 functions = self.functions_from_table()
         residual = bool(self.resid.isChecked()) if residual is None else residual
-        self.model = VelocityModel(self.project, key, layers, residual, functions=functions).build()
+        from ..ddc import DynamicDepthModel
+        self.model = VelocityModel(self.project, key, layers, residual, functions=functions)
+        self.ddm = DynamicDepthModel(self.project, self.model).build()
+        self._fill_misfit()
+        return self.model
+
+    def _fill_misfit(self):
         mt = self.model.misfit_table()
         self.misfit.setRowCount(len(mt))
         for r, row in enumerate(mt):
@@ -157,9 +184,43 @@ class VelocityDialog(QtWidgets.QDialog):
             for c, v in enumerate(vals):
                 self.misfit.setItem(r, c, QtWidgets.QTableWidgetItem(str(v)))
         res = np.array([m[5] for m in mt]) if mt else np.array([0.0])
-        self.info.setText(f"{len(self.model.grids()['wells'])} wells; misfit RMS {np.sqrt(np.mean(res ** 2)):.1f} m, "
-                          f"max {np.max(np.abs(res)):.1f} m\n" + self.info_text())
-        return self.model
+        self._info_text = (f"{len(self.model.grids()['wells'])} wells; misfit RMS {np.sqrt(np.mean(res ** 2)):.1f} m, "
+                          f"max {np.max(np.abs(res)):.1f} m\n" + self.info_text() +
+                          (f"\n{len(self.ddm.pseudo)} what-if well(s)" if self.ddm is not None and self.ddm.pseudo
+                           else ""))
+        self.info.setText(self._info_text)
+
+    def model_refreshed(self, report=None):
+        """The dynamic model changed (auto-update): refill the misfit table and redraw the depth map shown."""
+        if self.model is None:
+            return
+        self._fill_misfit()
+        if report:
+            self.info.setText(report.get("message", "") + "\n" + self._info_text)
+        if self._shown_layer is not None and self.basemap is not None and self._shown_layer < len(self.model.layers):
+            self.basemap.show_grid(self.model.depth_grid(self._shown_layer))
+
+    def add_what_if(self, name, x, y, horizon_or_formation, z):
+        """Pseudo-top (TVDSS m) at map x, y; the model rebuilds from that layer down (well project untouched)."""
+        if self.ddm is None:
+            self.build()
+        name = name or f"WI-{len(self.ddm.pseudo) + 1}"
+        tops = dict(self.ddm.pseudo.get(name, {}).get("tops", {}))
+        tops[horizon_or_formation] = float(z)
+        rep = self.ddm.add_what_if(name, x, y, tops)
+        self.model_refreshed(rep)
+        if self.on_change and self.project.display.get("velocity_model") == self.model.to_dict():
+            self.on_change()
+        return rep
+
+    def clear_what_if(self):
+        if self.ddm is None:
+            return None
+        rep = self.ddm.remove_what_if(None)
+        self.model_refreshed(rep)
+        if self.on_change and self.project.display.get("velocity_model") == self.model.to_dict():
+            self.on_change()
+        return rep
 
     def info_text(self):
         """One line per layer: function, k and where it came from."""
@@ -246,6 +307,7 @@ class VelocityDialog(QtWidgets.QDialog):
         if self.model is None:
             self.build()
         g = self.model.depth_grid(k)
+        self._shown_layer = k
         if self.basemap is not None:
             self.basemap.show_grid(g)
         return g

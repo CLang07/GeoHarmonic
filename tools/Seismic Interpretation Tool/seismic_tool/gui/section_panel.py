@@ -404,13 +404,43 @@ class SectionPanel(QtWidgets.QWidget):
         d = self.project.display.get("velocity_model") if self.project else None
         if not d:
             return None
+        dm = self.depth_model()
+        return dm.vm if dm is not None else None
+
+    def depth_model(self):
+        """The project's velocity model as a ddc.DynamicDepthModel (cached per model settings); None if undefined."""
+        d = self.project.display.get("velocity_model") if self.project else None
+        if not d:
+            return None
         key = repr(d)
         cache = self.__dict__.setdefault("_vm_cache", {})
         if key not in cache:
-            from ..velocity import VelocityModel
+            from ..ddc import DynamicDepthModel
             cache.clear()
-            cache[key] = VelocityModel.from_dict(self.project, d).build()
+            cache[key] = DynamicDepthModel(self.project, d).build()
         return cache[key]
+
+    def adopt_depth_model(self, dm):
+        """Share a DynamicDepthModel built elsewhere (velocity dialog 'Use') for the stored model settings."""
+        d = self.project.display.get("velocity_model") if self.project else None
+        if d and dm is not None and dm.vm.to_dict() == d:
+            cache = self.__dict__.setdefault("_vm_cache", {})
+            cache.clear()
+            cache[repr(d)] = dm
+
+    def ddc_refresh(self, force=False):
+        """Dynamic depth conversion: rebuild the changed part of the depth model; redraw a depth section.
+        Returns the refresh report or None (no model / nothing changed)."""
+        dm = self.depth_model()
+        if dm is None:
+            return None
+        rep = dm.refresh(force)
+        if rep and rep.get("from_layer") is not None and self.domain == "Depth" and self.project is not None:
+            try:
+                self.redraw()
+            except Exception:
+                pass
+        return rep
 
     def section_xy(self):
         """Map positions (x, y) of the traces of the section shown."""

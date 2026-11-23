@@ -42,6 +42,21 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.23.0 - Dynamic depth conversion, part 2: live update + what-if wells (PLAN item 17c)
+- **View > Auto-update depth model**: while on, the tool watches the linked well project (.wcproj.json) and the
+  horizons of the model. Save a moved / new top in the Well Correlation Tool (or re-track a horizon) and within ~1-2 s
+  the depth model rebuilds only the layers at and below the change; the depth section redraws, the velocity dialog's
+  misfit table and the depth map shown on the basemap refresh, and the status bar says what happened, e.g.
+  "Maui-6 F0 top moved +4.0 m -> rebuilt layers 4-6 in 0.30 s". Maps above the change stay bit-identical.
+- **What-if well** (Velocity model dialog, bottom row): X, Y, horizon, TVDSS depth -> "Add pseudo-top". The model is
+  rebuilt with that pseudo-top as if a well had it (from that horizon down); the well project is not touched (the
+  what-if wells are kept in the seismic project). "Clear what-if wells" removes them.
+- The velocity dialog and the depth display now share one model after "Use for depth display".
+- Speed: 50 wells on a 300 x 300 map rebuild in < 0.1 s; on a full 1000 x 1500 map expect ~0.5 s per layer whose
+  well values changed (deeper layers with unchanged well values reuse their gridded velocities).
+- Test: link the NZ well project, build + Use a model, View > Auto-update depth model, show an inline in Depth; in the
+  Well Correlation Tool move a Maui-6 top and save -> status line + section update. Then a what-if pseudo-top.
+
 ## Seismic v0.22.0 - Dynamic depth conversion, part 1: velocity functions (PLAN item 17a)
 - Interpret > Velocity model: each layer now has a **velocity function** column and a **k** column:
   V0 (constant, the old behaviour and the default), V0 + kZ, V0 + kT, Well T-D function (IDW-blended or nearest

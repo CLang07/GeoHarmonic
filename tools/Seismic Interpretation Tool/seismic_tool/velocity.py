@@ -28,12 +28,26 @@ def _idw_nodes(X, Y, px, py, pv, power=2.0):
     """Inverse-distance blend of per-well values; a value may be a scalar or an array of X's shape."""
     if len(pv) == 1:
         return np.broadcast_to(np.asarray(pv[0], float), X.shape).copy()
+    X = np.asarray(X, float)
+    Y = np.asarray(Y, float)
     num = np.zeros(X.shape)
     den = np.zeros(X.shape)
-    for x, y, v in zip(px, py, pv):
-        w = 1.0 / np.maximum((X - x) ** 2 + (Y - y) ** 2, 1.0) ** (power / 2)
-        num += w * v
+    w = np.empty(X.shape)
+    t = np.empty(X.shape)
+    for x, y, v in zip(px, py, pv):  # in place: no temporaries (1.5M-node maps x 50 wells)
+        np.subtract(X, x, out=w)
+        w *= w
+        np.subtract(Y, y, out=t)
+        t *= t
+        w += t
+        np.maximum(w, 1.0, out=w)
+        if power == 2.0:
+            np.reciprocal(w, out=w)
+        else:
+            np.power(w, -power / 2, out=w)
         den += w
+        np.multiply(w, v, out=t)
+        num += t
     return num / den
 
 
@@ -164,37 +178,40 @@ class VelocityModel:
                                      ref.x0, ref.y0, ref.dx, ref.dy) for g in grids[1:]]
         return grids
 
-    def well_table(self):
+    def well_row(self, name, tg=None):
+        """Well-table row of one well ({well, x, y, t, z, vint, source}) or None (no position / outside the map)."""
+        ws = self.project.wellset()
+        tg = tg if tg is not None else self.time_grids()
+        w = ws.well(name)
+        if w.x is None:
+            return None
+        ts = [float(g.sample([w.x], [w.y])[0]) for g in tg]
+        if not all(np.isfinite(ts)):
+            return None
+        zs, src = [], []
+        tops = (ws.wcp.tops or {}).get(name, {})
+        for (hname, fm), t in zip(self.layers, ts):
+            if fm and tops.get(fm) is not None:
+                try:
+                    ws.wcp.load_well(name)
+                except Exception:
+                    pass
+                zs.append(float(w.md_to_tvdss(tops[fm])))
+                src.append(f"top {fm}")
+            else:
+                zs.append(float(ws.td_for(name).depth(t)))
+                src.append("time-depth")
+        return {"well": name, "x": w.x, "y": w.y, "t": ts, "z": zs, "vint": _vint(ts, zs), "source": src}
+
+    def well_table(self, tg=None):
         """[{well, x, y, t: [..], z: [..], vint: [..], source: [..]}] for wells inside the map."""
         ws = self.project.wellset()
-        tg = self.time_grids()
+        tg = tg if tg is not None else self.time_grids()
         rows = []
         for n in ws.names:
-            w = ws.well(n)
-            if w.x is None:
-                continue
-            ts = [float(g.sample([w.x], [w.y])[0]) for g in tg]
-            if not all(np.isfinite(ts)):
-                continue
-            zs, src = [], []
-            tops = (ws.wcp.tops or {}).get(n, {})
-            for (hname, fm), t in zip(self.layers, ts):
-                if fm and tops.get(fm) is not None:
-                    try:
-                        ws.wcp.load_well(n)
-                    except Exception:
-                        pass
-                    zs.append(float(w.md_to_tvdss(tops[fm])))
-                    src.append(f"top {fm}")
-                else:
-                    zs.append(float(ws.td_for(n).depth(t)))
-                    src.append("time-depth")
-            t_prev, z_prev = 0.0, 0.0
-            vint = []
-            for t, z in zip(ts, zs):
-                vint.append(2000.0 * (z - z_prev) / max(t - t_prev, 1e-6))
-                t_prev, z_prev = t, z
-            rows.append({"well": n, "x": w.x, "y": w.y, "t": ts, "z": zs, "vint": vint, "source": src})
+            r = self.well_row(n, tg)
+            if r is not None:
+                rows.append(r)
         return rows
 
     # -------------------------------------------------------------- model
@@ -225,30 +242,61 @@ class VelocityModel:
         ws = self.project.wellset()
         return [ws.td_for(r["well"]) for r in wt]
 
-    def build(self):
-        tg = self.time_grids()
-        wt = self.well_table()
+    def build(self, from_layer=0, reuse=None, time_grids=None, wells=None):
+        """Grid the model. Incremental (dynamic depth conversion): with `reuse` (a previous grids() dict of this model)
+        layers above `from_layer` are copied unchanged and only from_layer and below are recomputed. `time_grids` /
+        `wells` (well-table rows) may be passed in to skip re-reading them. A row may carry "from_layer" (what-if wells:
+        used only for that layer and below) and "pseudo" (no time-depth function)."""
+        tg = time_grids if time_grids is not None else self.time_grids()
+        wt = wells if wells is not None else self.well_table(tg)
         if not wt:
             raise ValueError("no well inside the map has values for all horizons")
+        K = len(tg)
+        from_layer = int(min(max(from_layer, 0), K)) if reuse is not None else 0
         X, Y = tg[0].node_xy()
-        px = np.array([r["x"] for r in wt])
-        py = np.array([r["y"] for r in wt])
-        vgrids, zgrids, v0grids, info = [], [], [], []
-        z_prev = np.zeros(X.shape)
-        t_prev = np.zeros(X.shape)
+        px_all = np.array([r["x"] for r in wt], float)
+        py_all = np.array([r["y"] for r in wt], float)
+        real = [i for i, r in enumerate(wt) if not r.get("pseudo")]
+        td_px, td_py = px_all[real], py_all[real]
         tds = None
-        for k, g in enumerate(tg):
+        if any(f["func"] == "td" for f in self.functions):
+            if reuse is not None and reuse.get("td") is not None and \
+                    [wt[i]["well"] for i in real] == reuse.get("td_wells"):
+                tds = reuse["td"]
+            else:
+                tds = self._td_curves([wt[i] for i in real])
+        vgrids, zraw, v0grids, info = [], [], [], []
+        if from_layer:
+            vgrids = list(reuse["v"][:from_layer])
+            zraw = list(reuse["z_raw"][:from_layer])
+            v0grids = list(reuse["v0"][:from_layer])
+            info = list(reuse["layers"][:from_layer])
+            z_prev, t_prev = zraw[-1], tg[from_layer - 1].z
+        else:
+            z_prev = np.zeros(X.shape)
+            t_prev = np.zeros(X.shape)
+        for k in range(from_layer, K):
+            g = tg[k]
+            use = [i for i, r in enumerate(wt) if r.get("from_layer", 0) <= k]
+            if not use:
+                raise ValueError(f"layer {self.layers[k][0]}: no well")
+            rows = [wt[i] for i in use]
+            px, py = px_all[use], py_all[use]
             f = self.functions[k]
             func = f["func"]
             dt = np.maximum(g.z - t_prev, 0.0)
-            zt_w, zb_w, tt_w, tb_w = self._layer_data(wt, k)
+            zt_w, zb_w, tt_w, tb_w = self._layer_data(rows, k)
             v0 = None
             lay = {"func": func, "k": None, "k_source": ""}
+            prev = reuse["layers"][k] if reuse is not None and k < len(reuse.get("layers", [])) else {}
+            names = [r["well"] for r in rows]
             if func == "v0":
-                v = _idw_nodes(X, Y, px, py, np.array([r["vint"][k] for r in wt]))
+                vw = np.array([r["vint"][k] for r in rows])
+                lay["sig"] = _sig(func, names, vw)
+                v = reuse["v"][k] if prev.get("sig") == lay["sig"] else _idw_nodes(X, Y, px, py, vw)
                 z = z_prev + v * dt / 2000.0
             elif func in ("v0kz", "v0kt"):
-                kk, src = self._layer_k(wt, k)
+                kk, src = self._layer_k(rows, k)
                 lay.update(k=kk, k_source=src)
                 if func == "v0kz":
                     v0w = kz_v0(zt_w, zb_w, kk, (tb_w - tt_w) / 2000.0)
@@ -257,7 +305,8 @@ class VelocityModel:
                 ok = np.isfinite(v0w)
                 if not ok.any():
                     raise ValueError(f"layer {self.layers[k][0]}: no well with a usable thickness for V0")
-                v0 = _idw_nodes(X, Y, px[ok], py[ok], v0w[ok])
+                lay["sig"] = _sig(func, [n for n, o in zip(names, ok) if o], v0w[ok], kk)
+                v0 = reuse["v0"][k] if prev.get("sig") == lay["sig"] else _idw_nodes(X, Y, px[ok], py[ok], v0w[ok])
                 if func == "v0kz":
                     z = kz_base(z_prev, v0, kk, dt / 2000.0)
                     v_top = v0 + kk * z_prev
@@ -267,15 +316,15 @@ class VelocityModel:
                     v_top = v0 + kk * a
                 with np.errstate(invalid="ignore", divide="ignore"):
                     v = np.where(dt > 1e-6, 2000.0 * (z - z_prev) / np.where(dt > 1e-6, dt, 1.0), v_top)
-            else:  # td: thickness from the wells' time-depth functions, blended
-                if tds is None:
-                    tds = self._td_curves(wt)
+            else:  # td: thickness from the (real) wells' time-depth functions, blended
+                if not tds:
+                    raise ValueError(f"layer {self.layers[k][0]}: T-D function needs a real well")
                 mode = f.get("blend", "idw")
                 fin = np.isfinite(g.z) & np.isfinite(t_prev)
                 tb_safe = np.where(fin, t_prev + dt, 0.0)
                 tt_safe = np.where(fin, t_prev, 0.0)
                 if mode == "nearest":
-                    w = _blend_weights(X.ravel(), Y.ravel(), px, py, "nearest")
+                    w = _blend_weights(X.ravel(), Y.ravel(), td_px, td_py, "nearest")
                     dz = np.zeros(X.size)
                     for i, td in enumerate(tds):
                         sel = w[:, i] > 0
@@ -283,26 +332,31 @@ class VelocityModel:
                             dz[sel] = np.asarray(td.depth(tb_safe.ravel()[sel])) - np.asarray(td.depth(tt_safe.ravel()[sel]))
                     dz = dz.reshape(X.shape)
                 else:
-                    dz = _idw_nodes(X, Y, px, py, [np.asarray(td.depth(tb_safe)) - np.asarray(td.depth(tt_safe))
-                                                   for td in tds])
+                    dz = _idw_nodes(X, Y, td_px, td_py, [np.asarray(td.depth(tb_safe)) - np.asarray(td.depth(tt_safe))
+                                                         for td in tds])
                 z = np.where(fin, z_prev + np.maximum(dz, 0.0), np.nan)
                 with np.errstate(invalid="ignore", divide="ignore"):
                     v = np.where(dt > 1e-6, 2000.0 * (z - z_prev) / np.where(dt > 1e-6, dt, 1.0), np.nan)
                 lay["blend"] = mode
+            lay["n_wells"] = len(rows)
             vgrids.append(v)
-            zgrids.append(z)
+            zraw.append(z)
             v0grids.append(v0)
             info.append(lay)
             z_prev, t_prev = z, g.z
-        if self.residual_correction:
-            for k in range(len(tg)):
-                dg = MapGrid(zgrids[k], tg[k].kind, "m", "", tg[k].vol, tg[k].x0, tg[k].y0, tg[k].dx, tg[k].dy)
-                res = np.array([r["z"][k] for r in wt]) - dg.sample(px, py)
+        zgrids = list(reuse["z"][:from_layer]) if from_layer else []
+        for k in range(from_layer, K):
+            z = zraw[k]
+            if self.residual_correction:
+                use = [i for i, r in enumerate(wt) if r.get("from_layer", 0) <= k]
+                dg = MapGrid(z, tg[k].kind, "m", "", tg[k].vol, tg[k].x0, tg[k].y0, tg[k].dx, tg[k].dy)
+                res = np.array([wt[i]["z"][k] for i in use]) - dg.sample(px_all[use], py_all[use])
                 ok = np.isfinite(res)
                 if ok.any():
-                    zgrids[k] = zgrids[k] + _idw_nodes(X, Y, px[ok], py[ok], res[ok])
-        self._grids = {"t": tg, "v": vgrids, "z": zgrids, "v0": v0grids, "wells": wt, "layers": info,
-                       "td": tds, "px": px, "py": py}
+                    z = z + _idw_nodes(X, Y, px_all[use][ok], py_all[use][ok], res[ok])
+            zgrids.append(z)
+        self._grids = {"t": tg, "v": vgrids, "z": zgrids, "z_raw": zraw, "v0": v0grids, "wells": wt, "layers": info,
+                       "td": tds, "td_wells": [wt[i]["well"] for i in real], "px": td_px, "py": td_py}
         return self
 
     def layer_info(self):
@@ -366,6 +420,8 @@ class VelocityModel:
         out = []
         for r in g["wells"]:
             for k, (hname, fm) in enumerate(self.layers):
+                if k < r.get("from_layer", 0):
+                    continue
                 zm = float(self.depth_grid(k).sample([r["x"]], [r["y"]])[0])
                 out.append((r["well"], hname, fm or "", r["z"][k], zm, r["z"][k] - zm))
         return out
@@ -489,6 +545,25 @@ class VelocityModel:
     def from_dict(cls, project, d):
         return cls(project, d["survey"], [tuple(l) for l in d["layers"]], d.get("residual_correction", False),
                    d.get("cell", 100.0), d.get("below_velocity"), d.get("functions"))
+
+
+def _sig(*parts):
+    """Signature of a layer's gridding inputs (wells + values): equal -> the gridded values can be reused."""
+    import hashlib
+    h = hashlib.blake2b(digest_size=16)
+    for p in parts:
+        h.update(np.ascontiguousarray(p, float).tobytes() if isinstance(p, np.ndarray) else repr(p).encode())
+    return h.hexdigest()
+
+
+def _vint(ts, zs):
+    """Interval velocities (m/s) of the layers above each (time ms, depth m) pair, from the datum."""
+    t_prev, z_prev = 0.0, 0.0
+    out = []
+    for t, z in zip(ts, zs):
+        out.append(2000.0 * (z - z_prev) / max(t - t_prev, 1e-6))
+        t_prev, z_prev = t, z
+    return out
 
 
 def _monotonic_depths(zt):
