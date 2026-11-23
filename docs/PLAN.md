@@ -149,7 +149,17 @@ Kingdom-like interaction; large data.
    - Test data: synthetic horizontal wells (build section + 2-3 km lateral) through the synthetic 3D
      volume, with synthetic logs and stage CSV; the NZ deviated wells (Maui-5/6/7 surveys) for real
      trajectories. Tests: trajectory colours match the sampled attribute at MD; per-lateral stats correct.
-15. **Hardening** - status: todo
+15. **Scale + hardening** - status: todo
+   - Scale targets (Chris wants big datasets): 3D volume 20-50 GB SEG-Y, 1,000+ 2D lines, 10,000 wells,
+     1,000 laterals on the dashboard, all responsive on a 16-32 GB RAM PC.
+   - Seismic: import in parallel (threads over trace chunks; numpy releases the GIL in I/O/copy), bricked
+     store option (e.g. 64x64x64 bricks + small decimated overview volume for zoomed-out views), never load
+     a whole volume into RAM, progress + cancel for every long job. RGT/attributes: multi-resolution
+     (coarse solve on decimated grid, refine in bricks), out-of-core chunking, measured peak RAM.
+   - Wells: SQLite well index (headers, tops, survey/log catalogue) with spatial index (grid buckets) so
+     the map and dashboard query only visible wells; lazy log loading; npz cache already exists.
+   - Benchmarks script `dev/bench.py` (synthetic 2-5 GB volume, 10k synthetic wells) recording import time,
+     slice latency, map redraw time, peak RAM into docs/BENCHMARKS.md; fix the worst bottlenecks.
    - Read every module for bugs, edge cases (irregular 3D geometry, missing traces, dead traces, IBM vs
      IEEE, big files > 2 GB on Windows), performance on a 2 GB synthetic, docs/WHATS_NEW.md refresh.
 
