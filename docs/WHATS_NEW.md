@@ -42,6 +42,16 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.18.0 - scale: many wells on the basemap, threaded import (PLAN item 15 finished)
+- Basemap with thousands of wells: all wells are one scatter item; well names are drawn only for wells inside the
+  view and only when at most 150 are in view (zoom in to see names). Above 2,000 wells the view query uses the
+  SQLite well index (`wellindex.WellLayer`). Before, every well got its own text label (10,000 labels = very slow).
+- 3D import converts traces and builds the time-slice copy with up to 4 threads (`import_3d(workers=)`);
+  chunks capped at ~64 MB, NaN/inf clean-up in one pass. Output is bit-identical to the serial import (tested).
+- Sections render with automatic downsampling when zoomed out (long 2D lines, big time slices) and the colour
+  clip is computed from a 1M-value sample of the section instead of every value.
+- Dashboard: clicking the map finds the nearest wellbore in one vectorised search over all stations.
+
 ## Seismic v0.17.0 - Cancel button, well index (PLAN item 15, first part)
 - Every long job (3D import, dip, RGT, attributes, stacks) now has a **Cancel** button next to the progress bar;
   a cancelled 3D import removes its half-written store.

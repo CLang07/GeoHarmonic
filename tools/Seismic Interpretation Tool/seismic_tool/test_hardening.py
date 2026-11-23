@@ -47,7 +47,59 @@ def run(check, tmp):
           and np.isfinite(a).all() and np.abs(a[1, 5]).max() == 0 and np.abs(a[0, 3]).max() == 0
           and np.abs(a[2, 0]).max() > 0, "irregular 3D: holes, NaN + dead traces, crossline step 2")
     wellindex_checks(check, d)
+    welllayer_checks(check)
+    parallel_import_checks(check, d)
     return v
+
+
+def parallel_import_checks(check, d):
+    """Threaded import writes exactly the same stores as the serial one; cancel still cleans up."""
+    from .synth import write_3d, traces_from_surfaces, folded_surfaces
+    from .volume import import_3d
+    top, deep = folded_surfaces(23, 31)
+    cube = traces_from_surfaces([top, deep], [1.0, -0.7], 150, 0.004)
+    sgy = os.path.join(d, "par.sgy")
+    write_3d(sgy, cube)
+    a = import_3d(sgy, os.path.join(d, "ser"), chunk=97, workers=1)
+    b = import_3d(sgy, os.path.join(d, "par"), chunk=97, workers=3)
+    same = (np.array_equal(np.asarray(a.ilxl), np.asarray(b.ilxl)) and np.array_equal(np.asarray(a.tdata),
+            np.asarray(b.tdata)) and a.meta["fill_fraction"] == b.meta["fill_fraction"] == 1.0)
+    check(same, "parallel import (3 threads, 8 chunks) == serial import, both stores")
+    calls = {"n": 0}
+
+    def cancel():
+        calls["n"] += 1
+        return calls["n"] > 2  # header pass + one finished chunk, then cancel
+    store = os.path.join(d, "parc")
+    try:
+        import_3d(sgy, store, chunk=50, workers=3, cancel=cancel)
+        ok = False
+    except RuntimeError as e:
+        ok = str(e) == "cancelled"
+    check(ok and not os.path.exists(os.path.join(store, "data_ilxl.npy")), "parallel import cancelled cleanly")
+
+
+def welllayer_checks(check):
+    """Basemap well layer: labels only in view and only up to max_labels; index path == numpy path."""
+    from .wellindex import WellLayer
+    rng = np.random.default_rng(11)
+    xy = rng.uniform(0, 100000, (5000, 2))
+    wells = [(f"W{i}", x, y) for i, (x, y) in enumerate(xy)] + [("NOXY", None, None), ("NAN", float("nan"), 1.0)]
+    big = WellLayer(wells)  # indexed (>= 2000)
+    small = WellLayer(wells, index_from=10 ** 9)  # numpy box test
+    ok = big.index is not None and small.index is None and len(big) == 5000
+    for x0, y0, w in ((1000, 2000, 3000), (50000, 50000, 8000), (90000, 10, 15000)):
+        ok &= np.array_equal(big.in_view(x0, x0 + w, y0, y0 + w), small.in_view(x0 + w, x0, y0, y0 + w))
+    ok &= big.labels(None) == [] and big.labels(((0, 100000), (0, 100000))) == []
+    lab = big.labels(((20000, 23000), (40000, 43000)))
+    want = {f"W{i}" for i, (x, y) in enumerate(xy) if 20000 <= x <= 23000 and 40000 <= y <= 43000}
+    ok &= 0 < len(lab) <= 150 and {n_ for n_, _, _ in lab} == want
+    for qx, qy in rng.uniform(0, 100000, (10, 2)):
+        ok &= big.nearest(qx, qy) == small.nearest(qx, qy) == int(np.argmin(((xy - [qx, qy]) ** 2).sum(1)))
+    few = WellLayer([("A", 0.0, 0.0), ("B", 10.0, 0.0)])
+    ok &= [n_ for n_, _, _ in few.labels(None)] == ["A", "B"] and WellLayer([]).labels(None) == [] \
+        and WellLayer([]).nearest(0, 0) is None
+    check(ok, f"basemap well layer: 5,000 wells, labels only in view ({len(lab)}), index == numpy, nearest")
 
 
 def wellindex_checks(check, d):
@@ -100,4 +152,44 @@ def run_gui(check, tmp):
     s._job = (None, None, st)
     s.statusBar = lambda: type("SB", (), {"showMessage": lambda self, *a: None})()
     check(MainWindow.cancel_job(s) and st["cancel"], "Cancel button flags the running job")
+    # basemap: thousands of wells -> one scatter item + labels only for the wells in view
+    from .gui.basemap import Basemap
+    from .project import SeisProject
+    import json
+    rng = np.random.default_rng(3)
+    xy = rng.uniform(0, 50000, (3000, 2))
+    wp = os.path.join(tmp, "many.wcproj.json")
+    with open(wp, "w") as fh:
+        json.dump({"wells": [{"name": f"W{i}", "x": float(x), "y": float(y)} for i, (x, y) in enumerate(xy)]}, fh)
+    sp = SeisProject()
+    sp.well_project = wp
+    bm = Basemap()
+    bm.set_project(sp)
+    all_view = bm.update_labels(((0, 50000), (0, 50000)))
+    zoom = bm.update_labels(((1000, 3000), (1000, 3000)))
+    want = {f"W{i}" for i, (x, y) in enumerate(xy) if 1000 <= x <= 3000 and 1000 <= y <= 3000}
+    check(len(bm.wells) == 3000 and all_view == [] and {z[0] for z in zoom} == want and
+          len(bm._label_items) == len(want), f"basemap: 3,000 wells, {len(want)} labels when zoomed in, none zoomed out")
+    # dashboard nearest well (vectorised over every station of every wellbore)
+    from .gui.dashboard_window import DashboardWindow
+    from . import laterals as L
+    trajs = L.synthetic_laterals(40)
+    s2 = _S()
+    s2.trajs = trajs
+    ok = True
+    for t in trajs[::7]:
+        px, py = t.x[len(t.x) // 2] + 1.0, t.y[len(t.y) // 2] - 1.0
+        brute = int(np.argmin([np.min(np.hypot(u.x - px, u.y - py)) for u in trajs]))
+        ok &= DashboardWindow.nearest_well(s2, px, py) == brute
+    check(ok, "dashboard: vectorised nearest wellbore == per-well search")
+    # section colour levels from a strided sample of a big section
+    from .gui.section_panel import SectionPanel
+    s3 = _S()
+    s3._data = rng.standard_normal((3000, 2000)).astype(np.float16)
+    s3._level_sample = lambda limit=1_000_000: SectionPanel._level_sample(s3, limit)
+    s3.attr = "Seismic"
+    s3.clip_spin = type("Sp", (), {"value": lambda self: 99.0})()
+    lo, hi = SectionPanel.color_levels(s3)
+    full = float(np.percentile(np.abs(s3._data.astype(np.float32)), 99.0))
+    check(abs(hi - full) / full < 0.01 and lo == -hi, f"section clip from a 1M sample of 6M values ({hi:.3f} vs {full:.3f})")
     return True

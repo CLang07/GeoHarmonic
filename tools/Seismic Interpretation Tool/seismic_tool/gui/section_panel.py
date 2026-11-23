@@ -1,4 +1,5 @@
 """Section / time-slice viewer for 3D volumes and 2D lines."""
+import math
 import os
 
 os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
@@ -320,7 +321,8 @@ class SectionPanel(QtWidgets.QWidget):
         self._data, self._xaxis, self._yaxis = arr, x, y
         view = None if reset_view else self.vb.viewRange()
         self.plot.clear()
-        self._img = pg.ImageItem(arr)
+        # autoDownsample: big sections (long 2D lines, large time slices) render at screen resolution when zoomed out
+        self._img = pg.ImageItem(arr, autoDownsample=True)
         dx = (x[-1] - x[0]) / max(1, len(x) - 1) if len(x) > 1 else 1
         dy = (y[-1] - y[0]) / max(1, len(y) - 1) if len(y) > 1 else 1
         self._img.setRect(QtCore.QRectF(x[0] - dx / 2, y[0] - dy / 2, dx * len(x), dy * len(y)))
@@ -537,6 +539,15 @@ class SectionPanel(QtWidgets.QWidget):
             return arr, v.inlines, v.times, "Inline", "TWT (ms)"
         return arr, v.xlines, v.inlines, "Crossline", "Inline"
 
+    def _level_sample(self, limit=1_000_000):
+        """Finite values of the shown section, strided down to ~limit values (percentiles of a 60-Mpixel
+        2D line cost ~1 s; a regular sample gives the same clip to well under 1 %)."""
+        a = np.asarray(self._data).ravel()
+        if a.size > limit:
+            a = a[::int(math.ceil(a.size / limit))]
+        a = a.astype(np.float32, copy=False)
+        return a[np.isfinite(a)]
+
     def color_levels(self):
         """(lo, hi) display levels: symmetric percentile clip, or 0..1 for planarity."""
         if self.attr == "Planarity" or self.attr.startswith("Coherence"):
@@ -544,12 +555,12 @@ class SectionPanel(QtWidgets.QWidget):
         if self.attr == "Inst. phase":
             return -180.0, 180.0
         if self.attr in ("Envelope", "Inst. frequency", "RMS amplitude") or self.attr.startswith("Spectral"):
-            a = self._data[np.isfinite(self._data)]
+            a = self._level_sample()
             return (float(np.percentile(a, 1)), float(np.percentile(a, 99))) if a.size else (0.0, 1.0)
         if self.attr == "RGT":
-            a = self._data[np.isfinite(self._data)]
+            a = self._level_sample()
             return (float(a.min()), float(a.max())) if a.size else (0.0, 1.0)
-        a = np.abs(self._data[np.isfinite(self._data)])
+        a = np.abs(self._level_sample())
         clip = float(np.percentile(a, self.clip_spin.value() or 99.0)) if a.size else 1.0
         clip = clip or 1.0
         return -clip, clip

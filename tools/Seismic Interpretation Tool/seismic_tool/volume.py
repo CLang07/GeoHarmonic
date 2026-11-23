@@ -28,11 +28,13 @@ def _affine(il, xl, x, y):
 
 
 def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_byte=185, scalar_byte=71,
-              chunk=20000, progress=None, cancel=None):
+              chunk=20000, progress=None, cancel=None, workers=None):
     """Scan headers, then write the two float16 stores. progress(fraction, text) and cancel() -> bool are
-    optional; a cancelled import removes its partial store and raises RuntimeError('cancelled')."""
+    optional; a cancelled import removes its partial store and raises RuntimeError('cancelled').
+    workers: threads for the trace conversion and the time-slice copy (None = up to 4, 1 = serial)."""
     try:
-        return _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel)
+        return _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel,
+                          workers)
     except RuntimeError as e:
         if str(e) == "cancelled":
             for fn in ("data_ilxl.npy", "data_t.npy", "filled.npy", "meta.json"):
@@ -48,7 +50,14 @@ def _check_cancel(cancel):
         raise RuntimeError("cancelled")
 
 
-def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel):
+def _workers(w):
+    if w is None:
+        w = min(4, os.cpu_count() or 1)
+    return max(1, int(w))
+
+
+def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel,
+               workers=None):
     f = SegyFile(segy_path)
     if il_byte is None or xl_byte is None:
         g = f.guess_il_xl()
@@ -83,31 +92,78 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
     ilxl = np.lib.format.open_memmap(os.path.join(store_dir, "data_ilxl.npy"), mode="w+", dtype=np.float16,
                                      shape=(nil, nxl, ns))
     filled = np.zeros((nil, nxl), bool)
-    for s in range(0, n, chunk):
-        e = min(n, s + chunk)
-        tr = f.traces(s, e) * scale
-        np.nan_to_num(tr, copy=False, nan=0.0, posinf=0.0, neginf=0.0)  # corrupt / dead samples
+    workers = _workers(workers)
+
+    def write_chunk(s, e):
+        tr = f.traces(s, e)
+        np.multiply(tr, scale, out=tr)
+        bad = ~np.isfinite(tr)  # corrupt / dead samples (one pass; nan_to_num made three)
+        if bad.any():
+            tr[bad] = 0.0
         np.clip(tr, -60000, 60000, out=tr)
         ilxl[ii[s:e], jj[s:e], :] = tr.astype(np.float16)
         filled[ii[s:e], jj[s:e]] = True
-        if cancel and cancel():
-            del ilxl
-            raise RuntimeError("cancelled")
-        if progress:
-            progress(0.1 + 0.6 * e / n, f"Writing traces {e:,}/{n:,}")
+        return e
+
+    def run_parallel(jobs, fn, p0, p1, text):
+        """Run fn(a, b) over jobs with `workers` threads (numpy releases the GIL in the conversions and
+        copies); cancel is checked between chunks, progress in order of completion."""
+        done = 0
+        if workers <= 1:
+            for a, b in jobs:
+                fn(a, b)
+                done += 1
+                _check_cancel(cancel)
+                if progress:
+                    progress(p0 + (p1 - p0) * done / len(jobs), text(done, len(jobs)))
+            return
+        from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
+        it = iter(jobs)
+        with ThreadPoolExecutor(workers) as ex:
+            pending = set()
+            for _ in range(workers + 1):  # bounded queue: workers + 1 chunks in memory (<= ~64 MB each)
+                job = next(it, None)
+                if job is not None:
+                    pending.add(ex.submit(fn, *job))
+            while pending:
+                fin, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for fu in fin:
+                    fu.result()  # re-raise worker errors
+                    done += 1
+                if cancel and cancel():
+                    for fu in pending:
+                        fu.cancel()
+                    wait(pending)
+                    raise RuntimeError("cancelled")
+                if progress:
+                    progress(p0 + (p1 - p0) * done / len(jobs), text(done, len(jobs)))
+                for _ in fin:
+                    job = next(it, None)
+                    if job is not None:
+                        pending.add(ex.submit(fn, *job))
+
+    chunk = max(1, min(int(chunk), int(64e6 // max(1, ns * 4))))  # <= ~64 MB of float32 per chunk
+    jobs = [(s, min(n, s + chunk)) for s in range(0, n, chunk)]
+    try:
+        run_parallel(jobs, write_chunk, 0.1, 0.7, lambda d, t: f"Writing traces {min(n, d * chunk):,}/{n:,}")
+    except RuntimeError:
+        del ilxl
+        raise
     ilxl.flush()
     # time-major copy, built from blocks of inlines (contiguous reads, contiguous writes)
     tm = np.lib.format.open_memmap(os.path.join(store_dir, "data_t.npy"), mode="w+", dtype=np.float16,
                                    shape=(ns, nil, nxl))
     blk = max(1, int(64e6 // max(1, nxl * ns * 2)))
-    for a in range(0, nil, blk):
-        b = min(nil, a + blk)
+
+    def transpose_block(a, b):
         tm[:, a:b, :] = np.transpose(np.asarray(ilxl[a:b]), (2, 0, 1))
-        if cancel and cancel():
-            del tm, ilxl
-            raise RuntimeError("cancelled")
-        if progress:
-            progress(0.7 + 0.3 * b / nil, f"Building time slices {b}/{nil}")
+
+    try:
+        run_parallel([(a, min(nil, a + blk)) for a in range(0, nil, blk)], transpose_block, 0.7, 1.0,
+                     lambda d, t: f"Building time slices {d}/{t} blocks")
+    except RuntimeError:
+        del tm, ilxl
+        raise
     tm.flush()
     # coordinates
     x, y = f.coordinates(x_byte, y_byte, scalar_byte, 0, n)

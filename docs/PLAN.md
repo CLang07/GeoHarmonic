@@ -202,7 +202,7 @@ Kingdom-like interaction; large data.
    - Test data: synthetic horizontal wells (build section + 2-3 km lateral) through the synthetic 3D
      volume, with synthetic logs and stage CSV; the NZ deviated wells (Maui-5/6/7 surveys) for real
      trajectories. Tests: trajectory colours match the sampled attribute at MD; per-lateral stats correct.
-15. **Scale + hardening** - status: partial (run 1: 15a Cancel button for every threaded job incl. 3D import
+15. **Scale + hardening** - status: done (run 1 + run 2; v0.18.0. Run 1: 15a Cancel for every threaded job, `wellindex.py`; 15b dev/bench.py + docs/BENCHMARKS.md, import hardening. Run 2: basemap well layer (labels only in view, well index above 2,000 wells), threaded import (bit-identical), section autoDownsample + sampled clip, vectorised dashboard pick. Remaining items need Chris's PC: run bench at 5-20 GB, then fix what it shows - see 'Later'.)
    (partial store removed), `wellindex.py` SQLite well index with grid-bucket spatial queries (10k wells: box query
    ~1 ms). 15b: dev/bench.py + docs/BENCHMARKS.md (0.6 GB: import 166 MB/s, slices 0.4-1.3 ms); import
    hardening (NaN/inf samples -> 0, holes + crossline step tested). LEFT: run bench at 5-20 GB on Chris's PC; wire
@@ -238,5 +238,5 @@ Kingdom-like interaction; large data.
    1 ms / 0.5% / 5 deg; DTW warp respects the velocity cap; deterministic wavelet = true wavelet (corr > 0.95)
    at 10% noise; polarity flip detected; cycle-skip case flagged; multi-well batch on 10 synthetic wells.
 
-Later (Chris back): Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
+Later (Chris back): run `dev/bench.py --gb 5..20` on the PC and fix what it shows (overview volume only if zoomed-out display is slow); Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.

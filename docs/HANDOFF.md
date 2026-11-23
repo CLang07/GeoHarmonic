@@ -181,7 +181,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   Tests: `test_laterals.py` (run + run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
-  exactness bound), by_api, tops_of, wells_with_curve, headers, xy. Not yet used by the GUI.
+  exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,
+  index_from=2000)` (v0.18) = what the basemap draws: points(), in_view (index or numpy), labels(view) (only in view,
+  [] above max_labels), nearest. `Basemap.wells` / `update_labels(view)` (debounced on sigRangeChanged).
+- `import_3d(workers=None)` (v0.18): trace conversion + time-slice copy in a bounded ThreadPoolExecutor
+  (workers+1 chunks in flight, chunk <= ~64 MB); bit-identical to workers=1. Section ImageItem autoDownsample;
+  `SectionPanel._level_sample` (<= 1M values for percentiles).
 - Jobs: `MainWindow.run_job` + 3D import poll show a status-bar Cancel button (`cancel_job`); long functions
   raise RuntimeError('cancelled') between blocks; `job_cancelled(state)` turns that into a status message;
   `import_3d(cancel=)` deletes the partial store. Tests: `test_hardening.py`.

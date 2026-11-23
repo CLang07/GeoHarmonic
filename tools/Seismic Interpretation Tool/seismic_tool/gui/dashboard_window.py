@@ -88,6 +88,7 @@ class DashboardWindow(QtWidgets.QMainWindow):
         """Wells / laterals to show; extra: AttributeTable joined by API / name (engineering, production...)."""
         self.trajs = list(trajs)
         self._log_names = None
+        self._pick_key = None
         tab = L.stats_table(self.trajs, {})
         if extra is not None:
             tab = tab.join(extra)
@@ -459,8 +460,13 @@ class DashboardWindow(QtWidgets.QMainWindow):
     def nearest_well(self, x, y):
         if not self.trajs:
             return None
-        d = [np.min(np.hypot(t.x - x, t.y - y)) for t in self.trajs]
-        return int(np.argmin(d))
+        key = len(self.trajs)
+        if getattr(self, "_pick_key", None) != key:  # all stations of all wellbores in one array, built once
+            self._pick_xy = np.concatenate([np.column_stack([t.x, t.y]) for t in self.trajs])
+            self._pick_owner = np.concatenate([np.full(len(t.x), k) for k, t in enumerate(self.trajs)])
+            self._pick_key = key
+        d = (self._pick_xy[:, 0] - x) ** 2 + (self._pick_xy[:, 1] - y) ** 2
+        return int(self._pick_owner[int(np.argmin(d))])
 
     def _map_clicked(self, ev):
         vb = self.map.getViewBox()

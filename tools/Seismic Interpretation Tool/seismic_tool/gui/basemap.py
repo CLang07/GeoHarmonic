@@ -43,6 +43,13 @@ class Basemap(QtWidgets.QWidget):
         self._grid_items = []
         self._tie_items = []
         self.hz_range = None  # (vmin, vmax) of the last map, for the legend text
+        self.wells = None  # wellindex.WellLayer
+        self._label_items = []
+        self._label_timer = QtCore.QTimer(self)
+        self._label_timer.setSingleShot(True)
+        self._label_timer.setInterval(150)
+        self._label_timer.timeout.connect(self.update_labels)
+        self.plot.getPlotItem().getViewBox().sigRangeChanged.connect(lambda *_: self._label_timer.start())
         self.plot.scene().sigMouseClicked.connect(self._clicked)
 
     def set_project(self, project):
@@ -85,14 +92,14 @@ class Basemap(QtWidgets.QWidget):
             t = pg.TextItem(l["name"], color=(60, 60, 60), anchor=(0.5, 1.2))
             t.setPos(x[0], y[0])
             self.plot.addItem(t, ignoreBounds=True)
-        wells = p.wells()
-        if wells:
-            self.plot.addItem(pg.ScatterPlotItem([w[1] for w in wells], [w[2] for w in wells], symbol="o", size=8,
-                                                 brush=pg.mkBrush(0, 0, 0), pen=pg.mkPen("w")))
-            for name, x, y in wells:
-                t = pg.TextItem(name, color=(0, 0, 0), anchor=(-0.1, 1.1))
-                t.setPos(x, y)
-                self.plot.addItem(t, ignoreBounds=True)
+        from ..wellindex import WellLayer
+        self.wells = WellLayer(p.wells())
+        self._label_items = []
+        if len(self.wells):
+            wx, wy = self.wells.points()
+            big = len(self.wells) > 2000
+            self.plot.addItem(pg.ScatterPlotItem(wx, wy, symbol="o", size=5 if big else 8, brush=pg.mkBrush(0, 0, 0),
+                                                 pen=None if big else pg.mkPen("w")))
         self._hz_items = []
         self._flt_items = []
         self._grid_items = []
@@ -102,6 +109,33 @@ class Basemap(QtWidgets.QWidget):
         self._current = pg.PlotCurveItem(pen=pg.mkPen((220, 0, 0), width=3))
         self.plot.addItem(self._current)
         self.plot.getPlotItem().getViewBox().autoRange(padding=0.05)
+        self.update_labels()
+
+    def label_view(self):
+        """((x0, x1), (y0, y1)) of the map view, or None when it cannot be read."""
+        try:
+            (x0, x1), (y0, y1) = self.plot.getPlotItem().getViewBox().viewRange()
+            return (float(x0), float(x1)), (float(y0), float(y1))
+        except Exception:
+            return None
+
+    def update_labels(self, view=None):
+        """Well name labels only for the wells in view (none when more than WellLayer.max_labels are visible)."""
+        for it in self._label_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._label_items = []
+        if not self.wells or not len(self.wells):
+            return []
+        labs = self.wells.labels(view if view is not None else self.label_view())
+        for name, x, y in labs:
+            t = pg.TextItem(name, color=(0, 0, 0), anchor=(-0.1, 1.1))
+            t.setPos(x, y)
+            self.plot.addItem(t, ignoreBounds=True)
+            self._label_items.append(t)
+        return labs
 
     def show_horizon(self, name):
         """Show a horizon's time-structure map (3D grids as colour images, 2D picks as coloured dots)."""

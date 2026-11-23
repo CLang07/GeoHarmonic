@@ -130,3 +130,65 @@ class WellIndex:
     def xy(self):
         r = self.db.execute("SELECT name, x, y FROM wells WHERE x IS NOT NULL").fetchall()
         return [a for a, _, _ in r], np.array([[b, c] for _, b, c in r], float).reshape(-1, 2)
+
+
+class WellLayer:
+    """What the basemap draws for the wells, so 10,000 wells stay responsive (pure data, no Qt).
+
+    Every well is one point of a single scatter item (cheap even for 100k points); text labels are the slow part
+    in pyqtgraph, so they are made only for wells inside the current view and only when at most `max_labels` wells
+    are in view. Below `index_from` wells a numpy box test is used, above it an in-memory WellIndex (grid buckets).
+    """
+
+    def __init__(self, wells, max_labels=150, index_from=2000, bucket=None):
+        wells = [w for w in (wells or []) if w[1] is not None and w[2] is not None
+                 and math.isfinite(float(w[1])) and math.isfinite(float(w[2]))]
+        self.names = [w[0] for w in wells]
+        self.xy = np.array([[float(w[1]), float(w[2])] for w in wells], float).reshape(-1, 2)
+        self.max_labels = int(max_labels)
+        self.index = None
+        if len(wells) >= index_from:
+            if bucket is None:  # ~ 30 wells per bucket on average
+                span = max(float(np.ptp(self.xy[:, 0])), float(np.ptp(self.xy[:, 1])), 1.0)
+                bucket = max(1.0, span * math.sqrt(30.0 / len(wells)))
+            self.index = WellIndex(":memory:", bucket=bucket)
+            self.index.add_wells((n, None, x, y, None, None) for n, (x, y) in zip(self.names, self.xy))
+            self._row = {n: k for k, n in enumerate(self.names)}
+
+    def __len__(self):
+        return len(self.names)
+
+    def points(self):
+        """(x, y) arrays of every well - one scatter item."""
+        return self.xy[:, 0], self.xy[:, 1]
+
+    def in_view(self, x0, x1, y0, y1):
+        """Row numbers of the wells inside the box."""
+        if not len(self.names):
+            return np.zeros(0, int)
+        if self.index is not None:
+            return np.array(sorted(self._row[r[0]] for r in self.index.in_box(x0, x1, y0, y1)), int)
+        x0, x1, y0, y1 = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
+        m = (self.xy[:, 0] >= x0) & (self.xy[:, 0] <= x1) & (self.xy[:, 1] >= y0) & (self.xy[:, 1] <= y1)
+        return np.nonzero(m)[0]
+
+    def labels(self, view=None):
+        """[(name, x, y)] to label for view ((x0, x1), (y0, y1)) or None (= everything); [] when too many."""
+        if view is None:
+            rows = np.arange(len(self.names))
+        else:
+            (x0, x1), (y0, y1) = view
+            rows = self.in_view(x0, x1, y0, y1)
+        if len(rows) > self.max_labels:
+            return []
+        return [(self.names[k], float(self.xy[k, 0]), float(self.xy[k, 1])) for k in rows]
+
+    def nearest(self, x, y):
+        """Row of the nearest well (None when there are none)."""
+        if not len(self.names):
+            return None
+        if self.index is not None:
+            r = self.index.nearest(x, y, 1)
+            if r:
+                return self._row[r[0][0]]
+        return int(np.argmin((self.xy[:, 0] - x) ** 2 + (self.xy[:, 1] - y) ** 2))
