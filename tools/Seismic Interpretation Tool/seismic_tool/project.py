@@ -112,7 +112,11 @@ class SeisProject:
     def line(self, name):
         if name not in self._line_cache:
             l = next(l for l in self.lines if l["name"] == name)
-            self._line_cache[name] = Line2D(name, l["segy"], l.get("cdp_byte", 21), match_nav(name, self.nav()))
+            ln = Line2D(name, l["segy"], l.get("cdp_byte", 21), match_nav(name, self.nav()))
+            c = (self.display.get("mistie") or {}).get(name)
+            if c:
+                ln.set_correction((c.get("shift_ms", 0.0), c.get("phase_deg", 0.0), c.get("gain", 1.0)))
+            self._line_cache[name] = ln
         return self._line_cache[name]
 
     def add_lines(self, paths, cdp_byte=21):

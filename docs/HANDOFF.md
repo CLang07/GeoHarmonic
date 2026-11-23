@@ -109,6 +109,13 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `extract_amplitude(vol, surface, above, below, kind)` (inline blocks, only the needed time window),
   `well_velocity_points`, `depth_convert`, `write_xyz`, `write_cps3` / `read_cps3`, `export_png`.
   `gui/map_dialog.MapDialog` (compute(**overrides) testable), `Basemap.show_grid`. `test_maps.py`.
+- `mistie.py` (v0.10): numpy `analytic`, `apply_correction` (FFT shift + phase + gain), `measure(A, B, dt,
+  window, max_lag)` (stacked, envelope lag, phase from analytic inner product; correction of B to match A),
+  `extract_3d_along(vol, x, y)` (bilinear), `tie_line_to_volume` (+ along-line profile), `tie_lines` (2D-2D at
+  intersections), `all_ties`, `solve_network` (3D fixed, corr^2 weights, Huber IRLS, complex unit-vector phase,
+  log gain), `loop_closures`, `apply_solution` (project.display["mistie"], 2D picks shifted by the change).
+  `Line2D.raw_data()` vs `data()` (corrected), `Line2D.set_correction`; `SeisProject.line()` applies stored
+  corrections. `gui/mistie_dialog.MistieDialog`. `test_mistie.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

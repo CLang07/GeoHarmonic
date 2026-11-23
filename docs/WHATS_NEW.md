@@ -34,6 +34,15 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.10.0 - 2D-3D / 2D-2D mistie analysis (PLAN item 10, first part)
+- Interpret > Mistie analysis: simultaneous shift + phase + gain per tie, network solve with 3D fixed,
+  robust weights, loop closures, apply/reset corrections on the fly (display, tracking, RGT, picks).
+- Tests: single tie 8.9 ms / 33.7 deg / x2.00 (true 9 / 35 / 2); 2D cut from 3D with known corruption
+  8.01 ms / 30.2 deg / x2.00; network of 3 lines + 3D within 0.7 ms and 3 deg with a deliberately bad tie
+  (robust solve isolates it; non-robust is pulled 4 ms off); corrected line vs 3D corr 0.47 -> 0.99.
+- Still to do (next run): flex mode (along-line / time-variant corrections with smoothness), survey/key-line
+  groups, horizon-based misties, overlapping-line handling, corrected SEG-Y export, Mistie Tool integration.
+
 ## Seismic v0.9.0 - Horizon maps (PLAN item 8)
 - Interpret > Horizon maps (Ctrl+M): time structure, isochron, amplitude (RMS/max/min/mean/at horizon),
   depth with well average velocities (optionally calibrated to a formation top); basemap display with

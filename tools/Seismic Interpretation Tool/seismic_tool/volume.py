@@ -204,19 +204,39 @@ class Line2D:
         self.x, self.y = x, y
         self.has_coords = bool(np.hypot(np.ptp(x), np.ptp(y)) > 1.0)
         self._data = None
+        self._raw = None
+        self.correction = None  # (shift_ms, phase_deg, gain) from the mistie solution, applied in data()
 
     @property
     def times(self):
         return 1000.0 * (self.t0 + self.dt * np.arange(self.ns))
 
+    def raw_data(self):
+        """(n_traces, ns) float32 as stored in the SEG-Y (no mistie correction), cached."""
+        if self._raw is None:
+            self._raw = self.f.traces()
+        return self._raw
+
     def data(self):
-        """(n_traces, ns) float32, cached (2D lines are small)."""
+        """(n_traces, ns) float32, cached; with the line's mistie correction applied when it has one."""
         if self._data is None:
-            self._data = self.f.traces()
+            raw = self.raw_data()
+            c = self.correction
+            if c and (abs(c[0]) > 1e-9 or abs(c[1]) > 1e-9 or abs(c[2] - 1.0) > 1e-9):
+                from .mistie import apply_correction
+                self._data = apply_correction(raw, self.dt * 1000.0, c[0], c[1], c[2]).astype(np.float32)
+            else:
+                self._data = raw
         return self._data
+
+    def set_correction(self, c):
+        self.correction = tuple(c) if c else None
+        self._data = None
+        self._smooth_cache = None
 
     def release(self):
         self._data = None
+        self._raw = None
         self._smooth_cache = None
 
 

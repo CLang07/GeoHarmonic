@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.9: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.10: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -126,6 +126,16 @@ Starter projects:
   formation top), gridded between wells (constant with one well), depth = V x t / 2.
 - Shown on the basemap with contours (interval auto or set). Export **XYZ**, **CPS-3 ASCII** (Petrel /
   Kingdom / Zmap-style import; 3D grids resampled to an X/Y-aligned grid, null 1E+30), **PNG**.
+
+## Mistie analysis (Interpret > Mistie analysis)
+- Measures every 2D line against every 3D volume it crosses (the 3D is extracted along the 2D trace
+  positions, bilinear) and every 2D-2D intersection: time shift (envelope of the stacked cross-correlation),
+  constant phase rotation and gain at once.
+- Network solve: one correction per line with the 3D volumes fixed (reference), weights = correlation^2,
+  robust option (Huber) down-weights ties that disagree (cycle skips, bad navigation), phase solved as unit
+  vectors so 350 and 10 degrees average to 0. Table of ties with residuals, loop closures.
+- **Apply corrections**: applied on the fly to the 2D display, tracking and RGT (SEG-Y untouched); existing
+  2D horizon picks move with the shift. **Reset corrections** undoes it.
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.

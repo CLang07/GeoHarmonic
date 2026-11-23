@@ -211,6 +211,7 @@ class MainWindow(QtWidgets.QMainWindow):
         m.addSeparator()
         self._act(m, "&Well tie (synthetic seismogram)...", self.well_tie)
         self._act(m, "Horizon &maps (structure, isochron, amplitude, depth)...", self.horizon_maps, "Ctrl+M")
+        self._act(m, "M&istie analysis (2D-3D, 2D-2D)...", self.mistie_analysis)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -569,6 +570,22 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg._changed()
         dlg.exec()
         self.section.redraw()
+        return dlg
+
+    def mistie_analysis(self):
+        if not self.project.lines:
+            QtWidgets.QMessageBox.information(self, "Mistie", "The project has no 2D lines.")
+            return None
+        from .mistie_dialog import MistieDialog
+
+        def refreshed():
+            self.section.reset_rgt_editors()
+            self.section.redraw()
+            self._horizons_changed()
+
+        dlg = MistieDialog(self.project, self, refreshed)
+        dlg.show()
+        self._mistie_dialog = dlg
         return dlg
 
     def horizon_maps(self):

@@ -38,4 +38,5 @@
 - Item 8 DONE - horizon maps (v0.9.0): maps.py, gui/map_dialog.py, basemap grids + contours, test_maps.py.
   All tests PASS.
 - Item 9 DONE - docs/WHATS_NEW.md: risk-ordered test checklist + known limits + change log.
-- Working on PLAN item 10 next.
+- Item 10 PARTIAL - mistie analysis core (v0.10.0): mistie.py, gui/mistie_dialog.py, Line2D corrections,
+  test_mistie.py. Tests PASS. Left: flex mode and the other listed features (see PLAN).
