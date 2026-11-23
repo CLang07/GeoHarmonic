@@ -286,7 +286,7 @@ Kingdom-like interaction; large data.
    Run order: 17a -> 17c -> 17b -> 17d -> 17e (dynamic update is the priority after the velocity functions).
    Update docs/WHATS_NEW.md with a "Dynamic depth conversion" section and test checklist.
 
-18. **Basin model integrated with the Wheeler diagram** - status: partial (18a done v0.27.0)
+18. **Basin model integrated with the Wheeler diagram** - status: partial (18a done v0.27.0, 18b done v0.28.0)
    Chris asked for this on 2026-11-23 (do it before item 19). Goal: burial, thermal and maturity history from the
    interpreted framework (horizons, RGT horizon stack, depth model of item 17, wells), shown in chronostratigraphic
    (Wheeler) space as well as in depth / map view - PetroMod / Genesis-style 1D + pseudo-3D, numpy only.

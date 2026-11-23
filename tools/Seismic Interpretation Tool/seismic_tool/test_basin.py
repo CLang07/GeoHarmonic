@@ -108,8 +108,94 @@ def run_chrono(check, tmp):
           "zone lithology copied into the age table")
 
 
+def burial_table():
+    from .basin import chrono as C
+    return C.AgeTable([{"name": "Seabed", "age": 0.0, "lith": {"shale": 1}},
+                       {"name": "A", "age": 10.0, "lith": {"sand": 1}},
+                       {"name": "B", "age": 30.0, "lith": {"shale": 0.5, "carbonate": 0.5}},
+                       {"name": "C", "age": 50.0, "lith": {"sand": 0.6, "shale": 0.4}},
+                       {"name": "Base", "age": 80.0}])
+
+
+def run_burial(check, tmp):
+    from .basin import burial as B
+    from .basin import chrono as C
+    # analytic Athy: 1000 m from the surface with phi0 0.5, c 0.5/km holds 1000 - 1000 (1 - e^-0.5) grains
+    s = float(B.solid_thickness(0.0, 1000.0, 0.5, 0.5e-3))
+    check(abs(s - (1000 - 1000 * (1 - np.exp(-0.5)))) < 1e-9 and abs(float(B.base_for(0.0, s, 0.5, 0.5e-3)) - 1000) < 1e-6,
+          f"Athy grain thickness {s:.2f} m and its inverse (base depth 1000 m)")
+    # decompaction of a 100 m unit at 3000 m to the surface == analytic root (bisection)
+    s2 = float(B.solid_thickness(3000.0, 3100.0, 0.63, 0.51e-3))
+    h = float(B.base_for(0.0, s2, 0.63, 0.51e-3))
+    lo, hi = 0.0, 1000.0
+    for _ in range(200):
+        m = 0.5 * (lo + hi)
+        f = m - 0.63 / 0.51e-3 * (1 - np.exp(-0.51e-3 * m)) - s2
+        lo, hi = (m, hi) if f < 0 else (lo, m)
+    check(abs(h - lo) < 1e-6 and h > 150, f"decompacted thickness at the surface {h:.2f} m == analytic {lo:.2f} m")
+    m = B.mix({"sand": 0.5, "shale": 0.5})
+    check(abs(m["phi0"] - 0.56) < 1e-9 and abs(m["k"] - np.sqrt(3.2 * 1.9)) < 1e-9, "lithology mix (mean phi0, "
+          "geometric-mean conductivity)")
+
+    T = burial_table()
+    depths = {"Seabed": 100.0, "A": 900.0, "B": 2000.0, "C": 3200.0, "Base": 4000.0}
+    units = B.column_units(T, depths, seabed=100.0)
+    bh = B.BurialHistory(units, step=1.0, water_depth=100.0)
+    tops, bases = bh.present()
+    want = np.array([0, 800, 1900, 3100.0]), np.array([800, 1900, 3100, 3900.0])
+    check(np.allclose(tops, want[0], atol=1e-4) and np.allclose(bases, want[1], atol=1e-4),
+          "burial history reproduces the present-day column at 0 Ma")
+    S = np.array([[B.solid_thickness(bh.top[i, k], bh.base[i, k], bh.phi0[k], bh.c[k]) if np.isfinite(bh.top[i, k])
+                   else 0.0 for k in range(4)] for i in range(len(bh.ages))])
+    full = bh.ages[:, None] <= np.array([u["age_top"] for u in units])[None, :]
+    check(np.allclose(S[full], np.broadcast_to(bh.solid_full, S.shape)[full], rtol=1e-7, atol=1e-6),
+          "grain thickness conserved through time (all units, all steps)")
+    i50 = int(np.argmin(np.abs(bh.ages - 50.0)))
+    i30 = int(np.argmin(np.abs(bh.ages - 30.0)))
+    thick_c = bh.base[i50, 3] - bh.top[i50, 3]
+    check(thick_c > 1000.0 and bh.top[i50, 3] == 0.0 and abs(bh.top[i30, 3] - (bh.base[i30, 2] - bh.top[i30, 2])) < 1e-9,
+          f"unit C at 50 Ma: at the surface, decompacted to {thick_c:.0f} m (800 m today); under B at 30 Ma")
+    # zero-porosity lithology: no compaction
+    LZ = {k: dict(v) for k, v in B.LITHOLOGY.items()}
+    LZ["sand"]["phi0"] = 0.0
+    TZ = C.AgeTable([{"name": "Seabed", "age": 0.0, "lith": {"shale": 1}}, {"name": "A", "age": 10.0, "lith": {"sand": 1}},
+                     {"name": "Base", "age": 20.0}])
+    bz = B.BurialHistory(B.column_units(TZ, {"Seabed": 0.0, "A": 1500.0, "Base": 2500.0}, 0.0, props=LZ))
+    hz = (bz.base - bz.top)[:, 1]
+    check(np.allclose(hz[np.isfinite(hz) & (bz.ages <= 10.0)], 1000.0, atol=1e-6),
+          "zero-porosity lithology keeps its thickness at every burial depth")
+    # burial curves: monotonic burial without erosion, one curve per surface
+    curves = bh.surfaces()
+    names = [n for n, _, _ in curves]
+    dC = dict((n, d) for n, _, d in curves)["C"]
+    ok = np.isfinite(dC)
+    check(names == ["Seabed", "A", "B", "C", "Base"] and np.all(np.diff(dC[ok]) >= -1e-6),
+          "burial curves per surface; C deepens monotonically without erosion")
+    # erosion: 600 m eroded at A during a 10 My hiatus (A = 10 Ma, deposits below end at 20 Ma)
+    TE = burial_table()
+    TE.set("A", gap=10.0, eroded=600.0)
+    TE.set("B", age=30.0)
+    ue = B.column_units(TE, {"Seabed": 100.0, "A": 400.0, "B": 2000.0, "C": 3200.0, "Base": 4000.0}, 100.0)
+    be = B.BurialHistory(ue, step=0.5, water_depth=100.0)
+    ghost = [i for i, u in enumerate(ue) if u["ghost"]][0]
+    th = be.base[:, ghost] - be.top[:, ghost]
+    i15 = int(np.argmin(np.abs(be.ages - 15.0)))
+    dB = dict((n, d) for n, _, d in be.surfaces())["B"]
+    t0 = be.present()
+    check(abs(th[i15] - 600.0) < 1.0 and (np.isnan(th[-1]) or th[-1] == 0) and dB[i15] > dB[-1] and
+          abs(t0[0][ghost + 1] - 300.0) < 1e-3 and abs(t0[1][ghost + 1] - 1900.0) < 1e-3,
+          f"erosion: 600 m section on top at 15 Ma, removed by 10 Ma; B buried to {dB[i15]:.0f} m then uplifted "
+          f"(today {dB[-1]:.0f} m); present column honoured")
+    # porosity under the erosion surface stays at its maximum-burial value
+    ph = be.porosity()[:, ghost + 1]
+    check(ph[-1] <= np.nanmin(ph[be.ages >= 10.0]) + 1e-9, "no decompaction on uplift (porosity of maximum burial)")
+    bh.to_csv(os.path.join(tmp, "burial.csv"))
+    check(open(os.path.join(tmp, "burial.csv")).readline().startswith("age_Ma,"), "burial curves CSV")
+
+
 def run(check, tmp):
     run_chrono(check, tmp)
+    run_burial(check, tmp)
 
 
 def run_gui_chrono(check, tmp):

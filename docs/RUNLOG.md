@@ -222,4 +222,4 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - Next: PLAN item 18a.
 
 ## 2026-11-23 - run 4 (scheduled, started 22:18 UTC) - IN PROGRESS
-- PLAN item 18 (basin model): 18a chronostratigraphy + age-axis Wheeler done (v0.27.0); working on 18b.
+- PLAN item 18 (basin model): 18a age table + age Wheeler (v0.27.0), 18b burial history (v0.28.0) done; working on 18c.
