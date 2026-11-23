@@ -22,7 +22,8 @@ and `docs/PLAN.md` (ordered work) before changing anything.
    `PYTHONPATH=<repo>/dev/fakeqt:. python3 ...` (see HANDOFF "Testing GUI code").
 4. No network installs (pip is off in these sessions). Only numpy, matplotlib, pandas, PIL are
    available here. On Chris's PC the venv has numpy, matplotlib, PySide6==6.5.3, pyqtgraph==0.13.7.
-   Do not add other dependencies (no scipy, segyio, lasio). Write it in numpy.
+   Do not add other dependencies (no scipy, segyio, lasio). Write it in numpy. Exception: optional ML
+   backends (xgboost, scikit-learn, shap) may be used only behind try/except with the numpy version as default.
 5. Keep existing files and behaviour working; don't rewrite modules wholesale.
 6. After each item and at the end: update `docs/PLAN.md` status, append a RUNLOG entry (date, item, what was built,
    files touched, tests run + results, known limitations, "what Chris should test first" as a short

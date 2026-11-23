@@ -78,20 +78,37 @@ Kingdom-like interaction; large data.
 12. **Velocity model + depth conversion** - status: todo
    - Interval/average velocity from well time-depth pairs + horizons (layer-cake), gridded; convert
      horizons and sections to depth; well misfit table.
-13. **Analytics (Transform-style multi-attribute / predictive)** - status: todo
-   - `seismic_tool/analytics/`: a common "attribute table" built from horizon/zone extractions (seismic
-     attributes from item 11, isochrons, structure, curvature) sampled at wells and on the map grid, joined
-     with well properties (zone stats from the Well Correlation Tool: net sand, NtG, avg PHID/Vsh) and any
-     CSV of per-well targets (e.g. production / EUR when Chris has it).
-   - Tools: correlation matrix + crossplots with regression lines; PCA; k-means and self-organizing map
-     (SOM) clustering of multi-attribute maps and volumes (facies classes); multi-linear and ridge
-     regression and a small numpy MLP predicting a well property from attributes, with leave-one-well-out
-     cross-validation and honest error bars; predicted-property map + uncertainty map; attribute
-     ranking (which inputs matter, permutation importance).
-   - GUI: Analytics window (pick inputs/target, crossplot matrix, train/validate, push results back as
-     maps/volumes). Warn clearly when wells are too few for the number of inputs.
-   - Tests: synthetic attributes with a known linear/nonlinear relation to a target - recovered; clusters
-     recovered on synthetic facies.
+13. **Analytics (Transform-style + modern data-science workflow)** - status: todo
+   Split into 13a-13c; do them in order, checkpoint after each.
+   13a. Data + attribute table: `seismic_tool/analytics/` (shared, importable by the Well Correlation Tool
+     too). Table built from horizon/zone extractions (item 11 attributes, isochrons, structure, curvature)
+     sampled at wells and on the map grid, joined with well properties (zone stats: net sand, NtG, avg
+     PHID/Vsh) and any per-well target CSV (production / EUR later). Prep: missing-value report +
+     imputation (median / kNN), scaling, outlier flags, correlation matrix, multicollinearity (VIF),
+     crossplot matrix with regression lines, PCA.
+   13b. Models + validation (numpy implementations, sklearn-like API: fit / predict / get_params):
+     linear, ridge, lasso (coordinate descent); k-nearest neighbours; random forest; **gradient-boosted
+     trees in the XGBoost style** (second-order gradients, histogram split finding, L1/L2 regularisation,
+     shrinkage, row/column subsampling, max_depth/min_child_weight/gamma, early stopping); small MLP.
+     Validation that is honest for wells: group k-fold by well and spatial/blocked CV (no leakage between
+     nearby wells), leave-one-well-out, nested CV for hyperparameter search (grid/random), metrics R2,
+     RMSE, MAE, classification accuracy/F1/confusion matrix, learning curves, prediction-vs-actual plots.
+     Clustering: k-means, Gaussian mixture, SOM; elbow/silhouette.
+     Optional backends: if `xgboost`, `sklearn` or `shap` import successfully (Chris's PC, see 13c), the
+     same API uses them; numpy versions are the default and what the tests cover. Never require them.
+   13c. Explainability: gain/split importance, permutation importance (with CV), **SHAP values - exact
+     TreeSHAP for the tree models** (Lundberg et al. polynomial-time algorithm) and KernelSHAP for any
+     model; plots: SHAP summary (beeswarm), bar, dependence (with interaction colouring), waterfall per
+     well, partial dependence + ICE curves. Predicted-property map and uncertainty map (CV ensemble
+     spread), saved models (JSON/npz) and a run report (inputs, CV scores, importances) exported as HTML.
+     GUI: Analytics window (pick inputs/target, explore, train/validate, explain, push predictions back as
+     maps/volumes) with a clear warning when wells are too few for the number of inputs.
+     Add `Install analytics extras (optional).bat` that pip installs xgboost, scikit-learn and shap into
+     the tool's .venv, and a `--check-ml` command that compares numpy vs library results on a fixed dataset.
+   Tests: synthetic data with known linear + nonlinear + interaction effects -> models recover them;
+   TreeSHAP values sum to prediction minus expected value (local accuracy) and match brute-force Shapley
+   on small trees exactly; KernelSHAP close to exact; GBM beats linear on the nonlinear case; group CV
+   gives a worse (honest) score than random CV on spatially correlated synthetic wells.
 14. **Hardening** - status: todo
    - Read every module for bugs, edge cases (irregular 3D geometry, missing traces, dead traces, IBM vs
      IEEE, big files > 2 GB on Windows), performance on a 2 GB synthetic, docs/WHATS_NEW.md refresh.
