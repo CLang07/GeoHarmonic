@@ -1,0 +1,188 @@
+{
+ "format": "mistie_tool project",
+ "version": 2,
+ "config": {
+  "data_dir": ".",
+  "nav_csv": "npra_nav.csv",
+  "output_dir": "mistie_output",
+  "lines": [
+   {
+    "name": "R-2",
+    "segy": "R_2.SGY"
+   },
+   {
+    "name": "R-3",
+    "segy": "R_3.SGY"
+   },
+   {
+    "name": "R-4",
+    "segy": "R_4.SGY"
+   },
+   {
+    "name": "R-12",
+    "segy": "R_12.SGY"
+   },
+   {
+    "name": "R-13",
+    "segy": "R_13.SGY"
+   },
+   {
+    "name": "R-14",
+    "segy": "R_14.SGY"
+   },
+   {
+    "name": "R-15",
+    "segy": "R_15.SGY"
+   }
+  ],
+  "default_window": [
+   0.4,
+   2.6
+  ],
+  "display_tmax": 3.2,
+  "min_corr": 0.5,
+  "max_half_diff_ms": 10.0,
+  "reject_tol_ms": 4.0,
+  "reject_tol_deg": 35.0,
+  "reference": "R-4"
+ },
+ "state": {
+  "ties": {
+   "R-2|R-12|101|1092": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-2|R-14|1184|1395": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-2|R-15|1697|1403": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-3|R-12|10|2415": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-3|R-13|91|40": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-3|R-14|1787|2675": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-3|R-15|2324|2682": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-4|R-12|6706|3906": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-4|R-13|5960|933": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-4|R-14|4797|3776": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   },
+   "R-4|R-15|4080|3765": {
+    "window": [
+     0.4,
+     2.6
+    ],
+    "picked": false,
+    "use": "auto"
+   }
+  },
+  "lines": {
+   "R-2": {
+    "lock": false,
+    "shift": 0.0,
+    "phase": 0.0,
+    "gain": 1.0
+   },
+   "R-3": {
+    "lock": false,
+    "shift": 0.0,
+    "phase": 0.0,
+    "gain": 1.0
+   },
+   "R-4": {
+    "lock": false,
+    "shift": 0.0,
+    "phase": 0.0,
+    "gain": 1.0
+   },
+   "R-12": {
+    "lock": false,
+    "shift": 0.0,
+    "phase": 0.0,
+    "gain": 1.0
+   },
+   "R-13": {
+    "lock": false,
+    "shift": 0.0,
+    "phase": 0.0,
+    "gain": 1.0
+   },
+   "R-14": {
+    "lock": false,
+    "shift": 0.0,
+    "phase": 0.0,
+    "gain": 1.0
+   },
+   "R-15": {
+    "lock": false,
+    "shift": 0.0,
+    "phase": 0.0,
+    "gain": 1.0
+   }
+  },
+  "reference": "R-4",
+  "solve_by": "line"
+ },
+ "scenarios": {}
+}

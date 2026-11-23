@@ -1,0 +1,60 @@
+"""Entry point.
+
+    python -m well_correlation                      open the app
+    python -m well_correlation MyProject.wcproj.json
+    python -m well_correlation --selftest           test the data layer (no GUI needed)
+    python -m well_correlation --check FOLDER       print a curve inventory for a data folder
+    python -m well_correlation --png PROJECT OUT.png   export the current section without the GUI
+"""
+import argparse
+import os
+import sys
+
+os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")  # Anaconda also ships PyQt5
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="well_correlation", description="Well log correlation (Geo Tool Kit)")
+    ap.add_argument("project", nargs="?", help="project file (.wcproj.json)")
+    ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--check", metavar="FOLDER")
+    ap.add_argument("--png", nargs=2, metavar=("PROJECT", "OUT"))
+    a = ap.parse_args(argv)
+
+    if a.selftest:
+        from .selftest import run
+        sys.exit(0 if run() else 1)
+    if a.check:
+        from .project import Project
+        p = Project.from_folder(a.check)
+        for n in p.wells:
+            w = p.load_well(n)
+            fams = ", ".join(sorted(w.logs)) or "NO LOGS"
+            print(f"{n:15s} {len(w.las_paths):3d} LAS  {fams}")
+        return
+    if a.png:
+        from .project import Project
+        from .export import export_section
+        p = Project.open(a.png[0])
+        export_section(p, p.section_wells(), a.png[1])
+        print("wrote", a.png[1])
+        return
+    try:
+        from PySide6 import QtWidgets  # noqa: F401
+        import pyqtgraph  # noqa: F401
+    except ImportError as ex:
+        print(f"\nQt could not be loaded: {ex}\nPython: {sys.executable}\n"
+              "Run 'Install (run once).bat' (it sets up a private .venv for this tool).\n")
+        sys.exit(2)
+    from PySide6 import QtWidgets
+    from .gui.main_window import MainWindow
+    app = QtWidgets.QApplication(sys.argv[:1])
+    app.setApplicationName("Well Correlation Tool")
+    app.setStyle("Fusion")
+    win = MainWindow(a.project)
+    win.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

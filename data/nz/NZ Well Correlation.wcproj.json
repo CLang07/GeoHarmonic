@@ -1,0 +1,746 @@
+{
+ "app": "well_correlation",
+ "version": "0.1.0",
+ "name": "NZ Well Correlation",
+ "created": "2026-11-22 21:57",
+ "wells": [
+  {
+   "name": "Kiwi-1",
+   "uwi": "100000517073",
+   "lat": -39.4345108447,
+   "lon": 173.15491134,
+   "x": 1613331.6180144683,
+   "y": 5634992.03091437,
+   "elev": 25.0,
+   "elev_ref": "KB",
+   "td": 4238.0,
+   "info": {
+    "UWI": "100000517073",
+    "Latitude": "-39.4345108447",
+    "Longitude": "173.15491134",
+    "Elevation_m": "25.0",
+    "Elev_Ref": "KB",
+    "TD_m": "4238.0",
+    "Operator": "NEW ZEALAND OVERSEAS PETROLEUM LTD",
+    "Purpose": "Appraisal",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "22 August 2004",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Kiwi-1/las/Kiwi_1_ASCII_Data_RM.LAS"
+   ],
+   "survey": "wells/Kiwi-1/mudlog/Kiwi-1_Final Survey_TD.TXT"
+  },
+  {
+   "name": "Maui-1",
+   "uwi": "100000022148",
+   "lat": -39.669255555555566,
+   "lon": 173.31009166666664,
+   "x": 1626596.6184365628,
+   "y": 5608905.185584977,
+   "elev": 9.4,
+   "elev_ref": "DF",
+   "td": 3380.8,
+   "info": {
+    "UWI": "100000022148",
+    "Latitude": "-39.669255555555566",
+    "Longitude": "173.31009166666664",
+    "Elevation_m": "9.4",
+    "Elev_Ref": "DF",
+    "TD_m": "3380.8",
+    "Operator": "SHELL BP AND TODD OIL SERVICES LTD",
+    "Purpose": "Exploration",
+    "Status": "Suspended",
+    "Spud_Date": "27 January 1969",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Maui-1/las/Maui-1_1.las"
+   ],
+   "survey": null
+  },
+  {
+   "name": "Maui-2",
+   "uwi": "100000022052",
+   "lat": -39.610733333333336,
+   "lon": 173.44879722222225,
+   "x": 1638525.914885897,
+   "y": 5615349.917995006,
+   "elev": 34.1,
+   "elev_ref": "DF",
+   "td": 3566.1,
+   "info": {
+    "UWI": "100000022052",
+    "Latitude": "-39.610733333333336",
+    "Longitude": "173.44879722222225",
+    "Elevation_m": "34.1",
+    "Elev_Ref": "DF",
+    "TD_m": "3566.1",
+    "Operator": "SHELL BP AND TODD OIL SERVICES LTD",
+    "Purpose": "Appraisal",
+    "Status": "Suspended",
+    "Spud_Date": "05 October 1969",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Maui-2/las/MAUI-2_LOG_DATA.LAS"
+   ],
+   "survey": null
+  },
+  {
+   "name": "Maui-3",
+   "uwi": "100000022053",
+   "lat": -39.53473055555556,
+   "lon": 173.4514111111111,
+   "x": 1638792.6359106316,
+   "y": 5623783.786050157,
+   "elev": 34.1,
+   "elev_ref": "DF",
+   "td": 3401.2,
+   "info": {
+    "UWI": "100000022053",
+    "Latitude": "-39.53473055555556",
+    "Longitude": "173.4514111111111",
+    "Elevation_m": "34.1",
+    "Elev_Ref": "DF",
+    "TD_m": "3401.2",
+    "Operator": "SHELL BP AND TODD OIL SERVICES LTD",
+    "Purpose": "Appraisal",
+    "Status": "Suspended",
+    "Spud_Date": "25 December 1969",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Maui-3/las/Maui-3_1.las"
+   ],
+   "survey": null
+  },
+  {
+   "name": "Maui-4",
+   "uwi": "100000022050",
+   "lat": -40.0383342047,
+   "lon": 173.24102208099998,
+   "x": 1620562.0737184798,
+   "y": 5567960.223500652,
+   "elev": 34.14,
+   "elev_ref": "DF",
+   "td": 3919.0,
+   "info": {
+    "UWI": "100000022050",
+    "Latitude": "-40.0383342047",
+    "Longitude": "173.24102208099998",
+    "Elevation_m": "34.14",
+    "Elev_Ref": "DF",
+    "TD_m": "3919.0",
+    "Operator": "SHELL BP AND TODD OIL SERVICES LTD",
+    "Purpose": "Appraisal",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "11 May 1970",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Maui-4/las/MAUI_4.LAS"
+   ],
+   "survey": null
+  },
+  {
+   "name": "Maui-5",
+   "uwi": "100000113532",
+   "lat": -39.616576006100004,
+   "lon": 173.376864722,
+   "x": 1632348.304941103,
+   "y": 5614729.846108393,
+   "elev": 26.8,
+   "elev_ref": "DF",
+   "td": 3227.0,
+   "info": {
+    "UWI": "100000113532",
+    "Latitude": "-39.616576006100004",
+    "Longitude": "173.376864722",
+    "Elevation_m": "26.8",
+    "Elev_Ref": "DF",
+    "TD_m": "3227.0",
+    "Operator": "SHELL BP AND TODD OIL SERVICES LTD",
+    "Purpose": "Appraisal",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "13 May 1986",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Maui-5/las/DIS-SLS-CALI-GR_R-1.LAS",
+    "wells/Maui-5/las/DIS-SLS-CALI-GR_R-2.LAS",
+    "wells/Maui-5/las/DIS-SLS-GR-SP.LAS",
+    "wells/Maui-5/las/DLL-CNL-NGS-AMS.LAS",
+    "wells/Maui-5/las/DLL-MSFL-GR-SP-AMS.LAS",
+    "wells/Maui-5/las/LDL-CNL-GR-NGS-AMS.LAS",
+    "wells/Maui-5/las/LDL-CNL-NGS-AMS_S-3.LAS"
+   ],
+   "survey": null
+  },
+  {
+   "name": "Maui-6",
+   "uwi": "100000113531",
+   "lat": -39.529631946100004,
+   "lon": 173.407421349,
+   "x": 1635014.8633583498,
+   "y": 5624367.674148902,
+   "elev": 26.8,
+   "elev_ref": "KB",
+   "td": 3228.0,
+   "info": {
+    "UWI": "100000113531",
+    "Latitude": "-39.529631946100004",
+    "Longitude": "173.407421349",
+    "Elevation_m": "26.8",
+    "Elev_Ref": "KB",
+    "TD_m": "3228.0",
+    "Operator": "SHELL BP AND TODD OIL SERVICES LTD",
+    "Purpose": "Appraisal",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "06 July 1986",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Maui-6/las/DIS-SLS-CAL-SP.LAS",
+    "wells/Maui-6/las/DIS-SLS-GR.LAS",
+    "wells/Maui-6/las/DLL-MSFL-GR-DIS-SLS-GR.LAS",
+    "wells/Maui-6/las/LDL-CNL-MGS.LAS",
+    "wells/Maui-6/las/LDL-CNL-NGS_RS-ML.LAS"
+   ],
+   "survey": null
+  },
+  {
+   "name": "Maui-7",
+   "uwi": "100000113536",
+   "lat": -39.6351864426,
+   "lon": 173.32075306599998,
+   "x": 1627524.5580018484,
+   "y": 5612683.094105431,
+   "elev": 26.8,
+   "elev_ref": "DF",
+   "td": 3139.0,
+   "info": {
+    "UWI": "100000113536",
+    "Latitude": "-39.6351864426",
+    "Longitude": "173.32075306599998",
+    "Elevation_m": "26.8",
+    "Elev_Ref": "DF",
+    "TD_m": "3139.0",
+    "Operator": "SHELL BP AND TODD OIL SERVICES LTD",
+    "Purpose": "Production",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "16 August 1986",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Maui-7/las/DIL-SLS-GR.LAS",
+    "wells/Maui-7/las/DIS-SLS-CAL-GR.LAS",
+    "wells/Maui-7/las/DIS-SLS-GR.LAS",
+    "wells/Maui-7/las/DLL-MSFL-GR.LAS",
+    "wells/Maui-7/las/LDL-CNL-GR.LAS",
+    "wells/Maui-7/las/LDL-CNL-NGS.LAS",
+    "wells/Maui-7/las/LDL-CNL-NGS_2.LAS"
+   ],
+   "survey": null
+  },
+  {
+   "name": "Pateke-2",
+   "uwi": "100000516174",
+   "lat": -39.3793960792,
+   "lon": 173.19348015900002,
+   "x": 1616663.9521375047,
+   "y": 5641102.200977815,
+   "elev": 25.0,
+   "elev_ref": "KB",
+   "td": 3861.0,
+   "info": {
+    "UWI": "100000516174",
+    "Latitude": "-39.3793960792",
+    "Longitude": "173.19348015900002",
+    "Elevation_m": "25.0",
+    "Elev_Ref": "KB",
+    "TD_m": "3861.0",
+    "Operator": "NEW ZEALAND OVERSEAS PETROLEUM LTD",
+    "Purpose": "Appraisal",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "01 August 2004",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [],
+   "survey": null
+  },
+  {
+   "name": "Rahi-1",
+   "uwi": "100000223430",
+   "lat": -39.7164729318,
+   "lon": 173.343468425,
+   "x": 1629439.2914034799,
+   "y": 5603654.35667637,
+   "elev": 29.0,
+   "elev_ref": "DF",
+   "td": 3501.0,
+   "info": {
+    "UWI": "100000223430",
+    "Latitude": "-39.7164729318",
+    "Longitude": "173.343468425",
+    "Elevation_m": "29.0",
+    "Elev_Ref": "DF",
+    "TD_m": "3501.0",
+    "Operator": "SHELL TODD OIL SERVICES LIMITED",
+    "Purpose": "Exploration",
+    "Status": "Plugged and Abandoned",
+    "Spud_Date": "29 October 1996",
+    "Source": "NZP&M Geodata Catalogue, datum WGS84/NZGD2000 (EPSG 4326), elevation above MSL"
+   },
+   "las": [
+    "wells/Rahi-1/las/DLL-AS-LDL-CNL-GR-MSFL.LAS",
+    "wells/Rahi-1/las/MAIN_LOG_WCR.LAS"
+   ],
+   "survey": null
+  }
+ ],
+ "curve_overrides": {},
+ "formations": [
+  {
+   "name": "Tikorangi Limestone",
+   "color": "#3a8dde"
+  },
+  {
+   "name": "C-sands (Mangahewa)",
+   "color": "#e8a33d"
+  },
+  {
+   "name": "D-sands (Kaimiro)",
+   "color": "#d4572a"
+  },
+  {
+   "name": "E-shale",
+   "color": "#6b6b6b"
+  },
+  {
+   "name": "Tane Member",
+   "color": "#2ca02c"
+  },
+  {
+   "name": "F0 (Farewell F-sands)",
+   "color": "#b8860b"
+  },
+  {
+   "name": "F1 (Farewell F-sands)",
+   "color": "#8b4513"
+  },
+  {
+   "name": "Base Kapuni F-sands",
+   "color": "#7b2d8e"
+  },
+  {
+   "name": "Basement",
+   "color": "#000000"
+  }
+ ],
+ "tops": {
+  "Tui-1": {
+   "Tikorangi Limestone": 2930.0,
+   "D-sands (Kaimiro)": 3323.0,
+   "E-shale": 3491.0,
+   "Tane Member": 3566.0,
+   "F0 (Farewell F-sands)": 3614.0,
+   "F1 (Farewell F-sands)": 3664.0,
+   "Base Kapuni F-sands": 3879.7,
+   "Basement": 3897.0
+  },
+  "Maui-1": {
+   "Tikorangi Limestone": 2530.0,
+   "C-sands (Mangahewa)": 2691.0,
+   "D-sands (Kaimiro)": 2987.0,
+   "E-shale": 3184.0,
+   "Tane Member": 3200.3,
+   "F0 (Farewell F-sands)": 3258.0,
+   "F1 (Farewell F-sands)": 3369.2,
+   "Base Kapuni F-sands": 3432.9
+  },
+  "Maui-2": {
+   "Tikorangi Limestone": 2572.0,
+   "C-sands (Mangahewa)": 2786.0,
+   "D-sands (Kaimiro)": 3104.0,
+   "E-shale": 3299.0,
+   "Tane Member": 3315.3,
+   "F0 (Farewell F-sands)": 3387.8,
+   "F1 (Farewell F-sands)": 3445.5,
+   "Base Kapuni F-sands": 3451.5,
+   "Basement": 3505.0
+  },
+  "Maui-3": {
+   "Tikorangi Limestone": 2545.0,
+   "C-sands (Mangahewa)": 2732.0,
+   "D-sands (Kaimiro)": 3042.0,
+   "E-shale": 3254.0,
+   "Tane Member": 3273.5,
+   "F0 (Farewell F-sands)": 3344.0,
+   "F1 (Farewell F-sands)": 3364.0,
+   "Base Kapuni F-sands": 3380.0
+  },
+  "Maui-7": {
+   "Tikorangi Limestone": 2534.5,
+   "C-sands (Mangahewa)": 2711.8,
+   "D-sands (Kaimiro)": 3002.9
+  },
+  "Maui-5": {
+   "Tikorangi Limestone": 2612.1,
+   "C-sands (Mangahewa)": 2793.0,
+   "D-sands (Kaimiro)": 3101.9
+  },
+  "Maui-6": {
+   "Tikorangi Limestone": 2591.7,
+   "C-sands (Mangahewa)": 2776.0,
+   "D-sands (Kaimiro)": 3058.1
+  },
+  "Rahi-1": {
+   "C-sands (Mangahewa)": 2686.3,
+   "E-shale": 3191.4,
+   "Tane Member": 3207.4,
+   "F0 (Farewell F-sands)": 3276.5,
+   "F1 (Farewell F-sands)": 3379.4,
+   "Base Kapuni F-sands": 3460.4,
+   "Basement": 3500.4
+  }
+ },
+ "sections": {
+  "Maui field S-N": [
+   "Rahi-1",
+   "Maui-1",
+   "Maui-7",
+   "Maui-5",
+   "Maui-2",
+   "Maui-6",
+   "Maui-3"
+  ],
+  "Maui to Kiwi (SE-NW)": [
+   "Maui-2",
+   "Maui-5",
+   "Maui-7",
+   "Maui-1",
+   "Kiwi-1",
+   "Pateke-2"
+  ]
+ },
+ "current_section": "Maui field S-N",
+ "display": {
+  "gr_cutoff": 75.0,
+  "tracks": [
+   "LITH",
+   "GR",
+   "RES",
+   "DN",
+   "DT"
+  ],
+  "spacing": "equal",
+  "hang": "TVDSS",
+  "track_width": 1.0,
+  "well_gap": 0.6,
+  "between": "lithology",
+  "map": {
+   "kind": "structure",
+   "top": "C-sands (Mangahewa)",
+   "base": "D-sands (Kaimiro)",
+   "method": "tps",
+   "ci": 0
+  }
+ },
+ "tops_meta": {
+  "Tui-1": {
+   "Tikorangi Limestone": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "D-sands (Kaimiro)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "E-shale": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Tane Member": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F0 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F1 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Base Kapuni F-sands": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Basement": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   }
+  },
+  "Maui-1": {
+   "Tikorangi Limestone": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "C-sands (Mangahewa)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "D-sands (Kaimiro)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "E-shale": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Tane Member": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F0 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F1 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Base Kapuni F-sands": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   }
+  },
+  "Maui-2": {
+   "Tikorangi Limestone": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "C-sands (Mangahewa)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "D-sands (Kaimiro)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "E-shale": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Tane Member": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F0 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F1 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Base Kapuni F-sands": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Basement": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   }
+  },
+  "Maui-3": {
+   "Tikorangi Limestone": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "C-sands (Mangahewa)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "D-sands (Kaimiro)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "E-shale": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Tane Member": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F0 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "F1 (Farewell F-sands)": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   },
+   "Base Kapuni F-sands": {
+    "source": "published",
+    "note": "PR3099 Table 1.1 (NZOP 2005, from seismic correlation), m below KB"
+   }
+  },
+  "Maui-7": {
+   "Tikorangi Limestone": {
+    "source": "auto",
+    "score": 0.49,
+    "confidence": "high",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "C-sands (Mangahewa)": {
+    "source": "auto",
+    "score": 0.65,
+    "confidence": "high",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "D-sands (Kaimiro)": {
+    "source": "auto",
+    "score": 0.4,
+    "confidence": "medium",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   }
+  },
+  "Maui-5": {
+   "Tikorangi Limestone": {
+    "source": "auto",
+    "score": 0.52,
+    "confidence": "high",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "C-sands (Mangahewa)": {
+    "source": "auto",
+    "score": 0.58,
+    "confidence": "high",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "D-sands (Kaimiro)": {
+    "source": "auto",
+    "score": 0.16,
+    "confidence": "low",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   }
+  },
+  "Maui-6": {
+   "Tikorangi Limestone": {
+    "source": "auto",
+    "score": 0.7,
+    "confidence": "high",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "C-sands (Mangahewa)": {
+    "source": "auto",
+    "score": 0.67,
+    "confidence": "high",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "D-sands (Kaimiro)": {
+    "source": "auto",
+    "score": 0.25,
+    "confidence": "medium",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   }
+  },
+  "Rahi-1": {
+   "C-sands (Mangahewa)": {
+    "source": "auto",
+    "score": 0.29,
+    "confidence": "medium",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "E-shale": {
+    "source": "auto",
+    "score": 0.3,
+    "confidence": "medium",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "Tane Member": {
+    "source": "auto",
+    "score": 0.52,
+    "confidence": "high",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "F0 (Farewell F-sands)": {
+    "source": "auto",
+    "score": 0.26,
+    "confidence": "medium",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "F1 (Farewell F-sands)": {
+    "source": "auto",
+    "score": 0.21,
+    "confidence": "low",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "Base Kapuni F-sands": {
+    "source": "auto",
+    "score": 0.19,
+    "confidence": "low",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   },
+   "Basement": {
+    "source": "auto",
+    "score": 0.34,
+    "confidence": "medium",
+    "note": "GR+resistivity pattern match to Maui-1/2/3 published tops - check by eye"
+   }
+  }
+ },
+ "extra_aliases": {},
+ "reference_tops": {
+  "PR3099 Table 1.1 (NZOP 2005)": {
+   "tops": {
+    "Tui-1": {
+     "Tikorangi Limestone": 2930.0,
+     "D-sands (Kaimiro)": 3323.0,
+     "E-shale": 3491.0,
+     "Tane Member": 3566.0,
+     "F0 (Farewell F-sands)": 3614.0,
+     "F1 (Farewell F-sands)": 3664.0,
+     "Base Kapuni F-sands": 3879.7,
+     "Basement": 3897.0
+    },
+    "Maui-1": {
+     "Tikorangi Limestone": 2530.0,
+     "C-sands (Mangahewa)": 2691.0,
+     "D-sands (Kaimiro)": 2987.0,
+     "E-shale": 3184.0,
+     "Tane Member": 3200.3,
+     "F0 (Farewell F-sands)": 3258.0,
+     "F1 (Farewell F-sands)": 3369.2,
+     "Base Kapuni F-sands": 3432.9
+    },
+    "Maui-2": {
+     "Tikorangi Limestone": 2572.0,
+     "C-sands (Mangahewa)": 2786.0,
+     "D-sands (Kaimiro)": 3104.0,
+     "E-shale": 3299.0,
+     "Tane Member": 3315.3,
+     "F0 (Farewell F-sands)": 3387.8,
+     "F1 (Farewell F-sands)": 3445.5,
+     "Base Kapuni F-sands": 3451.5,
+     "Basement": 3505.0
+    },
+    "Maui-3": {
+     "Tikorangi Limestone": 2545.0,
+     "C-sands (Mangahewa)": 2732.0,
+     "D-sands (Kaimiro)": 3042.0,
+     "E-shale": 3254.0,
+     "Tane Member": 3273.5,
+     "F0 (Farewell F-sands)": 3344.0,
+     "F1 (Farewell F-sands)": 3364.0,
+     "Base Kapuni F-sands": 3380.0
+    }
+   },
+   "notes": "PR3099 (GNS for NZOP, 2005), Table 1.1: operator tops from seismic correlation, m below KB. Report findings: top F-sands = top F1 in Tui-1 and Maui-3 but top F0 (one reflector higher) in Maui-1 and Maui-2; F-sands onlap a structural high and are thin over Maui-2/Maui-3; facies get more distal from Maui toward Tui-1. Recommendation: move the base of the E-shale up ~20 m in Maui-3 so the maximum flooding surface is consistent."
+  }
+ }
+}

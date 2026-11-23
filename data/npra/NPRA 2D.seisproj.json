@@ -1,0 +1,27 @@
+{
+ "app": "seismic_tool",
+ "version": "0.1.0",
+ "name": "NPRA 2D",
+ "volumes": [],
+ "lines": [
+  {
+   "name": "R-2",
+   "segy": "R_2.SGY",
+   "cdp_byte": 21
+  },
+  {
+   "name": "R-3",
+   "segy": "R_3.SGY",
+   "cdp_byte": 21
+  }
+ ],
+ "nav_files": [
+  "npra_nav.csv"
+ ],
+ "well_project": null,
+ "display": {
+  "cmap": "seismic",
+  "clip": 99.0,
+  "reverse": false
+ }
+}

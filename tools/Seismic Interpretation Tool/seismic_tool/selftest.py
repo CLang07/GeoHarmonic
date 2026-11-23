@@ -1,0 +1,107 @@
+"""Self-test: writes small synthetic 2D and 3D SEG-Y files (IBM and IEEE), imports and checks them."""
+import os
+import shutil
+import tempfile
+
+import numpy as np
+
+
+def _ieee2ibm(x):
+    """float32 -> IBM float bits (uint32) for test files."""
+    x = np.asarray(x, np.float64)
+    out = np.zeros(x.shape, np.uint32)
+    nz = x != 0
+    sign = (x[nz] < 0).astype(np.uint32) << 31
+    a = np.abs(x[nz])
+    e = np.ceil(np.log(a) / np.log(16)).astype(int)
+    m = a / 16.0 ** e
+    over = m >= 1
+    e[over] += 1
+    m[over] /= 16
+    mant = np.round(m * 16777216).astype(np.uint64)
+    mant[mant >= 16777216] = 16777215
+    out[nz] = sign | ((e + 64).astype(np.uint32) << 24) | mant.astype(np.uint32)
+    return out
+
+
+def write_segy(path, traces, headers, dt_us=4000, fmt=5):
+    """traces (n, ns) float32; headers: {byte: int array} (4-byte words)."""
+    n, ns = traces.shape
+    with open(path, "wb") as f:
+        f.write(("C01 synthetic test" + " " * 62).encode("cp500") + b"\x40" * (3200 - 80))
+        b = bytearray(400)
+        b[16:18] = dt_us.to_bytes(2, "big")
+        b[20:22] = ns.to_bytes(2, "big")
+        b[24:26] = fmt.to_bytes(2, "big")
+        f.write(bytes(b))
+        th = np.zeros((n, 240), np.uint8)
+        for byte, vals in headers.items():
+            th[:, byte - 1: byte + 3] = np.asarray(vals, ">i4").view(np.uint8).reshape(n, 4)
+        th[:, 114:116] = np.full(n, ns, ">i2").view(np.uint8).reshape(n, 2)
+        body = (_ieee2ibm(traces).astype(">u4") if fmt == 1 else traces.astype(">f4")).view(np.uint8).reshape(n, -1)
+        f.write(np.concatenate([th, body], axis=1).tobytes())
+
+
+def run():
+    from .segy import SegyFile, ibm2ieee
+    from .volume import import_3d, Line2D
+    ok = True
+
+    def check(cond, msg):
+        nonlocal ok
+        print(("PASS " if cond else "FAIL ") + msg)
+        ok &= bool(cond)
+
+    vals = np.array([1.0, -2.5, 0.15625, 1234.5, -1e-3], np.float32)
+    check(np.allclose(ibm2ieee(_ieee2ibm(vals)), vals, rtol=1e-6), "IBM float conversion")
+    tmp = tempfile.mkdtemp(prefix="seis_selftest_")
+    try:
+        # ---- 3D: 30 inlines x 40 crosslines x 200 samples, rotated grid, inline-sorted, IBM
+        nil, nxl, ns = 30, 40, 200
+        il = np.repeat(np.arange(1001, 1001 + 2 * nil, 2), nxl)
+        xl = np.tile(np.arange(2001, 2001 + nxl), nil)
+        t = np.arange(ns)
+        cube = (np.sin(t[None, None, :] / 7.0 + il.reshape(nil, nxl)[:, :, None] / 20.0)
+                * (1 + xl.reshape(nil, nxl)[:, :, None] / 1000.0) * 500).astype(np.float32)
+        ang = np.radians(30)
+        x = (600000 + 12.5 * (xl - 2001) * np.cos(ang) - 25 * (il - 1001) / 2 * np.sin(ang)) * 100
+        y = (5600000 + 12.5 * (xl - 2001) * np.sin(ang) + 25 * (il - 1001) / 2 * np.cos(ang)) * 100
+        hdr = {189: il, 193: xl, 181: x.astype(np.int64), 185: y.astype(np.int64)}
+        p3 = os.path.join(tmp, "cube.sgy")
+        write_segy(p3, cube.reshape(-1, ns), hdr, fmt=1)
+        # scalar -100 at byte 71 (2 bytes)
+        mm = np.memmap(p3, np.uint8, "r+")
+        trl = 240 + ns * 4
+        for k in range(nil * nxl):
+            mm[3600 + k * trl + 70: 3600 + k * trl + 72] = np.frombuffer((-100).to_bytes(2, "big", signed=True), np.uint8)
+        mm.flush()
+        del mm
+        f = SegyFile(p3)
+        check(f.ntraces == nil * nxl and f.ns == ns and abs(f.dt - 0.004) < 1e-9, "SEG-Y header read")
+        check(f.guess_il_xl() == (189, 193), "inline/crossline bytes auto-detected")
+        v = import_3d(p3, os.path.join(tmp, "store"))
+        check((v.nil, v.nxl, v.il_step) == (nil, nxl, 2), f"3D geometry {v.nil}x{v.nxl}, inline step {v.il_step}")
+        err = np.abs(v.inline(1011) - cube[5]).max() / 500
+        check(err < 2e-3, f"inline matches input (rel err {err:.1e})")
+        err = np.abs(v.xline(2010) - cube[:, 9]).max() / 500
+        check(err < 2e-3, f"crossline matches input (rel err {err:.1e})")
+        err = np.abs(v.time_slice(400.0) - cube[:, :, 100]).max() / 500
+        check(err < 2e-3, f"time slice matches input (rel err {err:.1e})")
+        xx, yy = v.xy(1021, 2030)
+        k = (1021 - 1001) // 2 * nxl + (2030 - 2001)
+        check(abs(xx - x[k] / 100) < 0.5 and abs(yy - y[k] / 100) < 0.5, "trace coordinates (rotated grid, scalar -100)")
+        i2, x2 = v.ilxl_at(xx, yy)
+        check(abs(i2 - 1021) < 0.01 and abs(x2 - 2030) < 0.01, "map position -> inline/crossline")
+        sec, ils, xls = v.arbitrary([xx, v.xy(1041, 2010)[0]], [yy, v.xy(1041, 2010)[1]])
+        check(sec.shape[1] == ns and ils[0] == 1021 and xls[-1] == 2010, "arbitrary line")
+        # ---- 2D line, IEEE, cdp at byte 21
+        tr2 = np.random.default_rng(0).standard_normal((120, 300)).astype(np.float32)
+        p2 = os.path.join(tmp, "line.sgy")
+        write_segy(p2, tr2, {21: np.arange(1, 121)}, fmt=5)
+        nav = np.array([[1, 0.0, 0.0], [120, 1190.0, 0.0]])
+        l = Line2D("L", p2, nav=nav)
+        check(np.allclose(l.data(), tr2) and l.has_coords and abs(l.x[60] - 600) < 1e-6, "2D line + nav")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
+    return ok

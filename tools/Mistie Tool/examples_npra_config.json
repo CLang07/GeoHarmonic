@@ -1,0 +1,21 @@
+{
+  "data_dir": ".",
+  "nav_csv": "npra_nav.csv",
+  "output_dir": "mistie_output",
+  "lines": [
+    {"name": "R-2",  "segy": "R_2.SGY"},
+    {"name": "R-3",  "segy": "R_3.SGY"},
+    {"name": "R-4",  "segy": "R_4.SGY"},
+    {"name": "R-12", "segy": "R_12.SGY"},
+    {"name": "R-13", "segy": "R_13.SGY"},
+    {"name": "R-14", "segy": "R_14.SGY"},
+    {"name": "R-15", "segy": "R_15.SGY"}
+  ],
+  "default_window": [0.4, 2.6],
+  "display_tmax": 3.2,
+  "reference": "R-4",
+  "min_corr": 0.5,
+  "max_half_diff_ms": 10.0,
+  "reject_tol_ms": 4.0,
+  "reject_tol_deg": 35.0
+}

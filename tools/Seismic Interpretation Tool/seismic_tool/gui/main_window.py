@@ -1,0 +1,335 @@
+"""Main window: data tree + basemap docks, section viewer in the centre."""
+import os
+import threading
+import traceback
+
+os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
+from PySide6 import QtCore, QtGui, QtWidgets  # noqa: E402
+
+from .. import __version__  # noqa: E402
+from ..project import EXT, SeisProject  # noqa: E402
+from ..segy import IL_XL_CANDIDATES, SegyFile  # noqa: E402
+from ..volume import import_3d  # noqa: E402
+from .basemap import Basemap  # noqa: E402
+from .section_panel import SectionPanel  # noqa: E402
+
+
+class Import3DDialog(QtWidgets.QDialog):
+    """Pick a 3D SEG-Y, confirm header bytes, choose a name."""
+
+    def __init__(self, path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Import 3D SEG-Y")
+        self.path = path
+        f = SegyFile(path)
+        guess = f.guess_il_xl()
+        form = QtWidgets.QFormLayout(self)
+        self.name = QtWidgets.QLineEdit(os.path.splitext(os.path.basename(path))[0])
+        form.addRow("Volume name", self.name)
+        info = (f"{f.ntraces:,} traces, {f.ns} samples @ {f.dt * 1000:g} ms, format {f.fmt}, "
+                f"{os.path.getsize(path) / 1e9:.2f} GB")
+        form.addRow("File", QtWidgets.QLabel(info))
+        self.il = QtWidgets.QSpinBox()
+        self.xl = QtWidgets.QSpinBox()
+        self.xb = QtWidgets.QSpinBox()
+        self.yb = QtWidgets.QSpinBox()
+        for s in (self.il, self.xl, self.xb, self.yb):
+            s.setRange(1, 237)
+        self.il.setValue(guess[0] if guess else 189)
+        self.xl.setValue(guess[1] if guess else 193)
+        self.xb.setValue(181)
+        self.yb.setValue(185)
+        form.addRow("Inline byte", self.il)
+        form.addRow("Crossline byte", self.xl)
+        form.addRow("X coordinate byte", self.xb)
+        form.addRow("Y coordinate byte", self.yb)
+        note = ("Header bytes found automatically." if guess else
+                "Could not detect inline/crossline bytes - common pairs: " +
+                ", ".join(f"{a}/{b}" for a, b in IL_XL_CANDIDATES[:4]))
+        form.addRow(QtWidgets.QLabel(note))
+        hdr = QtWidgets.QPlainTextEdit(f.text_header)
+        hdr.setReadOnly(True)
+        hdr.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont))
+        hdr.setMinimumSize(640, 220)
+        form.addRow("Text header", hdr)
+        free = self._free_gb(os.path.dirname(path))
+        need = 2 * 2 * f.ntraces * f.ns / 1e9
+        form.addRow(QtWidgets.QLabel(f"Import writes two fast-access copies (~{need:.1f} GB) next to the project."
+                                     + (f"  Free space: {free:.0f} GB." if free else "")))
+        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        form.addRow(bb)
+        del f
+
+    @staticmethod
+    def _free_gb(folder):
+        try:
+            import shutil
+            return shutil.disk_usage(folder).free / 1e9
+        except Exception:
+            return None
+
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self, path=None):
+        super().__init__()
+        self.project = SeisProject()
+        self.section = SectionPanel()
+        self.setCentralWidget(self.section)
+        self.basemap = Basemap()
+        self.tree = QtWidgets.QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        for title, w, area in (("Data", self.tree, QtCore.Qt.LeftDockWidgetArea),
+                               ("Basemap", self.basemap, QtCore.Qt.LeftDockWidgetArea)):
+            d = QtWidgets.QDockWidget(title, self)
+            d.setObjectName(title)
+            d.setWidget(w)
+            self.addDockWidget(area, d)
+            setattr(self, f"dock_{title.lower()}", d)
+        self.resizeDocks([self.dock_data, self.dock_basemap], [200, 500], QtCore.Qt.Vertical)
+        self.resizeDocks([self.dock_basemap], [520], QtCore.Qt.Horizontal)
+        self.progress = QtWidgets.QProgressBar()
+        self.progress.setMaximumWidth(260)
+        self.progress.hide()
+        self.statusBar().addPermanentWidget(self.progress)
+        self._job = None
+
+        self.section.cursorInfo.connect(lambda s: self.statusBar().showMessage(s))
+        self.section.positionChanged.connect(lambda: self.basemap.show_current(self.section.current_trace_line()))
+        self.basemap.openLine.connect(lambda n: self.section.show("2D", n))
+        self.basemap.openInline.connect(lambda v, il, xl: self.section.show("3D", v, "Inline", il))
+        self.tree.itemDoubleClicked.connect(self._tree_open)
+        self._menus()
+        self.resize(1500, 900)
+        if path:
+            self.open_project(path)
+        else:
+            self._refresh()
+
+    # ------------------------------------------------------------ menus
+    def _menus(self):
+        mb = self.menuBar()
+        m = mb.addMenu("&File")
+        self._act(m, "&New project...", self.new_project, "Ctrl+N")
+        self._act(m, "&Open project...", self.open_dialog, "Ctrl+O")
+        self._act(m, "&Save project", self.save, "Ctrl+S")
+        m.addSeparator()
+        self._act(m, "Import &3D SEG-Y...", self.import_3d_dialog, "Ctrl+3")
+        self._act(m, "Add &2D SEG-Y lines...", self.add_2d_dialog, "Ctrl+2")
+        self._act(m, "Add 2D &navigation CSV...", self.add_nav_dialog)
+        self._act(m, "Link &well project...", self.link_wells_dialog)
+        m.addSeparator()
+        self._act(m, "E&xit", self.close, "Ctrl+Q")
+        m = mb.addMenu("&View")
+        self._act(m, "Next line / slice (PgDown)", lambda: self.section.step(1))
+        self._act(m, "Previous line / slice (PgUp)", lambda: self.section.step(-1))
+        m.addSeparator()
+        m.addAction(self.dock_data.toggleViewAction())
+        m.addAction(self.dock_basemap.toggleViewAction())
+        m = mb.addMenu("&Help")
+        self._act(m, "About", lambda: QtWidgets.QMessageBox.information(
+            self, "Seismic Interpretation Tool",
+            f"Seismic Interpretation Tool {__version__}\nGeo Tool Kit\n\n"
+            "PgUp/PgDown step through lines (Shift = 10x). Mouse wheel zooms, right-drag stretches axes, "
+            "right-click > View all resets."))
+
+    def _act(self, menu, text, fn, key=None):
+        a = QtGui.QAction(text, self)
+        if key:
+            a.setShortcut(QtGui.QKeySequence(key))
+        a.triggered.connect(fn)
+        menu.addAction(a)
+        return a
+
+    # ------------------------------------------------------------ project
+    def _refresh(self):
+        p = self.project
+        self.setWindowTitle(f"Seismic Interpretation Tool - {p.name}" + (f"  [{p.path}]" if p.path else ""))
+        self.tree.clear()
+        r3 = QtWidgets.QTreeWidgetItem(self.tree, [f"3D volumes ({len(p.volumes)})"])
+        for v in p.volumes:
+            it = QtWidgets.QTreeWidgetItem(r3, [v["name"]])
+            it.setData(0, QtCore.Qt.UserRole, ("3D", v["name"]))
+        r2 = QtWidgets.QTreeWidgetItem(self.tree, [f"2D lines ({len(p.lines)})"])
+        for l in p.lines:
+            it = QtWidgets.QTreeWidgetItem(r2, [l["name"]])
+            it.setData(0, QtCore.Qt.UserRole, ("2D", l["name"]))
+        rw = QtWidgets.QTreeWidgetItem(self.tree, [f"Wells ({len(p.wells())})"])
+        for w in p.wells():
+            QtWidgets.QTreeWidgetItem(rw, [w[0]])
+        self.tree.expandAll()
+        self.basemap.set_project(p)
+        self.section.set_project(p)
+
+    def _tree_open(self, item, _col):
+        d = item.data(0, QtCore.Qt.UserRole)
+        if d:
+            self.section.show(*d)
+
+    def _need_path(self):
+        if self.project.path:
+            return True
+        QtWidgets.QMessageBox.information(self, "Save first", "Save the project first - imported data is stored "
+                                                               "in a folder next to the project file.")
+        return self.save_as()
+
+    def new_project(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "New seismic project", os.path.expanduser("~/Documents"),
+                                                        f"Seismic project (*{EXT})")
+        if not path:
+            return
+        self.project = SeisProject()
+        self.project.path = path if path.endswith(EXT) else path + EXT
+        self.project.name = os.path.basename(self.project.path)[:-len(EXT)]
+        self.project.save()
+        self._refresh()
+
+    def open_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open seismic project", os.path.expanduser("~/Documents"),
+                                                        f"Seismic project (*{EXT})")
+        if path:
+            self.open_project(path)
+
+    def open_project(self, path):
+        try:
+            self.project = SeisProject.open(path)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Open failed", str(e))
+            return
+        self._refresh()
+
+    def save(self):
+        if not self.project.path:
+            return self.save_as()
+        self.project.save()
+        self.statusBar().showMessage(f"Saved {self.project.path}", 4000)
+        return True
+
+    def save_as(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save seismic project", os.path.expanduser("~/Documents"),
+                                                        f"Seismic project (*{EXT})")
+        if not path:
+            return False
+        self.project.save(path)
+        if self.project.name == "Untitled":
+            self.project.name = os.path.basename(self.project.path)[:-len(EXT)]
+            self.project.save()
+        self._refresh()
+        return True
+
+    # ------------------------------------------------------------ data loading
+    def add_2d_dialog(self):
+        paths, _ = QtWidgets.QFileDialog.getOpenFileNames(self, "Add 2D SEG-Y lines", self.project.base(),
+                                                          "SEG-Y (*.sgy *.segy *.SGY *.SEGY);;All files (*)")
+        if not paths:
+            return
+        names = self.project.add_lines(paths)
+        bad = []
+        for n in names:
+            try:
+                self.project.line(n)
+            except Exception as e:
+                bad.append(f"{n}: {e}")
+        if bad:
+            QtWidgets.QMessageBox.warning(self, "Some lines could not be read", "\n".join(bad))
+        no_xy = [n for n in names if n not in [b.split(":")[0] for b in bad] and not self.project.line(n).has_coords]
+        if no_xy:
+            self.statusBar().showMessage(f"{len(no_xy)} line(s) have no coordinates in the headers - add a "
+                                         "navigation CSV (line,cdp,x,y) to place them on the basemap.", 10000)
+        if self.project.path:
+            self.project.save()
+        self._refresh()
+        if names:
+            self.section.show("2D", names[0])
+
+    def add_nav_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "2D navigation CSV (line,cdp,x,y)", self.project.base(),
+                                                        "CSV (*.csv *.txt);;All files (*)")
+        if path:
+            self.project.add_nav(path)
+            if self.project.path:
+                self.project.save()
+            self._refresh()
+
+    def link_wells_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Well Correlation project", self.project.base(),
+                                                        "Well project (*.wcproj.json)")
+        if path:
+            self.project.well_project = path
+            if self.project.path:
+                self.project.save()
+            self._refresh()
+
+    def import_3d_dialog(self):
+        if self._job:
+            QtWidgets.QMessageBox.information(self, "Busy", "An import is already running.")
+            return
+        if not self._need_path():
+            return
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "3D SEG-Y", self.project.base(),
+                                                        "SEG-Y (*.sgy *.segy *.SGY *.SEGY);;All files (*)")
+        if not path:
+            return
+        try:
+            dlg = Import3DDialog(path, self)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Not a readable SEG-Y", str(e))
+            return
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
+            return
+        name = dlg.name.text().strip() or "Volume"
+        store = os.path.join(self.project.base(), os.path.basename(self.project.path)[:-len(EXT)] + "_seismic",
+                             "".join(c if c.isalnum() or c in "-_ " else "_" for c in name))
+        args = dict(il_byte=dlg.il.value(), xl_byte=dlg.xl.value(), x_byte=dlg.xb.value(), y_byte=dlg.yb.value())
+        state = {"frac": 0.0, "text": "Starting...", "done": False, "error": None}
+
+        def work():
+            try:
+                import_3d(path, store, progress=lambda f, t: state.update(frac=f, text=t), **args)
+            except Exception:
+                state["error"] = traceback.format_exc()
+            state["done"] = True
+
+        th = threading.Thread(target=work, daemon=True)
+        timer = QtCore.QTimer(self)
+        self._job = (th, timer, state)
+        self.progress.setRange(0, 1000)
+        self.progress.show()
+
+        def poll():
+            self.progress.setValue(int(state["frac"] * 1000))
+            self.statusBar().showMessage(f"Importing {name}: {state['text']}")
+            if not state["done"]:
+                return
+            timer.stop()
+            self.progress.hide()
+            self._job = None
+            if state["error"]:
+                QtWidgets.QMessageBox.critical(self, "Import failed", state["error"][-2000:])
+                return
+            self.project.volumes = [v for v in self.project.volumes if v["name"] != name]
+            self.project._vol_cache.pop(name, None)
+            self.project.volumes.append({"name": name, "store": store, "segy": path, **args})
+            self.project.save()
+            self._refresh()
+            self.section.show("3D", name, "Inline")
+            self.statusBar().showMessage(f"Imported {name}", 8000)
+
+        timer.timeout.connect(poll)
+        timer.start(250)
+        th.start()
+
+    def closeEvent(self, ev):
+        if self._job:
+            if QtWidgets.QMessageBox.question(self, "Import running",
+                                              "A 3D import is still running. Quit anyway (the import is lost)?") \
+                    != QtWidgets.QMessageBox.Yes:
+                ev.ignore()
+                return
+        if self.project.path:
+            try:
+                self.project.save()
+            except Exception:
+                pass
+        ev.accept()

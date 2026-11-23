@@ -1,0 +1,14 @@
+{
+ "app": "seismic_tool",
+ "version": "0.1.0",
+ "name": "Maui seismic",
+ "volumes": [],
+ "lines": [],
+ "nav_files": [],
+ "well_project": "NZ Well Correlation.wcproj.json",
+ "display": {
+  "cmap": "seismic",
+  "clip": 99.0,
+  "reverse": false
+ }
+}
