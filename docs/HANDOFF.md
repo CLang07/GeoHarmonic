@@ -149,6 +149,13 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `to_dict`/`from_dict` (stored in project.display["velocity_model"]). Panel domain "Depth" (`depth_on`,
   `_to_depth`, generic `_ymap` used for horizon conversion in Wheeler and Depth). `gui/velocity_dialog.py`,
   `test_velocity.py`.
+  v0.22 (17a): per-layer `functions` [{func v0|v0kz|v0kt|td, k (None = fit), blend idw|nearest}] (saved only when not
+  all v0); helpers `kz_base/kz_v0` (exp form, `_ek` k->0 limit), `kt_base/kt_v0`, `fit_k_kz` (ek^2-weighted V0
+  variance, scan + golden), `fit_k_kt` (linear LS), `fit_line` (2-sigma outliers); `layer_info`, `crossplot(k)`,
+  `v0_grid(k)`; grids dict has "v0", "layers", "td", "px", "py". `depth_of_time` is vectorised: horizon times hit the
+  (residual-corrected) depth maps, inside a layer the function's shape is scaled to them. `test_ddc.py` (ddc_case:
+  6 wells, V0+kZ / V0+kT earths). Dialog: function + k columns, set_layer_function, functions_from_table(names),
+  crossplot / show_crossplot, info_text.
 - `analytics/` (13a): `table.AttributeTable` (ids, cols, xy; add, matrix, subset, join by `normalise_id`
   (API-14 -> API-10, names), from_csv/to_csv, from_maps_at_wells, from_map_nodes, from_zone_stats (Well
   Correlation zones)), `engineering` (13a+: ALIASES/PRESETS column mapping + prefix fallback, unit detection

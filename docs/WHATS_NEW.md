@@ -42,6 +42,18 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.22.0 - Dynamic depth conversion, part 1: velocity functions (PLAN item 17a)
+- Interpret > Velocity model: each layer now has a **velocity function** column and a **k** column:
+  V0 (constant, the old behaviour and the default), V0 + kZ, V0 + kT, Well T-D function (IDW-blended or nearest
+  well's checkshot / tied sonic). k blank = fitted over the wells (one regional k per layer; V0 per well, gridded);
+  type a number to fix k (1/s for V0 + kZ, m/s2 for V0 + kT).
+- **Cross-plot of selected layer** button: interval velocity at the wells vs mid-layer depth (vs one-way time for
+  V0 + kT), least-squares line, R2, outlier wells (> 2 sigma) as red crosses, the model's k in the caption.
+- Depth sections now follow the layer function inside each layer and always land on the depth maps (with residual
+  correction the section and the maps used to disagree slightly - fixed). Old saved models load unchanged.
+- Test: Velocity model on the NZ wells + Maui horizons: V0 + kZ on the deeper layers, Cross-plot, Build, compare
+  the misfit table with the V0 model; Use for depth display and look at an inline in Depth.
+
 ## Seismic v0.21.1 - review of today's new code
 - Well tie: a second / later event pair now lands where you click (the click is mapped back through the existing
   warp); the tie window is read in displayed (tied) time and an empty window falls back to the whole log (crash

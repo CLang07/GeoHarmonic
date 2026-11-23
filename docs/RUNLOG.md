@@ -166,3 +166,6 @@ the 2D lines, Tui-1/Amokura-1 wells).
   17e scenarios, blind-well test, P10/P50/P90, depth SEG-Y. Run order 17a -> 17c -> 17b -> 17d -> 17e.
 - No code changed.
 - Next: PLAN item 17a.
+
+## 2026-11-23 - run 3 (scheduled, started 17:19 UTC) - in progress
+- 17a velocity functions done (v0.22.0); continuing with 17c.

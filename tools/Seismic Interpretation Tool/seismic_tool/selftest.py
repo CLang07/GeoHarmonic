@@ -135,6 +135,10 @@ def run():
         # ---- velocity model + depth conversion
         from . import test_velocity
         test_velocity.run(check, tmp)
+        # ---- dynamic depth conversion (item 17)
+        from . import test_ddc
+        os.makedirs(os.path.join(tmp, "ddc"))
+        test_ddc.run(check, os.path.join(tmp, "ddc"))
         # ---- analytics
         from . import test_analytics
         test_analytics.run(check, tmp)
@@ -197,6 +201,9 @@ def run_gui():
         from . import test_velocity
         os.makedirs(os.path.join(tmp, "velgui"))
         test_velocity.run_gui(check, os.path.join(tmp, "velgui"))
+        from . import test_ddc
+        os.makedirs(os.path.join(tmp, "ddcgui"))
+        test_ddc.run_gui(check, os.path.join(tmp, "ddcgui"))
         from . import test_explain
         os.makedirs(os.path.join(tmp, "angui"))
         test_explain.run_gui(check, os.path.join(tmp, "angui"))
