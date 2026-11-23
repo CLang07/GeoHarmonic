@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.8: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.9: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -117,6 +117,15 @@ Starter projects:
   synthetic (Ricker of chosen frequency or a statistical zero-phase wavelet from the seismic around the well)
   next to the seismic trace at the well; shift / stretch by hand or **Auto tie** (max correlation), **Save
   tie** - the saved shift/stretch is applied to that well's tops and track everywhere.
+
+## Horizon maps (Interpret > Horizon maps, Ctrl+M)
+- Survey (a 3D volume, or "2D" = all 2D lines gridded with inverse distance, blank far from the lines),
+  map type: **Time structure**, **Isochron** (base - top), **Amplitude** (RMS / max |a| / max / min / mean in a
+  window above/below the horizon, or the value at the horizon), **Depth (well velocities)**: average
+  velocity to the horizon at every well inside the map (from the well's time-depth, or calibrated to a
+  formation top), gridded between wells (constant with one well), depth = V x t / 2.
+- Shown on the basemap with contours (interval auto or set). Export **XYZ**, **CPS-3 ASCII** (Petrel /
+  Kingdom / Zmap-style import; 3D grids resampled to an X/Y-aligned grid, null 1E+30), **PNG**.
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.

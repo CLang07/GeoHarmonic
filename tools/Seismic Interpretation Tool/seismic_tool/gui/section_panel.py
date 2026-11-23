@@ -99,6 +99,9 @@ class SectionPanel(QtWidgets.QWidget):
         self._rgt_editors = {}
         self.show_contours = True
         self._ctr_items = []
+        self._well_items = []
+        self._wheeler = None
+        self._stratal_surface = None
         self.modeChanged = []  # callbacks(mode) when pick/fault/rgt mode switches
         self._flt_items = []
 
@@ -504,7 +507,7 @@ class SectionPanel(QtWidgets.QWidget):
                 il, xl, t = x[j], self.number, y[i]
             elif self.mode == "Stratal slice":
                 il, xl = y[i], x[j]
-                surf = getattr(self, "_stratal_surface", None)
+                surf = self._stratal_surface
                 t = float(surf[i, j]) if surf is not None else np.nan
                 tl = f"level {self.number}  t"
             else:
@@ -701,7 +704,7 @@ class SectionPanel(QtWidgets.QWidget):
         return out
 
     def draw_wells(self):
-        for it in getattr(self, "_well_items", []):
+        for it in self._well_items:
             try:
                 self.plot.removeItem(it)
             except Exception:
@@ -1018,7 +1021,7 @@ class SectionPanel(QtWidgets.QWidget):
             return
         if kind == "3D" and self.mode == "Stratal slice":
             return
-        wh = self.wheeler_on() and getattr(self, "_wheeler", None) is not None
+        wh = self.wheeler_on() and self._wheeler is not None
         for h in hs.items:
             if not h.visible:
                 continue

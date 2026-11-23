@@ -103,6 +103,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `statistical_wavelet`, `synthetic`, `tie_correlation`, `auto_tie`. `SeisProject.wellset()` cached.
   Panel `well_overlay()` / `draw_wells()`; `gui/welltie_dialog.WellTieDialog` (compute/auto/save testable
   without drawing). `test_welltie.py` (synthetic wells + survey with a known 12 ms shift; real Tui-1/Maui-5).
+- `maps.py` (v0.9): `MapGrid` (kind "ilxl" on a survey grid or "xy"; node_xy, sample (bilinear),
+  to_xy (axis-aligned resample), transform (QTransform), contours via well_correlation.mapping.contour_segments),
+  `idw_grid`, `horizon_grid(project, h, key)` (3D grid or gridded 2D picks), `isochron`,
+  `extract_amplitude(vol, surface, above, below, kind)` (inline blocks, only the needed time window),
+  `well_velocity_points`, `depth_convert`, `write_xyz`, `write_cps3` / `read_cps3`, `export_png`.
+  `gui/map_dialog.MapDialog` (compute(**overrides) testable), `Basemap.show_grid`. `test_maps.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +

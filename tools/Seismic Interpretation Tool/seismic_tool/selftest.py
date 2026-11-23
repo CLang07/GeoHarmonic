@@ -122,6 +122,9 @@ def run():
         # ---- wells on seismic: time-depth, tops, synthetics, ties
         from . import test_welltie
         test_welltie.run(check, tmp)
+        # ---- horizon maps
+        from . import test_maps
+        test_maps.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -157,6 +160,8 @@ def run_gui():
         test_edit.run_gui(check, tmp)
         from . import test_welltie
         test_welltie.run_gui(check, tmp)
+        from . import test_maps
+        test_maps.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

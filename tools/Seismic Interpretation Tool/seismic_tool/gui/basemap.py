@@ -39,6 +39,8 @@ class Basemap(QtWidgets.QWidget):
         self._hz_name = None  # horizon shown as a time-structure map
         self._hz_items = []
         self._flt_items = []
+        self._grid = (None, None)
+        self._grid_items = []
         self.hz_range = None  # (vmin, vmax) of the last map, for the legend text
         self.plot.scene().sigMouseClicked.connect(self._clicked)
 
@@ -89,7 +91,9 @@ class Basemap(QtWidgets.QWidget):
                 self.plot.addItem(t, ignoreBounds=True)
         self._hz_items = []
         self._flt_items = []
+        self._grid_items = []
         self._draw_horizon_map()
+        self._draw_grid()
         self.draw_faults()
         self._current = pg.PlotCurveItem(pen=pg.mkPen((220, 0, 0), width=3))
         self.plot.addItem(self._current)
@@ -154,6 +158,40 @@ class Basemap(QtWidgets.QWidget):
             self._hz_items.append(it)
         self.legend.setText(f"Time map {self._hz_name}: {self.hz_range[0]:.0f} ms (red, shallow) to "
                             f"{self.hz_range[1]:.0f} ms (purple, deep)" if self.hz_range else "")
+
+    def show_grid(self, grid, levels=None):
+        """Show a maps.MapGrid (structure, isochron, amplitude, depth) with contours; None clears it."""
+        self._grid = (grid, levels)
+        self._draw_grid()
+
+    def _draw_grid(self):
+        for it in self._grid_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._grid_items = []
+        grid, levels = self._grid
+        if grid is None:
+            return
+        from PySide6 import QtGui
+        from .. import horizons as hz
+        from ..maps import nice_levels
+        lut = colormaps.lut("Rainbow (attributes)", reverse=grid.unit in ("ms", "m"))
+        rgba, lo, hi = hz.structure_rgba(grid.z, lut)
+        it = pg.ImageItem(rgba)
+        it.setTransform(QtGui.QTransform(*grid.transform()))
+        it.setZValue(-9)
+        self.plot.addItem(it)
+        self._grid_items.append(it)
+        levels = levels if levels is not None else nice_levels(grid.z)
+        for lev, (xs, ys) in grid.contours(levels).items():
+            c = pg.PlotCurveItem(xs, ys, connect="pairs", pen=pg.mkPen((40, 40, 40), width=1))
+            c.setZValue(-8)
+            self.plot.addItem(c)
+            self._grid_items.append(c)
+        self.legend.setText(f"{grid.label}: {lo:.1f} - {hi:.1f} {grid.unit}"
+                            + (f", contours every {levels[1] - levels[0]:g}" if len(levels) > 1 else ""))
 
     def fault_map_lines(self):
         """[(name, colour, xs, ys)] - each stick projected on the map plus a line joining the stick tops."""

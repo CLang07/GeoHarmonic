@@ -58,7 +58,7 @@ Kingdom-like interaction; large data.
      velocity from DT, nearest-checkshot fallback; show wells + tops (in TWT) on sections and basemap;
      synthetic seismogram (RHOB*DT AI, reflectivity, Ricker wavelet with chosen frequency, or statistical
      wavelet from seismic near the well), bulk shift / stretch-squeeze tie with correlation coefficient.
-8. **Horizon maps + attributes** - status: todo
+8. **Horizon maps + attributes** - status: done (run 1, 2026-11-23; v0.9.0)
    - Time-structure, isochron, amplitude extraction (RMS / max in window), depth conversion with a
      velocity from well ties, contours (reuse marching squares from well_correlation/mapping.py), export
      grids (XYZ, CPS-3 ASCII), PNG.

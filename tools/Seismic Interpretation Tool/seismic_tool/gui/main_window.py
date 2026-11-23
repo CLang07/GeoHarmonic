@@ -210,6 +210,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Re-link RGT around active fault", self.rgt_relink_fault)
         m.addSeparator()
         self._act(m, "&Well tie (synthetic seismogram)...", self.well_tie)
+        self._act(m, "Horizon &maps (structure, isochron, amplitude, depth)...", self.horizon_maps, "Ctrl+M")
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -568,6 +569,18 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg._changed()
         dlg.exec()
         self.section.redraw()
+        return dlg
+
+    def horizon_maps(self):
+        if not self.project.horizons.items:
+            QtWidgets.QMessageBox.information(self, "Horizon maps", "Pick or create a horizon first.")
+            return None
+        from .map_dialog import MapDialog
+        dlg = MapDialog(self.project, self.basemap, self, self.section.source)
+        if self.section.active_horizon:
+            dlg.h1.setCurrentText(self.section.active_horizon)
+        dlg.show()
+        self._map_dialog = dlg
         return dlg
 
     def toggle_rgt_mode(self):

@@ -2,6 +2,15 @@
 
 Newest first. Each section: what it does, how to use it, what to test.
 
+## Seismic v0.9.0 - Horizon maps (PLAN item 8)
+- Interpret > Horizon maps (Ctrl+M): time structure, isochron, amplitude (RMS/max/min/mean/at horizon),
+  depth with well average velocities (optionally calibrated to a formation top); basemap display with
+  contours; export XYZ, CPS-3, PNG. 2D horizons are gridded.
+- Tests: isochron exact, RMS/max/at values equal direct computation, contour of a plane on the expected line,
+  CPS-3 and XYZ round trips, 2D gridding honours the lines, depth conversion 1475.2 m vs 1475.0 m.
+- Known limits: velocity between wells by inverse distance (no kriging / velocity cube); CPS-3 row order is
+  top row first (Petrel convention) - check orientation on first import into Kingdom.
+
 ## Seismic v0.8.0 - Wells on seismic + well ties (PLAN item 7)
 - Wells + tops (TWT) on sections and time slices from the linked well project; time-depth from checkshot
   DLIS (Tui-1, Pateke-2), else sonic anchored to the nearest checkshot.
