@@ -378,3 +378,45 @@ def trajectories_from_wellset(ws, step=10.0):
                            api=getattr(w, "uwi", None) or None)
         out.append(t.resample(step) if len(t.md) > 1 else t)
     return out
+
+
+# ====================================================================== well strip / geosteering
+def wellbore_section(traj, vol, step=None):
+    """Seismic along the wellbore: nearest trace under each station (optionally resampled every `step` m of MD).
+    Returns (data (n, ns) with NaN rows outside the survey, md (n,), times (ns,) ms)."""
+    t = traj.resample(step) if step else traj
+    a, b = vol.ax, vol.ay
+    M = np.linalg.inv(np.array([[a[1], a[2]], [b[1], b[2]]]))
+    il = M[0, 0] * (t.x - a[0]) + M[0, 1] * (t.y - b[0])
+    xl = M[1, 0] * (t.x - a[0]) + M[1, 1] * (t.y - b[0])
+    ii = np.rint((il - vol.il0) / vol.il_step).astype(int)
+    jj = np.rint((xl - vol.xl0) / vol.xl_step).astype(int)
+    inside = (ii >= 0) & (ii < vol.nil) & (jj >= 0) & (jj < vol.nxl)
+    out = np.full((len(t.md), vol.ns), np.nan, np.float32)
+    if inside.any():
+        out[inside] = np.asarray(vol.ilxl[ii[inside], jj[inside]], np.float32) * vol.inv
+    return out, t.md, vol.times
+
+
+def strip_data(traj, logs=None, top=None, base=None, vol=None, twt_of_z=None, step=None):
+    """Everything a well strip / geosteering view draws, along MD:
+    md, z (TVDSS), logs {name: values at md}, top / base depth of the zone under each station (from depth grids),
+    distance above top (+ = well below top), in-zone flag, and with a volume + time-depth: the seismic section along
+    the wellbore (data, times) and the well's two-way time path.  logs: {name: (log md, values)}."""
+    t = traj.resample(step) if step else traj
+    out = {"md": t.md, "z": t.z, "logs": {}}
+    for n, (lmd, v) in (logs or {}).items():
+        out["logs"][n] = sample_log(t, lmd, v)
+    if top is not None:
+        out["top"] = top.sample(t.x, t.y)
+        out["below_top"] = t.z - out["top"]
+    if base is not None:
+        out["base"] = base.sample(t.x, t.y)
+    if top is not None and base is not None:
+        out["in_zone"] = zone_along(t, top, base)
+    if vol is not None:
+        data, _, times = wellbore_section(t, vol)
+        out["section"], out["times"] = data, times
+        if twt_of_z is not None:
+            out["twt"] = np.asarray(twt_of_z(t.z), float)
+    return out

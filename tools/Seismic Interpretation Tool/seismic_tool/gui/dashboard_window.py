@@ -28,6 +28,7 @@ class DashboardWindow(QtWidgets.QMainWindow):
         self.analytics_window = None  # set by the main window when Analytics is open
         self._ws = None
         self._table_rows = []
+        self._log_names = None
         self.model = DashboardModel()
         self.model.subscribe(self._on_model)
         self._items = []
@@ -62,7 +63,7 @@ class DashboardWindow(QtWidgets.QMainWindow):
             tb.addWidget(QtWidgets.QLabel(f" {lab} "))
             tb.addWidget(w)
         for text, fn in (("Wells from project", self.load_project_wells), ("Add basemap grid", self._add_basemap_grid),
-                         ("Stage CSV...", self._stages_dialog), ("Lateral stats", self.add_lateral_stats),
+                         ("Stage CSV...", self._stages_dialog), ("Lateral stats", self.add_lateral_stats), ("Well strip", lambda: self.open_strip()),
                          ("Send to Analytics", self.send_to_analytics), ("Clear filters", lambda: self.model.clear_filters()),
                          ("Save layout...", self._save_layout), ("Load layout...", self._load_layout),
                          ("Export HTML...", self._export_dialog)):
@@ -82,6 +83,7 @@ class DashboardWindow(QtWidgets.QMainWindow):
     def set_trajectories(self, trajs, extra=None):
         """Wells / laterals to show; extra: AttributeTable joined by API / name (engineering, production...)."""
         self.trajs = list(trajs)
+        self._log_names = None
         tab = L.stats_table(self.trajs, {})
         if extra is not None:
             tab = tab.join(extra)
@@ -124,9 +126,33 @@ class DashboardWindow(QtWidgets.QMainWindow):
         out += [f"stage: {c}" for c in cols]
         if self.project is not None and getattr(self.project, "volumes", None) and getattr(self, "_ws", None):
             out += [f"seismic: {v['name']}" for v in self.project.volumes]
+        out += [f"log: {c}" for c in self.log_names()]
         if len(self.grids) >= 2:
             out.append("in zone")
         return out
+
+    def well_logs(self, name):
+        """{curve: (md, values)} of a project well (loaded on demand, cached by the well project)."""
+        if self._ws is None or self._ws.wcp is None or name not in self._ws.names:
+            return {}
+        try:
+            w = self._ws.wcp.load_well(name)
+        except Exception:
+            return {}
+        if w.depth is None or not len(w.depth):
+            return {}
+        return {c: (w.depth, v) for c, v in w.logs.items()}
+
+    def log_names(self, max_wells=300):
+        """Curve names over the project wells (skipped for very large projects - type them in a layout)."""
+        if self._ws is None or len(self.trajs) > max_wells:
+            return []
+        if self._log_names is None:
+            names = set()
+            for t in self.trajs:
+                names |= set(self.well_logs(t.name))
+            self._log_names = sorted(names)
+        return self._log_names
 
     def set_zone(self, top, base):
         self.zone = (top, base)
@@ -149,6 +175,9 @@ class DashboardWindow(QtWidgets.QMainWindow):
                     v = L.sample_volume(t, self.project.volume(source[9:]), td.twt)
                 except Exception:  # no time-depth for this well
                     v = np.full(len(t.md), np.nan)
+            elif source.startswith("log: "):
+                lg = self.well_logs(t.name).get(source[5:])
+                v = L.sample_log(t, *lg) if lg is not None else np.full(len(t.md), np.nan)
             elif source == "in zone":
                 top, base = self.zone or list(self.grids)[:2]
                 v = L.zone_along(t, self.grids[top], self.grids[base])
@@ -189,6 +218,36 @@ class DashboardWindow(QtWidgets.QMainWindow):
             self.status.setText("Open Interpret > Analytics first.")
             return None
         return win.add_table(self.model.table)
+
+    def strip_for(self, k, step=5.0):
+        """laterals.strip_data for well row k: its logs, the zone grids (if set), the first 3D volume."""
+        t = self.trajs[k]
+        top = base = None
+        if len(self.grids) >= 2:
+            tn, bn = self.zone or list(self.grids)[:2]
+            top, base = self.grids[tn], self.grids[bn]
+        vol = twt = None
+        if self.project is not None and getattr(self.project, "volumes", None) and self._ws is not None:
+            try:
+                vol = self.project.volume(self.project.volumes[0]["name"])
+                twt = self._ws.td_for(t.name).twt
+            except Exception:
+                vol = twt = None
+        return L.strip_data(t, self.well_logs(t.name), top, base, vol, twt, step)
+
+    def open_strip(self, k=None):
+        if k is None:
+            k = min(self.model.selected) if self.model.selected else None
+        if k is None:
+            self.status.setText("Select a well first.")
+            return None
+        from .well_strip import WellStrip
+        d = self.strip_for(k)
+        self._strip = WellStrip()
+        self._strip.setWindowTitle(f"Well strip - {self.trajs[k].name}")
+        self._strip.show_data(self.trajs[k].name, d)
+        self._strip.show()
+        return d
 
     def map_batches(self, pixel=None):
         """{bin: (xs, ys)} NaN-separated polylines, one per colour bin (one draw call each)."""

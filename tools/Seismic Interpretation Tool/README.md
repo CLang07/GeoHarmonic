@@ -194,6 +194,9 @@ Starter projects:
 - Linked panels: map, histogram (drag the shaded range to filter), crossplot (with fit and r), table; selecting
   in one highlights in all. "Lateral stats" adds mean / P10 / P50 / P90 of the colour attribute and % in zone per
   lateral; "Send to Analytics" makes them model inputs. Save / load layouts; export a standalone HTML page.
+- Log curves (GR, RHOB...) are colour sources too. **Well strip** (select a well): log vs MD, TVDSS vs MD with
+  the zone top / base under the wellbore (the two zone grids), and the seismic along the wellbore with the
+  well's time path - a geosteering view.
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--check-ml`, `--png PROJECT OUT.png`.

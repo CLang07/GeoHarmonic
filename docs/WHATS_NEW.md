@@ -27,7 +27,8 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
    (completions.csv first, then production.csv) - the mapping form (combo per column) is new real-Qt code.
 8. Dashboard (new real-Qt window): on the NZ project linked to the Maui 3D, Interpret > Dashboard - deviated
    Maui wells should be drawn from their surveys; Colour by TVDSS, then a basemap grid; drag the histogram range;
-   click a well on the map / a table row and check the highlight follows in all panels.
+   click a well on the map / a table row and check the highlight follows in all panels. Select a deviated
+   well, Well strip: the seismic panel's yellow time path should sit on the reflector the well follows.
 9. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
    orientation (top row first).
 
@@ -40,6 +41,10 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
 
 ## Change log (newest first)
+
+## Seismic v0.16.1 - well strip / geosteering view
+- Dashboard > Well strip: log vs MD, TVDSS vs MD with zone top/base, seismic along the wellbore + time path.
+- Log curves as lateral colour sources.
 
 ## Seismic v0.16.0 - Dashboard with laterals (PLAN item 14, first parts)
 - Interpret > Dashboard: map / histogram / crossplot / table docks with linked selection and filters; wells from

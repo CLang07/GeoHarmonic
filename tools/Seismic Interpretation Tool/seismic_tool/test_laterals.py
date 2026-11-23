@@ -209,6 +209,7 @@ def run_gui(check, tmp):
     win.add_grid("top", zt)
     win.add_grid("base", zb)
     win.set_zone("top", "base")
+    strip_checks(check, sp, ws, tb, zt, zb)
     vzn = win.color_by("in zone")
     win.add_lateral_stats()
     check(np.nanmax(vzn["B-1"]) == 1.0 and win.model.table.cols["pct_in_zone"][1] == 100.0,
@@ -221,6 +222,15 @@ def run_gui(check, tmp):
     win.load_stages(stp)
     vst = win.color_by("stage: Proppant per ft")
     check(np.nanmax(vst["B-1"]) == 1400.0 and np.all(np.isnan(vst["A-1"])), "dashboard: colour by stage CSV values")
+    md_log = np.arange(0, tb.md[-1] + 1, 0.5)
+    win.well_logs = lambda n: {"GR": (md_log, 50 + 0.01 * md_log)} if n == "B-1" else {}
+    win._log_names = None
+    check("log: GR" in win.color_sources(), "dashboard: log curves offered as colour sources")
+    vl = win.color_by("log: GR")
+    check(np.allclose(vl["B-1"], 50 + 0.01 * tb.md) and np.all(np.isnan(vl["A-1"])), "dashboard: colour by a log along MD")
+    sd = win.open_strip(trajs.index(tb))
+    check(sd is not None and "section" in sd and "GR" in sd["logs"] and "top" in sd and np.isfinite(sd["twt"]).all(),
+          "dashboard: well strip (log, zone, seismic along the wellbore)")
     check(win.nearest_well(tb.x[-1] + 5, tb.y[-1]) == trajs.index(tb), "dashboard: map click picks the nearest wellbore")
     win.model.select([1])
     check(win.model.selected == {1}, "dashboard: linked selection")
@@ -243,3 +253,22 @@ def run_gui(check, tmp):
     check(os.path.getsize(out) > 5000 and "data:image/png" in open(out, encoding="utf-8").read(),
           "dashboard: HTML export with the coloured lateral map")
     return True
+
+
+def strip_checks(check, sp, ws, tb, zt, zb):
+    """Well strip data: section along the wellbore, well time path, zone top/base, logs."""
+    from . import laterals as L
+    vol = sp.volume("V")
+    td = ws.td_for(tb.name)
+    md_log = np.arange(0, tb.md[-1] + 1, 0.5)
+    gr = 50 + 0.01 * md_log
+    sd = L.strip_data(tb, {"GR": (md_log, gr)}, zt, zb, vol, td.twt, step=10.0)
+    k = len(sd["md"]) // 2
+    xk, yk, _ = tb.at_md(sd["md"][k])
+    il, xl = vol.ilxl_at(float(xk), float(yk))
+    tr = vol.trace(il, xl)
+    check(sd["section"].shape == (len(sd["md"]), vol.ns) and np.allclose(sd["section"][k], tr),
+          "well strip: seismic section along the wellbore (nearest traces)")
+    check(np.allclose(sd["logs"]["GR"], 50 + 0.01 * sd["md"]) and np.allclose(sd["below_top"], sd["z"] - 990.0)
+          and np.nanmax(sd["twt"]) > 0 and np.all(np.diff(sd["twt"][sd["z"] < 900]) >= -1e-9),
+          "well strip: log along MD, distance below the zone top, two-way time path")

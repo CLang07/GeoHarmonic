@@ -176,6 +176,8 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `gui/dashboard_window.DashboardWindow` (QMainWindow with docks; set_trajectories, add_grid, load_stages,
   color_sources/values_for/color_by, add_lateral_stats, send_to_analytics, map_batches, filter_from_region,
   nearest_well, export_html; model events data|filter|selection; selection does not rebuild the table).
+  `laterals.wellbore_section`, `strip_data`; `gui/well_strip.WellStrip.show_data`; dashboard `well_logs`,
+  `log_names` (<= 300 wells), `strip_for`, `open_strip`.
   Tests: `test_laterals.py` (run + run_gui).
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
