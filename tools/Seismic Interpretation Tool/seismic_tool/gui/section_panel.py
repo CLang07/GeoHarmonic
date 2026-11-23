@@ -322,7 +322,9 @@ class SectionPanel(QtWidgets.QWidget):
         self._hz_items = []
         self._flt_items = []
         self._ctr_items = []
+        self._well_items = []
         self.draw_contours()
+        self.draw_wells()
         self.draw_horizons()
         self.draw_faults()
         if view and not reset_view:
@@ -670,6 +672,66 @@ class SectionPanel(QtWidgets.QWidget):
         self._rgt_grab = None
         for cb in self.modeChanged:
             cb(mode)
+
+    # ------------------------------------------------------------ wells
+    def well_overlay(self):
+        """Pure data: [{name, x, t_top, t_bottom, tops: [(formation, twt, colour)]}] for wells on/near the
+        section (3D inline/crossline: within 3 traces; 2D: within 500 m; time slice: map position)."""
+        if not self.project or not self.project.well_project or not self.source or self.wheeler_on():
+            return []
+        kind, name = self.source
+        try:
+            ws = self.project.wellset()
+            surv = self.project.volume(name) if kind == "3D" else self.project.line(name)
+            near = ws.near_section(kind, surv, self.mode, self.number)
+        except Exception as e:
+            self.cursorInfo.emit(f"Wells not shown: {e}")
+            return []
+        out = []
+        for wn, xv, dist in near:
+            try:
+                td = ws.td_for(wn)
+                w = ws.well(wn)
+                tops = [(fm, t, ws.formation_color(fm)) for fm, t in ws.tops_twt(wn).items()]
+                z_td = w.md_to_tvdss(w.td) if w.td else td.z[-1]
+                out.append({"name": wn, "x": xv, "dist": dist, "t_top": 0.0, "t_bottom": float(td.twt(z_td)),
+                            "tops": sorted(tops, key=lambda a: a[1]), "td_source": td.source})
+            except Exception:
+                continue
+        return out
+
+    def draw_wells(self):
+        for it in getattr(self, "_well_items", []):
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._well_items = []
+        if self._data is None:
+            return
+        slice_view = self.source and self.source[0] == "3D" and self.mode in ("Time slice", "Stratal slice")
+        for w in self.well_overlay():
+            if slice_view:
+                xv, yv = w["x"]
+                items = [pg.ScatterPlotItem([xv], [yv], symbol="o", size=10, brush=pg.mkBrush(0, 0, 0),
+                                            pen=pg.mkPen("w"))]
+                t = pg.TextItem(w["name"], color=(0, 0, 0), anchor=(-0.1, 1.1))
+                t.setPos(xv, yv)
+                items.append(t)
+            else:
+                items = [pg.PlotCurveItem([w["x"], w["x"]], [w["t_top"], w["t_bottom"]], pen=pg.mkPen((0, 0, 0), width=2))]
+                t = pg.TextItem(w["name"], color=(0, 0, 0), anchor=(0.5, 1.0))
+                t.setPos(w["x"], w["t_top"])
+                items.append(t)
+                dx = max(1.0, 0.01 * float(np.ptp(self._xaxis))) if self._xaxis is not None else 1.0
+                for fm, tw, col in w["tops"]:
+                    items.append(pg.PlotCurveItem([w["x"] - dx, w["x"] + dx], [tw, tw], pen=pg.mkPen(col, width=3)))
+                    lab = pg.TextItem(fm, color=col, anchor=(0, 0.5))
+                    lab.setPos(w["x"] + dx, tw)
+                    items.append(lab)
+            for it in items:
+                self.plot.addItem(it, ignoreBounds=True) if isinstance(it, pg.TextItem) else self.plot.addItem(it)
+                self._well_items.append(it)
 
     # ------------------------------------------------------------ RGT editing + contours
     def rgt_editor(self):

@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.7: loading, viewing, horizons, faults, dip field, RGT model (stack, Wheeler, stratal slices, editing)
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.8: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -104,6 +104,19 @@ Starter projects:
   area. **Re-link RGT around active fault**: after drawing or editing a fault, re-solves around it so the
   model honours it (no need to recompute everything).
 - Edits are saved immediately (`rgt_nodes.npz`, `edits.json` in the RGT folder).
+
+## Wells on seismic + well ties
+- Link the Well Correlation project (File > Link well project). Wells within 3 traces of an inline/crossline
+  (500 m of a 2D line) are drawn as vertical lines with their tops (formation colours) in TWT; on time slices
+  as dots.
+- Time-depth per well: its checkshot (DLIS in `wells\<Well>\checkshot\`, all surveys merged, or a CSV from
+  `--checkshot`), else the sonic integrated from the log top and anchored to the nearest well that has a
+  checkshot (Maui wells use Tui-1's - the Maui checkshot LAS files contain no time-depth pairs), else a
+  default velocity function.
+- **Interpret > Well tie**: AI (RHOB x velocity from DT; Gardner density if RHOB is missing), reflectivity,
+  synthetic (Ricker of chosen frequency or a statistical zero-phase wavelet from the seismic around the well)
+  next to the seismic trace at the well; shift / stretch by hand or **Auto tie** (max correlation), **Save
+  tie** - the saved shift/stretch is applied to that well's tops and track everywhere.
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.

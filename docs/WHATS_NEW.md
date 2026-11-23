@@ -2,6 +2,15 @@
 
 Newest first. Each section: what it does, how to use it, what to test.
 
+## Seismic v0.8.0 - Wells on seismic + well ties (PLAN item 7)
+- Wells + tops (TWT) on sections and time slices from the linked well project; time-depth from checkshot
+  DLIS (Tui-1, Pateke-2), else sonic anchored to the nearest checkshot.
+- Interpret > Well tie: synthetic (Ricker / statistical wavelet) vs seismic, shift/stretch, auto tie, save.
+- Tests: synthetic survey delayed 12 ms -> auto tie finds 12.1 ms (corr -0.55 -> 0.99); statistical
+  wavelet 12.1 ms; Tui-1 3875 m TVDSS -> 2806 ms (checkshot); Maui-5 tops 1864-2110 ms via sonic + Tui-1.
+- Known limits: wells treated as vertical at the surface location on sections (deviated paths in item 14);
+  stretch is one linear factor (no multi-point squeeze yet); tie uses the nearest trace only.
+
 ## Well Correlation Tool v0.5.0 - DLIS reader (PLAN item 6b)
 - DLIS files in `wells\<Well>\dlis\` load like LAS; Tui-1 added to the NZ project from its two DLIS
   files (header from wells_header.csv; PR3099 tops were already there).

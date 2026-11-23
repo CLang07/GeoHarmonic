@@ -95,6 +95,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `NodeInterp` in solve.py = shared full-res interpolation; write_rgt_3d rounds tau to float32 first so
   edits reproduce untouched traces bit-exactly. Panel: `set_mode('rgt')`, `rgt_click`, `rgt_contours()`,
   `draw_contours`, editors cached in `_rgt_editors` (reset before recomputing dip/RGT). `test_edit.py`.
+- `welltie.py` (v0.8): imports the sibling `well_correlation` package (`wc()` adds tools/Well Correlation Tool
+  to sys.path); `checkshot_for` (merges all DLIS/CSV checkshots of a well), `sonic_td`, `WellTD` (z_ss -> twt,
+  extrapolation, tie shift/stretch about t_centre, `depth()` inverse), `WellSet(seisproject)` (td_for: checkshot >
+  sonic anchored to nearest checkshot > default; tops_twt; near_section; trace_at_well; save_tie into
+  `project.display["well_ties"]`), `logs_in_time` (AI averaged per output sample), `ricker`,
+  `statistical_wavelet`, `synthetic`, `tie_correlation`, `auto_tie`. `SeisProject.wellset()` cached.
+  Panel `well_overlay()` / `draw_wells()`; `gui/welltie_dialog.WellTieDialog` (compute/auto/save testable
+  without drawing). `test_welltie.py` (synthetic wells + survey with a known 12 ms shift; real Tui-1/Maui-5).
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +
@@ -158,4 +166,6 @@ key results with matplotlib to PNG and look at them.
 - Windows: close npz files (`with np.load(...)`) and drop memmaps before rewriting/replacing a file.
 - RGT point edits: a single tau(t)=v constraint folds the model (non-monotonic) when the level moves more
   than a node interval; constrain a +/-24 ms segment instead (`move_level`).
+- The Maui-5 / Maui-6 "checkshot" LAS files are mislabelled exports (TIME index with GR/CALI columns) - no
+  usable time-depth; Tui-1 (4 CSAT DLIS) and Pateke-2 (SEIS_CSI_037PNP) are the real checkshots.
 - Chris wants Kingdom/GeoGraphix-style behaviour and speed with big datasets; avoid per-trace Python loops.

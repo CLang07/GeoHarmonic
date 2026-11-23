@@ -31,13 +31,13 @@ def folded_surfaces(nil, nxl):
     return top, deep
 
 
-def write_3d(path, cube, il0=1001, xl0=2001, dt_us=4000, fmt=5):
+def write_3d(path, cube, il0=1001, xl0=2001, dt_us=4000, fmt=5, x0=500000.0, y0=6000000.0):
     from .selftest import write_segy
     nil, nxl, ns = cube.shape
     il = np.repeat(np.arange(il0, il0 + nil), nxl)
     xl = np.tile(np.arange(xl0, xl0 + nxl), nil)
-    x = 500000 + 25.0 * (xl - xl0)
-    y = 6000000 + 25.0 * (il - il0)
+    x = x0 + 25.0 * (xl - xl0)
+    y = y0 + 25.0 * (il - il0)
     write_segy(path, cube.reshape(-1, ns), {189: il, 193: xl, 181: x.astype(np.int64), 185: y.astype(np.int64)},
                dt_us=dt_us, fmt=fmt)
 

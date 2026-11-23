@@ -119,6 +119,9 @@ def run():
         # ---- RGT step D: local editing
         from . import test_edit
         test_edit.run(check, tmp)
+        # ---- wells on seismic: time-depth, tops, synthetics, ties
+        from . import test_welltie
+        test_welltie.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -152,6 +155,8 @@ def run_gui():
         test_stack.run_gui(check, tmp)
         from . import test_edit
         test_edit.run_gui(check, tmp)
+        from . import test_welltie
+        test_welltie.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

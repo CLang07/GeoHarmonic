@@ -33,4 +33,6 @@
   wells/<Well>/dlis/*.dlis, CLI --dlisinfo/--dlis2las/--checkshot, Tui-1 added to the NZ project (logs from
   DLIS: GR, RHOB, NPHI, DT, PE, RDEEP, RSHAL, SP, CALI). Tests: synthetic DLIS round trip + real Tui-1 sanity
   ranges + checkshot PASS; all tool self-tests PASS.
-- Working on PLAN item 7 next.
+- Item 7 DONE - wells on seismic + well ties (v0.8.0): welltie.py, gui/welltie_dialog.py, test_welltie.py,
+  panel well overlay, Interpret > Well tie. Tests PASS (auto tie 12.1 vs 12 ms; real Tui-1/Maui-5 TD).
+- Working on PLAN item 8 next.

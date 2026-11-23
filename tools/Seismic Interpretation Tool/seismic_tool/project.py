@@ -134,6 +134,14 @@ class SeisProject:
         self._nav = None
         self._line_cache.clear()
 
+    def wellset(self, reload=False):
+        """WellSet (well project + time-depth + ties) for the linked well project, cached."""
+        from .welltie import WellSet
+        if reload or getattr(self, "_wellset", None) is None or self._wellset_path != self.well_project:
+            self._wellset = WellSet(self)
+            self._wellset_path = self.well_project
+        return self._wellset
+
     def wells(self):
         """[(name, x, y)] from the linked Well Correlation project (headers only)."""
         if not self.well_project or not os.path.exists(self.well_project):

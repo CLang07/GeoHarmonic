@@ -209,6 +209,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Use active horizon as RGT constraint", self.rgt_horizon_constraint)
         self._act(m, "Re-link RGT around active fault", self.rgt_relink_fault)
         m.addSeparator()
+        self._act(m, "&Well tie (synthetic seismogram)...", self.well_tie)
+        m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
         self._act(m, "Next line / slice (PgDown)", lambda: self.section.step(1))
@@ -550,6 +552,23 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f"RGT done ({len(names)} lines): {getattr(self, '_rgt_stats', {})}", 15000)
 
         self.run_job("RGT 2D lines", fn, done)
+
+    def well_tie(self, well=None):
+        if not self.project.well_project:
+            QtWidgets.QMessageBox.information(self, "Well tie", "Link a well project first (File > Link well project).")
+            return None
+        if not self.section.source:
+            return None
+        from .welltie_dialog import WellTieDialog
+        try:
+            dlg = WellTieDialog(self.project, self.section.source, self, well)
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Well tie", str(e))
+            return None
+        dlg._changed()
+        dlg.exec()
+        self.section.redraw()
+        return dlg
 
     def toggle_rgt_mode(self):
         on = not self.section.rgt_mode

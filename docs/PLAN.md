@@ -53,7 +53,7 @@ Kingdom-like interaction; large data.
      converted logs; the large main-pass DLIS (171 MB, not in repo) is converted by Chris on his PC with
      `--dlis2las`. Document that in WHATS_NEW.
    - Checkshot tables (Tui-1, Pateke-2, Maui-5, Maui-6) become the time-depth inputs for item 7.
-7. **Wells on seismic** - status: todo
+7. **Wells on seismic** - status: done (run 1, 2026-11-23; v0.8.0)
    - Load well project wells; time-depth from checkshots (Maui-5, Maui-6 LAS in data/nz) or interval
      velocity from DT, nearest-checkshot fallback; show wells + tops (in TWT) on sections and basemap;
      synthetic seismogram (RHOB*DT AI, reflectivity, Ricker wavelet with chosen frequency, or statistical
