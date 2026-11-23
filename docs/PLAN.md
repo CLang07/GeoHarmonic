@@ -105,6 +105,25 @@ Kingdom-like interaction; large data.
      maps/volumes) with a clear warning when wells are too few for the number of inputs.
      Add `Install analytics extras (optional).bat` that pip installs xgboost, scikit-learn and shap into
      the tool's .venv, and a `--check-ml` command that compares numpy vs library results on a fixed dataset.
+   13d. Model QC toolkit (a "QC report" tab run on any trained model):
+     - Validation designs: true blind wells (never seen in any tuning), spatial-buffer CV (drop training
+       wells within R of the test well), temporal holdout (train on older wells, test on newer - needs a
+       date column), repeated/bootstrapped CV with score spread.
+     - Baselines every model must beat: mean, IDW/kriging of the target alone (does seismic add value over
+       spatial interpolation?), best single attribute regression. Y-randomization (shuffled-target) test
+       and an added random-noise feature (real inputs must out-rank noise) to expose overfitting/leakage.
+     - Residual diagnostics: residual vs predicted, vs each input, QQ plot, residual map and residual
+       variogram / Moran's I (spatial structure left in residuals = missing input).
+     - Uncertainty: quantile GBM and split-conformal prediction intervals with measured coverage
+       (e.g. 80% interval should contain ~80% of blind wells); classifier calibration (reliability
+       diagram, Brier score).
+     - Applicability domain: flag/mask map cells whose inputs are outside the training data
+       (Mahalanobis / nearest-neighbour distance in input space) - no confident predictions there.
+     - Stability: importance and SHAP rankings across folds/bootstraps, grouped permutation importance for
+       correlated inputs, hyperparameter sensitivity, learning curve (would more wells help?).
+     - Geologic sanity: optional monotonic constraints in the GBM, partial-dependence direction checks
+       against expected physics, predicted vs observed at every well on the map.
+     - Model comparison: paired CV-fold comparison with a significance estimate; one-page HTML QC report.
    Tests: synthetic data with known linear + nonlinear + interaction effects -> models recover them;
    TreeSHAP values sum to prediction minus expected value (local accuracy) and match brute-force Shapley
    on small trees exactly; KernelSHAP close to exact; GBM beats linear on the nonlinear case; group CV
