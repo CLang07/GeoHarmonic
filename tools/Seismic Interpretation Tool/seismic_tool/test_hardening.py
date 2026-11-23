@@ -28,6 +28,24 @@ def run(check, tmp):
         os.path.join(store, "meta.json")), "import cancelled: partial store removed")
     v = import_3d(sgy, store, chunk=300, cancel=lambda: False)
     check(v.nil == 30 and v.nxl == 40, "import after a cancelled one works")
+    # irregular geometry: missing traces, a NaN trace, a dead trace, IBM floats
+    from .selftest import write_segy
+    nil, nxl, ns = 12, 15, 80
+    tr = traces_from_surfaces([np.full((nil, nxl), 150.0)], [1.0], ns, 0.004).reshape(nil * nxl, ns)
+    il = np.repeat(np.arange(100, 100 + nil), nxl)
+    xl = np.tile(np.arange(10, 10 + 2 * nxl, 2), nil)
+    keep = np.ones(nil * nxl, bool)
+    keep[[3, 4, 50, 51, 52]] = False  # holes
+    tr[20] = np.nan
+    tr[21] = 0.0
+    p2 = os.path.join(d, "irr.sgy")
+    write_segy(p2, tr[keep], {189: il[keep], 193: xl[keep], 181: 1000 + 25 * (xl[keep] - 10) // 2,
+                              185: 5000 + 25 * (il[keep] - 100)}, fmt=5)
+    v2 = import_3d(p2, os.path.join(d, "irr"))
+    a = np.asarray(v2.ilxl, np.float32)
+    check(v2.nxl == nxl and v2.xl_step == 2 and abs(v2.meta["fill_fraction"] - (1 - 5 / (nil * nxl))) < 1e-9
+          and np.isfinite(a).all() and np.abs(a[1, 5]).max() == 0 and np.abs(a[0, 3]).max() == 0
+          and np.abs(a[2, 0]).max() > 0, "irregular 3D: holes, NaN + dead traces, crossline step 2")
     wellindex_checks(check, d)
     return v
 

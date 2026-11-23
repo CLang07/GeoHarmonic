@@ -86,6 +86,7 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
     for s in range(0, n, chunk):
         e = min(n, s + chunk)
         tr = f.traces(s, e) * scale
+        np.nan_to_num(tr, copy=False, nan=0.0, posinf=0.0, neginf=0.0)  # corrupt / dead samples
         np.clip(tr, -60000, 60000, out=tr)
         ilxl[ii[s:e], jj[s:e], :] = tr.astype(np.float16)
         filled[ii[s:e], jj[s:e]] = True

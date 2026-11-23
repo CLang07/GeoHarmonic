@@ -204,8 +204,10 @@ Kingdom-like interaction; large data.
      trajectories. Tests: trajectory colours match the sampled attribute at MD; per-lateral stats correct.
 15. **Scale + hardening** - status: partial (run 1: 15a Cancel button for every threaded job incl. 3D import
    (partial store removed), `wellindex.py` SQLite well index with grid-bucket spatial queries (10k wells: box query
-   ~1 ms). LEFT: dev/bench.py + docs/BENCHMARKS.md, overview volume for zoomed-out views, wire the well index
-   into basemap/dashboard for >2,000 wells, parallel import, code review pass)
+   ~1 ms). 15b: dev/bench.py + docs/BENCHMARKS.md (0.6 GB: import 166 MB/s, slices 0.4-1.3 ms); import
+   hardening (NaN/inf samples -> 0, holes + crossline step tested). LEFT: run bench at 5-20 GB on Chris's PC; wire
+   the well index into basemap/dashboard for >2,000 wells; parallel import if the PC bench shows import is CPU-bound;
+   overview volume only if zoomed-out display is slow there)
    - Scale targets (Chris wants big datasets): 3D volume 20-50 GB SEG-Y, 1,000+ 2D lines, 10,000 wells,
      1,000 laterals on the dashboard, all responsive on a 16-32 GB RAM PC.
    - Seismic: import in parallel (threads over trace chunks; numpy releases the GIL in I/O/copy), bricked
