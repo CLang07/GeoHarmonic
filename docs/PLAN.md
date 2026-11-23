@@ -318,7 +318,7 @@ Kingdom-like interaction; large data.
         test checklist). GUI logic tested under dev/fakeqt.
    Run order: 18a -> 18b -> 18c -> 18d -> 18e.
 
-19. **Seismic inversion package (post-stack + pre-stack)** - status: partial (19a done v0.32.0)
+19. **Seismic inversion package (post-stack + pre-stack)** - status: partial (19a v0.32.0, 19b v0.33.0 done)
    Chris asked for this on 2026-11-23 (after item 18). Builds on item 16 (well tie, wavelets, Aki-Richards / Shuey,
    logs_in_time) and item 17 (vgrid kriging / guide, horizons framework). numpy only (no PyLops / scipy).
    19a. Low-frequency model: well AI (and Vp, Vs, rho for pre-stack) in time from the ties, conditioned (despike,

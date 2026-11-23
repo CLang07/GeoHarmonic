@@ -150,5 +150,83 @@ def run_lfm(check, tmp):
     return sp, E
 
 
+def run_poststack(check, tmp, sp=None, E=None):
+    from .inversion import lfm as L
+    from .inversion import poststack as PS
+    rng = np.random.default_rng(3)
+    for m in (31, 32):
+        w = rng.normal(size=m)
+        x = rng.normal(size=(2, 200))
+        op = PS.ConvOp(w, 200)
+        y = rng.normal(size=(2, 200))
+        same = np.array([np.convolve(r, w, "same") for r in x])
+        check(np.allclose(op.forward(x), same) and abs(np.sum(op.forward(x) * y) - np.sum(x * op.adjoint(y))) < 1e-9,
+              f"convolution operator == np.convolve 'same' and its adjoint passes the dot test (wavelet {m})")
+    z = rng.normal(size=(2, 100))
+    r = rng.normal(size=(2, 100))
+    check(abs(np.sum(PS.D(z) * r) - np.sum(z * PS.DT(r))) < 1e-12, "reflectivity operator adjoint (dot test)")
+    if sp is None:
+        sp, E = inversion_project(tmp, "inv_ps")
+    vol = sp.volume("S")
+    curves = curves_from_earth(vol, E, WELL_IJ)
+    fc = 8.0
+    wav = E["wavelet"]
+    i, j = WELL_IJ[0]
+    s_w = np.asarray(vol.ilxl[i, j], np.float32).astype(float) * vol.inv
+    w_scaled, k = PS.scale_wavelet(wav * 3.0, s_w, E["ai"][i, j])
+    check(abs(k * 3.0 - 1.0) < 0.02, f"wavelet scaled to the seismic at a well (k = {k * 3:.3f}, true 1)")
+    vl = L.VolumeLFM(sp, "S", curves, "ai", ["H1", "H2"], fc=fc)
+    bi, bj = BLIND_IJ
+    prior = vl.traces([bi], [bj])
+    s = np.asarray(vol.ilxl[bi, bj], np.float32).astype(float)[None, :] * vol.inv
+    zt = PS.invert_traces(s, np.log(prior), wav, lam=0.02)
+    true = E["ai"][bi, bj]
+    e_inv = PS.band_error(zt[0], true, DT, 60.0)
+    e_lfm = PS.band_error(np.log(prior[0]), true, DT, 60.0)
+    check(e_inv < 3.0 and e_inv < 0.5 * e_lfm, f"model-based inversion at a blind trace: {e_inv:.2f} % AI error in "
+          f"the seismic band (LFM alone {e_lfm:.2f} %)")
+    nr = PS.residual_nrms(s, zt, wav)[0]
+    check(nr < 25.0, f"synthetic of the result matches the seismic (NRMS {nr:.1f} %)")
+    noisy = s + rng.normal(0, 0.15 * s.std(), s.shape)
+    zn = PS.invert_traces(noisy, np.log(prior), wav, lam=0.1)
+    en = PS.band_error(zn[0], true, DT, 60.0)
+    check(en < 5.0, f"with 15 % noise: {en:.2f} % AI error")
+    # blocky earth: L1 (IRLS) beats Tikhonov
+    n = 300
+    blocky = np.exp(np.log(6000.0) + np.cumsum(np.where(rng.random(n) < 0.04, rng.normal(0, 0.12, n), 0.0)))
+    sb = PS.synthetic_ln(np.log(blocky)[None, :], wav)
+    pr = np.exp(np.convolve(np.log(blocky), np.ones(41) / 41, "same"))[None, :]
+    pr[:, :20], pr[:, -20:] = blocky[:20].mean(), blocky[-20:].mean()
+    z2 = PS.invert_traces(sb, np.log(pr), wav, lam=0.002)
+    z1 = PS.invert_traces(sb, np.log(pr), wav, lam=0.002, mu=0.005, eps=1e-3)
+    e2 = np.mean(np.abs(np.exp(z2[0]) / blocky - 1))
+    e1 = np.mean(np.abs(np.exp(z1[0]) / blocky - 1))
+    check(e1 < e2, f"blocky (L1 / TV by IRLS) inversion on a blocky earth: {100 * e1:.2f} % vs Tikhonov {100 * e2:.2f} %")
+    # coloured inversion
+    ci = PS.Coloured(sp, "S", curves)
+    rel = ci.traces([bi], [bj])[0]
+    bp = PS.butter_filter(PS.butter_filter(np.log(true), DT, 60.0), DT, 5.0, 4, "high")
+    c = PS.corr(rel[50:-50], bp[50:-50])
+    check(c > 0.8 and ci.alpha < 0.5, f"coloured inversion: alpha {ci.alpha:.2f}, correlation with the band-limited "
+          f"true ln AI {c:.2f}")
+    # volume + blind well test
+    lfm_name = vl.write("LFM AI 8Hz")
+    inv = PS.PostStack(sp, "S", lfm_name, wav, lam=0.02)
+    name = inv.write()
+    v2 = sp.volume(name)
+    back = np.asarray(v2.ilxl[bi, bj], np.float32) * v2.inv
+    check(name == "S [AI model-based]" and PS.band_error(np.log(back), true, DT, 60.0) < 3.5,
+          f"model-based AI volume written ({PS.band_error(np.log(back), true, DT, 60.0):.2f} % at the blind trace)")
+    lat = PS.PostStack(sp, "S", lfm_name, wav, lam=0.02, lateral=0.5)
+    zl = np.log(lat.compute(10, 14))
+    z0 = np.log(inv.compute(10, 14))
+    check(np.std(np.diff(zl, axis=1)) <= np.std(np.diff(z0, axis=1)) + 1e-12, "lateral smoothing of the update")
+    rows = PS.blind_well_test(sp, "S", curves, wav, ["H1", "H2"], fc=fc, lam=0.02)
+    check(len(rows) == 4 and all(r["corr"] > 0.9 and r["error_pct"] < 4.0 for r in rows),
+          "blind-well test: " + ", ".join(f"{r['well']} r={r['corr']:.2f} {r['error_pct']:.1f} %" for r in rows))
+    return sp, E
+
+
 def run(check, tmp):
-    run_lfm(check, tmp)
+    sp, E = run_lfm(check, tmp)
+    run_poststack(check, tmp, sp, E)
