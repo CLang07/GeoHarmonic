@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.14: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties, attributes, velocity model + depth, analytics
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.15: loading, viewing, horizons, faults, RGT model (dip, stack, Wheeler, stratal slices, editing), well ties, maps, 2D-3D misties, attributes, velocity model + depth, analytics
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -173,6 +173,11 @@ Starter projects:
   there only to show how optimistic it is). A warning appears when there are too few wells for the inputs.
 - SHAP values (exact TreeSHAP) for tree models; HTML report; **Predict map** = mean of the CV-fold models with
   an uncertainty map (spread).
+- **Model QC...**: does the model beat the mean, IDW of the target alone and the best single input? Does it
+  collapse when the target is shuffled (leakage test)? Do the inputs out-rank a random noise column? Is spatial
+  structure left in the residuals (Moran's I = missing input)? 80% conformal interval, importance stability.
+  One-page HTML. More QC functions (quantile GBM intervals, calibration, applicability domain, temporal / blind
+  designs, paired model comparison) are in `seismic_tool/analytics/qc.py`.
 - Engineering / production helpers (CSV presets for Enverus, IHS, Texas RRC, FracFocus, NDIC, ECMC, NM OCD, OCC;
   units; cums, IP, GOR, Arps EUR, parent/child) are in `seismic_tool/analytics/engineering.py` - a GUI import
   dialog comes next. `python dev/make_synthetic_engineering.py OUT` writes a synthetic data set to try.

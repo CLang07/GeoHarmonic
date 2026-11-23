@@ -21,7 +21,9 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
    `python -m well_correlation --dlis2las <the 171 MB Tui-1 main DLIS> <folder>`.
 6. Maui 3D (when imported): link the NZ well project; wells + tops on inlines; Interpret > Well tie for
    Maui-5/6 (time-depth = sonic anchored to Tui-1's checkshot), Auto tie, Save; Interpret > Horizon maps.
-7. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
+7. Analytics: Interpret > Analytics, add 2-3 basemap grids + a CSV target, Train (GBM, leave one well out),
+   then **Model QC...** - read the summary (baselines / leakage / Moran) and open the HTML.
+8. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
    orientation (top row first).
 
 ## Known limits (all items)
@@ -33,6 +35,15 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
 
 ## Change log (newest first)
+
+## Seismic v0.15.0 - Analytics 13d: model QC toolkit
+- `analytics/qc.py`: baselines (mean, IDW of the target, best single input), y-randomisation, random-noise
+  feature, residual QQ / variogram / Moran's I, split-conformal and quantile-GBM intervals with coverage,
+  classifier calibration (Brier), applicability domain (Mahalanobis + kNN), importance stability,
+  hyperparameter sensitivity, PDP direction checks, paired fold comparison, blind / temporal / repeated designs.
+- Analytics window: **Model QC...** button (one-page HTML); Predict map now carries an applicability mask.
+- Tests: Moran's I z 24.9 -> 4.1 once x/y is added; conformal 80% interval covers 84% of new wells;
+  y-randomisation collapses R2; noise column ranks last.
 
 ## Seismic v0.14.0 - Analytics 13a-13c (PLAN item 13, first parts)
 - analytics package: attribute table + joins (API/name), data prep (imputation, outliers, correlation, VIF,

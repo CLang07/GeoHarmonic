@@ -9,6 +9,7 @@ import numpy as np  # noqa: E402
 from ..analytics import explain as XP  # noqa: E402
 from ..analytics import models as MD  # noqa: E402
 from ..analytics import prep  # noqa: E402
+from ..analytics import qc as QC  # noqa: E402
 from ..analytics import validation as V  # noqa: E402
 from ..analytics.table import AttributeTable  # noqa: E402
 
@@ -52,7 +53,8 @@ class AnalyticsWindow(QtWidgets.QDialog):
         self.b_train = QtWidgets.QPushButton("Train + validate")
         self.b_map = QtWidgets.QPushButton("Predict map")
         self.b_report = QtWidgets.QPushButton("HTML report...")
-        for w in (self.b_explore, self.b_train, self.b_map, self.b_report):
+        self.b_qc = QtWidgets.QPushButton("Model QC...")
+        for w in (self.b_explore, self.b_train, self.b_map, self.b_report, self.b_qc):
             row.addWidget(w)
         lay.addLayout(row)
         self.out = QtWidgets.QPlainTextEdit()
@@ -69,6 +71,7 @@ class AnalyticsWindow(QtWidgets.QDialog):
         self.b_train.clicked.connect(self._train_clicked)
         self.b_map.clicked.connect(lambda: self.predict_map())
         self.b_report.clicked.connect(self._report_dialog)
+        self.b_qc.clicked.connect(self._qc_dialog)
 
     # ------------------------------------------------------------ data
     def wells(self):
@@ -162,7 +165,7 @@ class AnalyticsWindow(QtWidgets.QDialog):
         base = V.cross_val_predict(MD.LinearModel(), np.zeros((n, 1)), y, splits)  # mean baseline
         final = model.clone().fit(X, y)
         res = {"model": final, "fold_models": fold_models, "inputs": list(inputs), "target": target, "X": X, "y": y,
-               "ids": ids, "cv_pred": pred, "r2": V.r2(y, pred), "rmse": V.rmse(y, pred),
+               "ids": ids, "xy": xy, "splits": splits, "cv_pred": pred, "r2": V.r2(y, pred), "rmse": V.rmse(y, pred),
                "baseline_r2": V.r2(y, base), "cv": cv, "warning": warn, "model_name": model_name}
         if model_name in ("gbm", "rf"):
             res["shap"], res["shap_ev"] = XP.tree_shap(final, X)
@@ -198,9 +201,93 @@ class AnalyticsWindow(QtWidgets.QDialog):
         g = MapGrid(z, ref.kind, "", f"Predicted {r['target']} ({r['model_name']})", ref.vol, ref.x0, ref.y0, ref.dx, ref.dy)
         g.uncertainty = MapGrid(u, ref.kind, "", f"Uncertainty (CV spread) {r['target']}", ref.vol, ref.x0, ref.y0,
                                 ref.dx, ref.dy)
+        # applicability domain: cells whose inputs lie outside the training wells' input space
+        inside = np.zeros(len(Xn), bool)
+        if good.any() and r["X"].shape[0] > r["X"].shape[1] + 1:
+            inside[good], _, _ = QC.applicability(r["X"], Xn[good])
+        else:
+            inside[good] = True
+        g.inside = inside.reshape(shape)
+        g.outside_fraction = float(1 - inside[good].mean()) if good.any() else 0.0
         if self.basemap is not None:
             self.basemap.show_grid(g)
         return g
+
+    def qc(self, path=None):
+        """Model QC on the last trained model: baselines, y-randomisation, noise feature, residual spatial
+        structure, conformal interval, importance stability.  Each check is skipped (n/a) when there are too few
+        wells.  Returns (lines, path of the HTML report or None)."""
+        r = self.result
+        if r is None:
+            return ["Train a model first."], None
+        X, y, ids, xy = r["X"], r["y"], r["ids"], r["xy"]
+        model = r["model"].clone()
+        n = len(y)
+        lines, items = [], []
+
+        def step(title, fn):
+            try:
+                txt = fn()
+            except Exception as e:  # too few wells, singular data...
+                txt = f"n/a ({type(e).__name__}: {e})"
+            lines.append(f"{title}: {txt}")
+            items.append((title, txt))
+
+        lines.append(f"{r['model_name']} / {r['cv']}: CV R2 {r['r2']:.2f} on {n} wells")
+        k = min(5, len(np.unique(ids)))
+        if k < 3:
+            lines.append("Too few wells for model QC (need >= 3).")
+            return lines, None
+
+        def base():
+            b = QC.baselines(X, y, xy, ids, r["inputs"])
+            verdict = "beats all" if r["r2"] > max(b.values()) else "DOES NOT beat every baseline"
+            return ", ".join(f"{a} {v:.2f}" for a, v in b.items()) + f" -> model {verdict}"
+        step("Baselines (CV R2)", base)
+
+        def yrand():
+            v = QC.y_randomization(model, X, y, ids, 3)
+            return f"shuffled-target R2 max {v.max():.2f}" + (" (OK)" if v.max() < 0.2 else " - LEAKAGE / OVERFIT?")
+        step("Y-randomisation", yrand)
+
+        def noise():
+            imp, kn = QC.noise_feature_test(model, X, y)
+            weak = [nm for nm, v in zip(r["inputs"], imp[:kn]) if v <= imp[kn]]
+            return "all inputs out-rank a random column" if not weak else "below random noise: " + ", ".join(weak)
+        step("Noise feature", noise)
+
+        def moran():
+            I, z = QC.morans_i(xy, y - r["cv_pred"])
+            return f"Moran's I {I:.2f} (z {z:.1f})" + (" - spatial structure left: missing input?" if z > 2 else " (OK)")
+        step("Residual spatial structure", moran)
+
+        def resid():
+            d = QC.residual_diagnostics(y, r["cv_pred"])
+            return f"QQ corr {d['qq_corr']:.2f}, residual vs prediction corr {d['resid_vs_pred_corr']:+.2f}"
+        step("Residuals", resid)
+
+        def conf():
+            lo, hi, q = QC.conformal_intervals(model, X, y, X, 0.2, ids)
+            return f"80% split-conformal interval = prediction +/- {q:.3g}"
+        step("Uncertainty", conf)
+
+        def stab():
+            rho, _ = QC.importance_stability(model, X, y, ids, 4)
+            return f"importance rank correlation between bootstraps {rho:.2f}"
+        if X.shape[1] > 1:
+            step("Importance stability", stab)
+        out = None
+        if path:
+            out = QC.qc_report(path, f"Model QC: {r['target']}", [("Summary", "<br>".join(lines))] + items)
+        return lines, out
+
+    def _qc_dialog(self):
+        if self.result is None:
+            self._show("Train a model first.")
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Model QC report", self.project.base(), "HTML (*.html)")
+        lines, _ = self.qc(path or None)
+        self._show("\n".join(lines))
 
     def report(self, path):
         r = self.result

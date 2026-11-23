@@ -150,7 +150,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   tested == brute-force Shapley), tree_expectation, brute_force_shap, kernel_shap, partial_dependence + ICE,
   ensemble_map, save_model/load_model JSON, matplotlib plots, html_report), `check_ml` (--check-ml).
   `gui/analytics_window.AnalyticsWindow` (add_grid, add_csv, add_zone, build_table, explore, train, predict_map,
-  report). `Install analytics extras (optional).bat`. `test_explain.py` (run + run_gui).
+  report, qc (Model QC button), predict_map adds `g.inside` applicability mask + `g.outside_fraction`).
+  `Install analytics extras (optional).bat`. `test_explain.py` (run + run_gui).
+  `qc` (13d: blind_split, temporal_split, repeated_cv_scores, idw_loo, baselines, y_randomization,
+  noise_feature_test, residual_diagnostics (QQ), variogram, morans_i (z under randomisation),
+  conformal_intervals (split-conformal by well groups), quantile_intervals (GBM objective='quantile'),
+  coverage, calibration (reliability bins + Brier), applicability (Mahalanobis + kNN distance),
+  importance_stability, hyperparameter_sensitivity, pdp_direction_checks, paired_comparison, qc_report).
+  `test_qc.py` (run + run_gui). Window QC degrades to 'n/a' per check when wells are too few.
   `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
   Pearson/Spearman, vif, pca, regression_line). `test_analytics.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),

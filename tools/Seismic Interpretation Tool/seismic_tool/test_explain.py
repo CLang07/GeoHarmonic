@@ -88,7 +88,7 @@ def run_gui(check, tmp):
     r = win.train(["H1 time"], "Porosity", "linear", "leave one well out")
     check(r["warning"].startswith("WARNING") and np.isfinite(r["r2"]), "analytics: LOO validation + few-wells warning")
     g = win.predict_map()
-    check(g is not None and g.z.shape == g1.z.shape and np.isfinite(g.uncertainty.z).any(),
+    check(g is not None and g.z.shape == g1.z.shape and np.isfinite(g.uncertainty.z).any() and g.inside.shape == g.z.shape,
           "analytics: predicted map + uncertainty map")
     r2 = win.train(["H1 time", "H2 time"], "Porosity", "gbm", "group 5-fold")
     rep = win.report(os.path.join(tmp, "an.html"))

@@ -308,20 +308,23 @@ class RandomForest(Model):
 
 class GradientBoosting(Model):
     params = ("n_estimators", "learning_rate", "max_depth", "min_child_weight", "reg_lambda", "reg_alpha", "gamma",
-              "subsample", "colsample", "n_bins", "objective", "early_stopping", "monotone", "seed")
+              "subsample", "colsample", "n_bins", "objective", "early_stopping", "monotone", "seed", "quantile")
 
     def __init__(self, n_estimators=300, learning_rate=0.1, max_depth=4, min_child_weight=1.0, reg_lambda=1.0,
                  reg_alpha=0.0, gamma=0.0, subsample=0.8, colsample=1.0, n_bins=64, objective="squared",
-                 early_stopping=None, monotone=None, seed=0):
+                 early_stopping=None, monotone=None, seed=0, quantile=0.5):
         self.n_estimators, self.learning_rate, self.max_depth = n_estimators, learning_rate, max_depth
         self.min_child_weight, self.reg_lambda, self.reg_alpha, self.gamma = min_child_weight, reg_lambda, reg_alpha, gamma
         self.subsample, self.colsample, self.n_bins, self.objective = subsample, colsample, n_bins, objective
         self.early_stopping, self.monotone, self.seed = early_stopping, monotone, seed
+        self.quantile = quantile
 
     def _grad(self, y, f):
         if self.objective == "logistic":
             p = 1.0 / (1.0 + np.exp(-f))
             return p - y, np.maximum(p * (1 - p), 1e-6)
+        if self.objective == "quantile":  # pinball loss; unit hessian (gradient-descent leaf steps)
+            return np.where(y > f, -self.quantile, 1.0 - self.quantile), np.ones_like(y)
         return f - y, np.ones_like(y)
 
     def fit(self, X, y, X_val=None, y_val=None):
@@ -333,6 +336,8 @@ class GradientBoosting(Model):
         if self.objective == "logistic":
             m = np.clip(y.mean(), 1e-6, 1 - 1e-6)
             self.base_ = float(np.log(m / (1 - m)))
+        elif self.objective == "quantile":
+            self.base_ = float(np.quantile(y, self.quantile))
         else:
             self.base_ = float(y.mean())
         f = np.full(n, self.base_)
@@ -365,6 +370,9 @@ class GradientBoosting(Model):
         if self.objective == "logistic":
             p = np.clip(1.0 / (1.0 + np.exp(-f)), 1e-9, 1 - 1e-9)
             return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+        if self.objective == "quantile":
+            d = y - f
+            return float(np.mean(np.maximum(self.quantile * d, (self.quantile - 1) * d)))
         return float(np.mean((y - f) ** 2))
 
     def raw(self, X):
