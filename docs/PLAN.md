@@ -286,5 +286,58 @@ Kingdom-like interaction; large data.
    Run order: 17a -> 17c -> 17b -> 17d -> 17e (dynamic update is the priority after the velocity functions).
    Update docs/WHATS_NEW.md with a "Dynamic depth conversion" section and test checklist.
 
+18. **Basin model integrated with the Wheeler diagram** - status: todo
+   Chris asked for this on 2026-11-23 (do it before item 19). Goal: burial, thermal and maturity history from the
+   interpreted framework (horizons, RGT horizon stack, depth model of item 17, wells), shown in chronostratigraphic
+   (Wheeler) space as well as in depth / map view - PetroMod / Genesis-style 1D + pseudo-3D, numpy only.
+   18a. Chronostratigraphy: an age table (Ma) for horizons / formations (user-editable, saved in the seismic project;
+        Taranaki template with published ages for the Maui formations as a starting point); RGT stack levels get ages
+        by interpolation between dated horizons. Wheeler diagram with an **age axis** (option next to the RGT axis):
+        hiatus / erosion gaps shown in Ma, labelled. Lithology per zone from the wells (Vsh -> sand / shale /
+        carbonate fractions via well_correlation lithology) or typed in. Tests: ages interpolated monotonic, a
+        synthetic pinch-out shows a gap of the right age span.
+   18b. Burial history 1D (wells + pseudo-wells at any map point): present-day thicknesses from the depth model,
+        backstripping / decompaction (Athy phi = phi0 exp(-c z) per lithology, mixed by fractions), erosion events
+        (missing thickness typed in or estimated from Wheeler gaps), optional paleo-water depth and sea level.
+        Burial curves plot (depth vs age, one line per horizon). Tests: grain thickness conserved; decompacted
+        thickness matches the analytic Athy solution; zero-porosity lithology = no compaction.
+   18c. Thermal + maturity: surface temperature history, basal heat flow (constant, piecewise, or McKenzie rift
+        transient), bulk conductivity from lithology + porosity (geometric mean), 1D transient conduction (implicit
+        finite differences on the moving burial grid, radiogenic heat optional). Calibration to well temperatures
+        (BHT read from LAS / DLIS headers where present - Kiwi-1, Maui-4, Tui-1 - with a Horner-type correction) by
+        fitting heat flow. Maturity: EASY%Ro (Sweeney & Burnham 1990) and Lopatin TTI; transformation ratio for
+        type I / II / III kerogen with a simple published kinetic set; oil / gas window timing. Tests: steady state =
+        analytic geotherm; EASY%Ro against published reference values; heat-flow fit recovers a synthetic value.
+   18d. Wheeler + map integration: colour the Wheeler diagram by temperature / %Ro / TR / porosity at the time of
+        deposition or today; run the 1D model on a grid of pseudo-wells (threaded, cancellable) for maps of
+        present-day temperature, %Ro, TR and "time of oil window entry" at any horizon; burial section along an
+        inline / 2D line; petroleum-system event chart (source, reservoir, seal, trap, generation / expulsion) from
+        the ages and the model. Live update with item 17's dynamic depth model where cheap.
+   18e. GUI: Interpret > Basin model window (age table, lithologies, heat-flow + calibration plot, burial / temperature /
+        maturity plots per well, map runs, Wheeler colouring), CSV / CPS-3 exports, docs (WHATS_NEW section and
+        test checklist). GUI logic tested under dev/fakeqt.
+   Run order: 18a -> 18b -> 18c -> 18d -> 18e.
+
+19. **Seismic inversion package (post-stack + pre-stack)** - status: todo
+   Chris asked for this on 2026-11-23 (after item 18). Builds on item 16 (well tie, wavelets, Aki-Richards / Shuey,
+   logs_in_time) and item 17 (vgrid kriging / guide, horizons framework). numpy only (no PyLops / scipy).
+   19a. Low-frequency model: well AI (and Vp, Vs, rho for pre-stack) in time from the ties, conditioned (despike,
+        washout, Gardner / Castagna fill), interpolated through the structural framework (proportional / parallel to
+        top / parallel to base per zone, or along RGT stack levels) with IDW / kriging / velocity-guided trend
+        (vgrid), then low-pass filtered (zero-phase Butterworth in numpy, cut picked from the seismic spectrum).
+        Stored as a volume. Tests: wells honoured, no layer-crossing trends, filter response.
+   19b. Post-stack: coloured inversion (operator from the well AI spectrum vs the seismic spectrum, relative AI) and
+        model-based inversion (trace by trace in log-impedance, wavelet from item 16, LFM prior, Tikhonov or blocky
+        L1 / TV via IRLS, optional lateral smoothing between traces); threaded, cancellable, writes a volume. QC:
+        synthetic vs seismic residual, blind-well test. Tests on a synthetic earth with known AI (recovered within a
+        few % in band), blind well.
+   19c. Pre-stack simultaneous inversion: partial angle stacks (several volumes with angle ranges) or angle gathers;
+        Fatti / Aki-Richards linearisation in ln Zp, ln Zs, ln rho with background trend constraints; wavelet per
+        angle stack. Outputs Zp, Zs, rho, Vp/Vs, lambda-rho, mu-rho volumes. Tests on synthetic angle stacks.
+   19d. GUI + QC: Interpret > Inversion window (LFM build, wavelet choice, parameters, run, QC plots, cross-plots of
+        the results coloured by a well log, export SEG-Y). Note: the public NPRA lines and Maui 3D are stacks, so
+        pre-stack is tested on synthetics unless partial stacks turn up in the NZP&M catalogue.
+   Run order: 19a -> 19b -> 19c -> 19d.
+
 Later (Chris back): run `dev/bench.py --gb 5..20` on the PC and fix what it shows (overview volume only if zoomed-out display is slow); Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.

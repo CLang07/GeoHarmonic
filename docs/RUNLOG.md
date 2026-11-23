@@ -212,3 +212,11 @@ the 2D lines, Tui-1/Amokura-1 wells).
   6. Depth-convert a (small) volume to SEG-Y, Cancel once, then load the file in Kingdom/Petrel as depth.
 - Next: PLAN has no todo/partial items left. "Later (Chris back)" items remain (PC benchmark, Maui 3D subset,
   mistie with 2D lines, Tui-1/Amokura-1 wells) plus the optional item-17 follow-ups noted in PLAN.
+
+## 2026-11-23 - plan update (interactive session with Chris)
+- Added PLAN item 18 Basin model integrated with the Wheeler diagram (18a chronostratigraphy + age-axis Wheeler,
+  18b burial history / decompaction, 18c thermal + maturity with BHT calibration and EASY%Ro, 18d Wheeler / map
+  integration + event chart, 18e GUI) and item 19 Seismic inversion (19a low-frequency model, 19b post-stack
+  coloured + model-based, 19c pre-stack simultaneous, 19d GUI + QC). Chris: do 18 first.
+- No code changed.
+- Next: PLAN item 18a.
