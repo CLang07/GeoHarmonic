@@ -58,63 +58,80 @@ def pick_lowcut(freqs, amp, frac=0.2):
 def write_volume(project, vol_name, name, compute, block=16, progress=None, cancel=None, meta_extra=None):
     """New volume store with the layout of `vol_name` filled by compute(a, b) -> float32 (b - a, nxl, ns) for
     inline indices [a, b); registered as '<vol_name> [<name>]'. Cancel removes the partial store."""
+    return write_volumes(project, vol_name, [name], lambda a, b: {name: compute(a, b)}, block, progress, cancel,
+                         meta_extra)[0]
+
+
+def write_volumes(project, vol_name, names, compute, block=16, progress=None, cancel=None, meta_extra=None):
+    """Several volumes from one pass: compute(a, b) -> {name: float32 (b - a, nxl, ns)}. Returns the new names."""
     from ..volume import STORE_VERSION, Volume3D, unused_store
     vol = project.volume(vol_name)
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
-    store = unused_store(os.path.join(os.path.dirname(vol.store), f"{os.path.basename(vol.store)}__{safe}"))
-    os.makedirs(store, exist_ok=True)
-    raw = np.lib.format.open_memmap(os.path.join(store, "raw.tmp.npy"), mode="w+", dtype=np.float32,
-                                    shape=(vol.nil, vol.nxl, vol.ns))
-    samples = []
+    stores, raws, samples = {}, {}, {}
+    for name in names:
+        safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+        st = unused_store(os.path.join(os.path.dirname(vol.store), f"{os.path.basename(vol.store)}__{safe}"))
+        os.makedirs(st, exist_ok=True)
+        stores[name] = st
+        raws[name] = np.lib.format.open_memmap(os.path.join(st, "raw.tmp.npy"), mode="w+", dtype=np.float32,
+                                               shape=(vol.nil, vol.nxl, vol.ns))
+        samples[name] = []
     try:
         for a in range(0, vol.nil, block):
             if cancel and cancel():
                 raise RuntimeError("cancelled")
             b = min(vol.nil, a + block)
-            res = np.asarray(compute(a, b), np.float32)
-            raw[a:b] = res
-            fin = np.abs(res[::max(1, len(res) // 4), ::5, ::3])
-            samples.append(fin[np.isfinite(fin)].ravel())
+            res = compute(a, b)
+            for name in names:
+                r = np.asarray(res[name], np.float32)
+                raws[name][a:b] = r
+                fin = np.abs(r[::max(1, len(r) // 4), ::5, ::3])
+                samples[name].append(fin[np.isfinite(fin)].ravel())
             if progress:
-                progress(0.8 * b / vol.nil, f"{name}: inline {b}/{vol.nil}")
+                progress(0.8 * b / vol.nil, f"inline {b}/{vol.nil}")
     except BaseException:
-        del raw
-        shutil.rmtree(store, ignore_errors=True)
+        raws.clear()
+        for st in stores.values():
+            shutil.rmtree(st, ignore_errors=True)
         raise
-    allv = np.concatenate(samples) if samples else np.ones(1)
-    p999 = float(np.percentile(allv, 99.9)) if allv.size else 1.0
-    scale = 1000.0 / (p999 or 1.0)
-    out = np.lib.format.open_memmap(os.path.join(store, "data_ilxl.npy"), mode="w+", dtype=np.float16,
-                                    shape=(vol.nil, vol.nxl, vol.ns))
-    for a in range(0, vol.nil, block):
-        b = min(vol.nil, a + block)
-        out[a:b] = np.clip(np.nan_to_num(raw[a:b]) * scale, -60000, 60000).astype(np.float16)
-    out.flush()
-    del raw
-    os.remove(os.path.join(store, "raw.tmp.npy"))
-    tm = np.lib.format.open_memmap(os.path.join(store, "data_t.npy"), mode="w+", dtype=np.float16,
-                                   shape=(vol.ns, vol.nil, vol.nxl))
-    for a in range(0, vol.nil, block):
-        b = min(vol.nil, a + block)
-        tm[:, a:b, :] = np.transpose(np.asarray(out[a:b]), (2, 0, 1))
+    out_names = []
+    for name in names:
+        st, raw = stores[name], raws[name]
+        allv = np.concatenate(samples[name]) if samples[name] else np.ones(1)
+        p999 = float(np.percentile(allv, 99.9)) if allv.size else 1.0
+        scale = 1000.0 / (p999 or 1.0)
+        out = np.lib.format.open_memmap(os.path.join(st, "data_ilxl.npy"), mode="w+", dtype=np.float16,
+                                        shape=(vol.nil, vol.nxl, vol.ns))
+        for a in range(0, vol.nil, block):
+            b = min(vol.nil, a + block)
+            out[a:b] = np.clip(np.nan_to_num(raw[a:b]) * scale, -60000, 60000).astype(np.float16)
+        out.flush()
+        raws[name] = None
+        del raw
+        os.remove(os.path.join(st, "raw.tmp.npy"))
+        tm = np.lib.format.open_memmap(os.path.join(st, "data_t.npy"), mode="w+", dtype=np.float16,
+                                       shape=(vol.ns, vol.nil, vol.nxl))
+        for a in range(0, vol.nil, block):
+            b = min(vol.nil, a + block)
+            tm[:, a:b, :] = np.transpose(np.asarray(out[a:b]), (2, 0, 1))
+        tm.flush()
+        del tm, out
+        filled = os.path.join(vol.store, "filled.npy")
+        if os.path.exists(filled):
+            shutil.copy(filled, os.path.join(st, "filled.npy"))
+        meta = dict(vol.meta)
+        meta.update({"version": STORE_VERSION, "scale": scale, "attribute": name, "source_volume": vol_name})
+        meta.update(meta_extra or {})
+        with open(os.path.join(st, "meta.json"), "w") as fh:
+            json.dump(meta, fh, indent=1)
+        new_name = f"{vol_name} [{name}]"
+        project.volumes = [v for v in project.volumes if v["name"] != new_name]
+        project._vol_cache.pop(new_name, None)
+        project.volumes.append({"name": new_name, "store": st, "segy": "", "attribute": name, "source": vol_name})
+        Volume3D(st)
+        out_names.append(new_name)
         if progress:
-            progress(0.8 + 0.2 * b / vol.nil, f"{name}: time slices {b}/{vol.nil}")
-    tm.flush()
-    del tm, out
-    filled = os.path.join(vol.store, "filled.npy")
-    if os.path.exists(filled):
-        shutil.copy(filled, os.path.join(store, "filled.npy"))
-    meta = dict(vol.meta)
-    meta.update({"version": STORE_VERSION, "scale": scale, "attribute": name, "source_volume": vol_name})
-    meta.update(meta_extra or {})
-    with open(os.path.join(store, "meta.json"), "w") as fh:
-        json.dump(meta, fh, indent=1)
-    new_name = f"{vol_name} [{name}]"
-    project.volumes = [v for v in project.volumes if v["name"] != new_name]
-    project._vol_cache.pop(new_name, None)
-    project.volumes.append({"name": new_name, "store": store, "segy": "", "attribute": name, "source": vol_name})
-    Volume3D(store)
-    return new_name
+            progress(0.8 + 0.2 * len(out_names) / len(names), f"{name}: stored")
+    return out_names
 
 
 # ====================================================================== well logs in time

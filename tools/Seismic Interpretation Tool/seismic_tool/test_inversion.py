@@ -227,6 +227,87 @@ def run_poststack(check, tmp, sp=None, E=None):
     return sp, E
 
 
+ANGLES = [("Near", 8.0), ("Mid", 18.0), ("Far", 28.0)]
+
+
+def add_angle_stacks(sp, E, tmp):
+    """Angle stacks (Aki-Richards, Ricker 25 Hz) of the earth as volumes Near / Mid / Far."""
+    from .synth import write_3d
+    from .tie import angle_synthetics
+    from .volume import import_3d
+    d = os.path.dirname(sp.path)
+    nil, nxl, ns = E["ai"].shape
+    cubes = np.zeros((len(ANGLES), nil, nxl, ns), np.float32)
+    angs = [a for _, a in ANGLES]
+    for i in range(nil):
+        for j in range(nxl):
+            g, _ = angle_synthetics(E["vp"][i, j], E["vs"][i, j], E["rho"][i, j], angs, E["wavelet"])
+            cubes[:, i, j] = g.T
+    for k, (name, _) in enumerate(ANGLES):
+        write_3d(os.path.join(d, f"{name}.sgy"), cubes[k])
+        store = os.path.join(d, "s_seismic", name)
+        import_3d(os.path.join(d, f"{name}.sgy"), store)
+        sp.volumes.append({"name": name, "store": store, "segy": ""})
+    return cubes
+
+
+def run_prestack(check, tmp, sp=None, E=None):
+    from .inversion import lfm as L
+    from .inversion import poststack as PS
+    from .inversion import prestack as PR
+    from .tie import rc_aki_richards
+    if sp is None:
+        sp, E = inversion_project(tmp, "inv_pre")
+    # Fatti linearisation vs Aki-Richards on small contrasts
+    vp, vs, rho = np.array([2500.0, 2650.0]), np.array([1200.0, 1330.0]), np.array([2.2, 2.27])
+    ar = rc_aki_richards(vp, vs, rho, [0.0, 15.0, 30.0])[0]
+    K = 0.5 * (vs[0] / vp[0] + vs[1] / vp[1])
+    zp, zs = vp * rho, vs * rho
+    fa = np.array([sum(c * 0.5 * np.diff(np.log(x))[0] for c, x in zip(PR.fatti_coeffs(a, K), (zp, zs, rho)))
+                   for a in (0.0, 15.0, 30.0)])
+    check(np.max(np.abs(fa - ar)) < 0.03 * np.max(np.abs(ar)) + 2e-4, f"Fatti coefficients == Aki-Richards for small "
+          f"contrasts ({np.round(fa, 4)} vs {np.round(ar, 4)})")
+    add_angle_stacks(sp, E, tmp)
+    vol = sp.volume("S")
+    curves = curves_from_earth(vol, E, WELL_IJ)
+    bg = PR.fit_background(curves)
+    check(0.5 < bg["k"] < 1.5 and 0.0 < bg["m"] < 0.5 and 0.4 < bg["K"] < 0.65,
+          f"background trends from the wells: ln Zs = {bg['k']:.2f} ln Zp + c, ln rho = {bg['m']:.2f} ln Zp + c, "
+          f"Vs/Vp {bg['K']:.2f}")
+    pri = {}
+    for prop in ("ai", "vs", "rho"):
+        pri[prop] = L.VolumeLFM(sp, "S", curves, prop, ["H1", "H2"], fc=8.0).write(f"LFM {prop.upper()}")
+    names = [n for n, _ in ANGLES]
+    wavs = [E["wavelet"]] * 3
+    ps = PR.PreStack(sp, ANGLES, wavs, pri, bg)
+    bi, bj = BLIND_IJ
+    lzp, lzs, lrho = ps.traces([bi], [bj])
+    ezp = PS.band_error(lzp[0], E["ai"][bi, bj], DT, 60.0)
+    ezs = PS.band_error(lzs[0], E["vs"][bi, bj] * E["rho"][bi, bj], DT, 60.0)
+    erh = PS.band_error(lrho[0], E["rho"][bi, bj], DT, 60.0)
+    vpvs = np.exp(lzp[0] - lzs[0])
+    evv = PS.band_error(np.log(vpvs), E["vp"][bi, bj] / E["vs"][bi, bj], DT, 60.0)
+    lf = {k: np.asarray(sp.volume(v).ilxl[bi, bj], np.float32) * sp.volume(v).inv for k, v in pri.items()}
+    erh0 = PS.band_error(np.log(lf["rho"]), E["rho"][bi, bj], DT, 60.0)
+    ezs0 = PS.band_error(np.log(lf["vs"] * lf["rho"]), E["vs"][bi, bj] * E["rho"][bi, bj], DT, 60.0)
+    check(ezp < 3.0 and ezs < 5.0 and evv < 5.0 and ezs < ezs0, f"simultaneous inversion at a blind trace: Zp "
+          f"{ezp:.2f} %, Zs {ezs:.2f} % (LFM {ezs0:.2f} %), Vp/Vs {evv:.2f} %")
+    check(erh < max(3.0, erh0), f"density {erh:.2f} % (LFM alone {erh0:.2f} % - least constrained)")
+    outs = ps.write()
+    check(len(outs) == 6 and outs[0] == "Near [SI Zp]" and all(o in [v["name"] for v in sp.volumes] for o in outs),
+          "Zp, Zs, density, Vp/Vs, lambda-rho, mu-rho volumes written in one pass")
+    v = sp.volume("Near [SI VpVs]")
+    back = np.asarray(v.ilxl[bi, bj], np.float32) * v.inv
+    check(np.allclose(back, vpvs, rtol=3e-3), "Vp/Vs volume == Zp / Zs of the inversion")
+    lr = sp.volume("Near [SI LambdaRho]")
+    lrb = np.asarray(lr.ilxl[bi, bj], np.float32) * lr.inv
+    zpb, zsb = np.exp(lzp[0]), np.exp(lzs[0])
+    check(np.allclose(lrb, zpb ** 2 - 2 * zsb ** 2, rtol=5e-3, atol=1e-3 * np.abs(lrb).max()),
+          "lambda-rho = Zp^2 - 2 Zs^2")
+    return sp, E
+
+
 def run(check, tmp):
     sp, E = run_lfm(check, tmp)
     run_poststack(check, tmp, sp, E)
+    run_prestack(check, tmp, sp, E)

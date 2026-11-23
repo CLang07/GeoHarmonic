@@ -223,4 +223,4 @@ the 2D lines, Tui-1/Amokura-1 wells).
 
 ## 2026-11-23 - run 4 (scheduled, started 22:18 UTC) - IN PROGRESS
 - PLAN item 18 (basin model + Wheeler) DONE, v0.27.0-v0.31.0 (18a age table + age Wheeler, 18b burial, 18c thermal +
-  maturity, 18d pseudo-well maps / Wheeler colouring / event chart, 18e Basin model window). Item 19: 19a low-frequency model (v0.32.0), 19b post-stack coloured + model-based inversion (v0.33.0) done; working on 19c.
+  maturity, 18d pseudo-well maps / Wheeler colouring / event chart, 18e Basin model window). Item 19: 19a low-frequency model (v0.32.0), 19b post-stack coloured + model-based inversion (v0.33.0), 19c pre-stack simultaneous inversion (v0.34.0) done; working on 19d.
