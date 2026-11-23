@@ -51,3 +51,6 @@
 - 13a+ done: engineering/production import (presets, unit detection), completion + spacing + parent/child,
   production features (cums, IP, GOR, WC, Arps + EUR within 0.0% on synthetic), FracFocus, lease allocation,
   synthetic data set generator (dev/make_synthetic_engineering.py). Tests PASS.
+- 13b done: models (OLS/ridge/lasso, kNN, tree, RF, XGBoost-style GBM with NaN handling + monotone constraints +
+  early stopping + logistic, MLP, k-means, GMM, SOM) and honest validation (group/spatial-block CV, nested CV,
+  learning curves). On the benchmark GBM R2 0.97 vs linear 0.29; random CV 0.86 vs group 0.36 / block 0.59.

@@ -140,6 +140,8 @@ def run():
         test_analytics.run(check, tmp)
         from . import test_engineering
         test_engineering.run(check, tmp)
+        from . import test_models
+        test_models.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")

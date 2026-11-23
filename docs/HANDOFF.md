@@ -140,6 +140,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   lb/t, bbl/m3/gal, ft/m; completion_table, spacing_features (nn spacing, child flag), qc_flags, monthly_series,
   production_features (cums, BOE, IP30/90, GOR, WC, per-1000 ft, Arps fit + EUR), fracfocus_estimates,
   allocate_lease), `synthetic.make` (known geology + completion effects; also dev/make_synthetic_engineering.py),
+  `models` (13b: LinearModel/ridge, Lasso CD, KNN, Binner + shared histogram `build_tree` (XGBoost gain, L1/L2,
+  gamma, min_child_weight, NaN default direction, monotone constraints) used by DecisionTree / RandomForest /
+  GradientBoosting (squared / logistic, subsample, colsample, early stopping, gain importance), MLP (Adam),
+  KMeans++, GaussianMixture (diag EM), SOM, silhouette, elbow, make_model with optional xgboost/sklearn),
+  `validation` (r2/rmse/mae/accuracy/f1/confusion, kfold, group_kfold, leave_one_group_out, spatial_blocks with
+  buffer, cross_val_predict/score, grid_search, nested_cv, learning_curve). `test_models.py`.
   `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
   Pearson/Spearman, vif, pca, regression_line). `test_analytics.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
