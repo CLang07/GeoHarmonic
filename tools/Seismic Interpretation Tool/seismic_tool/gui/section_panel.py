@@ -12,7 +12,7 @@ from .. import faults as flt  # noqa: E402
 from .. import horizons as hz  # noqa: E402
 
 MODES = ["Inline", "Crossline", "Time slice", "Stratal slice"]
-DOMAINS = ["Time", "Wheeler", "Depth"]
+DOMAINS = ["Time", "Wheeler", "Wheeler (age)", "Depth"]
 from ..attributes import ATTRIBUTES as _SEIS_ATTRS  # noqa: E402
 
 ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity", "RGT"] + list(_SEIS_ATTRS)
@@ -117,6 +117,7 @@ class SectionPanel(QtWidgets.QWidget):
         self._ctr_items = []
         self._well_items = []
         self._wheeler = None
+        self._age = None  # age-axis Wheeler: {"model", "axis", "labels", "blank"}
         self._ymap = None
         self._stratal_surface = None
         self.modeChanged = []  # callbacks(mode) when pick/fault/rgt mode switches
@@ -156,7 +157,9 @@ class SectionPanel(QtWidgets.QWidget):
         self.attr = "Seismic"
         self.dom_combo = QtWidgets.QComboBox()
         self.dom_combo.addItems(DOMAINS)
-        self.dom_combo.setToolTip("Wheeler: vertical axis = relative geologic time (needs RGT); gaps = hiatus")
+        self.dom_combo.setToolTip("Wheeler: vertical axis = relative geologic time (needs RGT); gaps = hiatus.\n"
+                                  "Wheeler (age): the same on an age axis (Ma) from the Basin model age table "
+                                  "(needs two dated horizons on the section)")
         self.domain = "Time"
         self.ctr_chk = QtWidgets.QCheckBox("RGT contours")
         self.ctr_chk.setChecked(True)
@@ -362,6 +365,8 @@ class SectionPanel(QtWidgets.QWidget):
         self.draw_contours()
         self.draw_wells()
         self.draw_horizons()
+        if self.age_on():
+            self.draw_age_labels()
         self.draw_faults()
         if view and not reset_view:
             self.vb.setRange(xRange=view[0], yRange=view[1], padding=0)
@@ -383,7 +388,7 @@ class SectionPanel(QtWidgets.QWidget):
         if self.attr != "Seismic":
             t += f"  [{self.attr}{' ms/trace' if 'dip' in self.attr else ''}]"
         if self.wheeler_on():
-            t += "  [Wheeler]"
+            t += "  [Wheeler, age]" if self.age_on() else "  [Wheeler]"
         if self.depth_on():
             t += "  [Depth]"
         self.plot.setTitle(t)
@@ -394,7 +399,7 @@ class SectionPanel(QtWidgets.QWidget):
         self.redraw(reset_view=True)
 
     def wheeler_on(self):
-        return self.domain == "Wheeler" and (self.source[0] == "2D" or self.mode in ("Inline", "Crossline"))
+        return self.domain in ("Wheeler", "Wheeler (age)") and (self.source[0] == "2D" or self.mode in ("Inline", "Crossline"))
 
     def depth_on(self):
         return self.domain == "Depth" and (self.source[0] == "2D" or self.mode in ("Inline", "Crossline"))
@@ -518,10 +523,69 @@ class SectionPanel(QtWidgets.QWidget):
         kind, name = self.source
         times = self.project.volume(name).times if kind == "3D" else self.project.line(name).times
         levels = self.wheeler_levels(tau)
-        amp, _ = wheeler(np.asarray(arr, np.float32).T, tau, levels, times)
+        amp, hiatus = wheeler(np.asarray(arr, np.float32).T, tau, levels, times)
         self._wheeler = (tau, times, levels)
+        self._age = None
+        if self.age_on():
+            return self._to_age(amp, hiatus, tau, times, levels)
         self._ymap = (tau, times)
         return amp, levels, "RGT (relative geologic time)"
+
+    def age_on(self):
+        return self.domain == "Wheeler (age)" and self.wheeler_on()
+
+    def section_horizon_times(self):
+        """{horizon name: times (ntr,) ms} of the horizons picked on the displayed section."""
+        hs = self.hset()
+        out = {}
+        if hs is None or not self.source:
+            return out
+        kind, name = self.source
+        surv = self.project.volume(name) if kind == "3D" else self.project.line(name)
+        key = self.section_key()
+        for h in hs.items:
+            c = hz.section_curve(h, key, surv, self.mode, self.number)
+            if c is not None and np.isfinite(c[1]).any():
+                out[h.name] = np.asarray(c[1], float)
+        return out
+
+    def _to_age(self, amp, hiatus, tau, times, levels):
+        """Wheeler (levels, n) -> age axis (Ma) using the Basin model age table (PLAN 18a)."""
+        from ..basin import chrono as C
+        table = C.AgeTable.load(self.project)
+        try:
+            model, rgts = C.section_age_model(table, tau, times, self.section_horizon_times())
+        except ValueError as e:
+            raise RuntimeError(f"age axis: {e} - pick horizons named as in Interpret > Basin model "
+                               "(age table) or set their 'horizon' names") from None
+        la = C.level_ages(levels, model)
+        axis = C.age_axis(la)
+        W, blank = C.wheeler_age(amp, hiatus, la, axis, model.gaps())
+        x = self._section_x()
+        self._age = {"model": model, "axis": axis, "blank": blank, "rgts": rgts,
+                     "labels": C.gap_labels(blank, axis, x, min_my=2.0 * (axis[1] - axis[0]) if len(axis) > 1 else 0)}
+        self._ymap = (model(tau), times)
+        return W, axis, "Age (Ma)"
+
+    def _section_x(self):
+        kind, name = self.source
+        if kind == "2D":
+            return self.project.line(name).cdp
+        v = self.project.volume(name)
+        return v.xlines if self.mode == "Inline" else v.inlines
+
+    def age_labels(self, max_labels=12):
+        """Hiatus labels [(x, age, text)] of the age Wheeler shown (largest gaps first)."""
+        if not self._age:
+            return []
+        return [(d["x"], d["age"], d["text"]) for d in self._age["labels"][:max_labels]]
+
+    def draw_age_labels(self):
+        for x, a, text in self.age_labels():
+            it = pg.TextItem(text, color=(120, 0, 0), anchor=(0.5, 0.5))
+            it.setPos(float(x), float(a))
+            self.plot.addItem(it)
+            self._hz_items.append(it)
 
     def _stratal(self):
         from ..rgt.stack import stratal_slice
