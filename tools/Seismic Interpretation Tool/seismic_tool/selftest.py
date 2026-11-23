@@ -164,6 +164,9 @@ def run():
         from . import test_basin
         os.makedirs(os.path.join(tmp, "basin"))
         test_basin.run(check, os.path.join(tmp, "basin"))
+        from . import test_inversion
+        os.makedirs(os.path.join(tmp, "inversion"))
+        test_inversion.run(check, os.path.join(tmp, "inversion"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
