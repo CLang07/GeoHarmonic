@@ -110,6 +110,9 @@ def run():
         # ---- RGT step A: dip field
         from . import test_dip
         test_dip.run(check, tmp)
+        # ---- RGT step B: mesh + global solve
+        from . import test_rgt
+        test_rgt.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -137,6 +140,8 @@ def run_gui():
         test_faults.run_gui(check, tmp)
         from . import test_dip
         test_dip.run_gui(check, tmp)
+        from . import test_rgt
+        test_rgt.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

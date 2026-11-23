@@ -107,3 +107,43 @@ def fault_sticks_from(fxl, vol, ils_idx, t_ms=(150.0, 600.0)):
             pts.append((float(x), float(y), tm))
         sticks.append(pts)
     return sticks
+
+
+def rgt_geology(nil=40, nxl=60, ns=300, dt_s=0.004, throw_ms=28.0, n_ref=60, seed=7, fault=True, noise=0.02):
+    """Synthetic geology for RGT tests: random reflectivity in geologic time, a gentle fold, a wedge of layers
+    that pinches out towards crossline 0 (onlap), and a planar normal fault (hanging wall shifted down by
+    throw_ms; fault xl index = 32 + 0.05 * (t - 300) + 0.08 * il).
+    Returns dict(cube, horizons (n_ref, nil, nxl) ms incl. fault shift, tau_ref (n_ref,), hang (nil, nxl, ns)
+    bool, fxl, wedge (lo, hi) geologic-time interval, g (nxl,) wedge thickness factor)."""
+    rng = np.random.default_rng(seed)
+    i, j = np.meshgrid(np.arange(nil), np.arange(nxl), indexing="ij")
+    struct = 25 * np.sin(j / 14.0) + 0.6 * i + 0.3 * j - 20 * np.exp(-((i - nil / 2) ** 2 + (j - nxl / 2) ** 2) / 300.0)
+    tau_ref = np.sort(rng.uniform(150, 1000, n_ref))
+    amps = rng.uniform(0.3, 1.0, n_ref) * rng.choice([-1, 1], n_ref)
+    wedge = (450.0, 530.0)
+    g = np.clip(j[0] / (0.6 * nxl), 0, 1)  # thickness factor 0 at xl 0 -> 1 from 60% of the survey on
+    hz = []
+    for tr in tau_ref:
+        # geologic time -> depth-like time: rate 1 except inside the wedge (rate g)
+        below = np.clip(tr - wedge[1], 0, None)
+        inside = np.clip(min(tr, wedge[1]) - wedge[0], 0, None)
+        above = min(tr, wedge[0])
+        tt = above + inside * g[None, :] + below + struct
+        hz.append(np.broadcast_to(tt, (nil, nxl)).astype(float))
+    hz = np.array(hz)
+    t = np.arange(ns) * dt_s * 1000.0
+    fxl = lambda il, tm: 32 + 0.05 * (tm - 300) + 0.08 * il  # noqa: E731
+    foot = traces_from_surfaces(list(hz), list(amps), ns, dt_s, noise=noise, seed=seed)
+    if fault:
+        hw = traces_from_surfaces(list(hz + throw_ms), list(amps), ns, dt_s, noise=noise, seed=seed + 1)
+        hang = j[..., None] > fxl(i[..., None], t[None, None, :])
+        cube = np.where(hang, hw, foot).astype(np.float32)
+        # horizon times on the hanging wall are shifted where the horizon itself lies in the hanging wall
+        hz_true = hz.copy()
+        on_hw = j[None] > fxl(i[None], hz + throw_ms)
+        hz_true[on_hw] += throw_ms
+    else:
+        hang = np.zeros((nil, nxl, ns), bool)
+        cube, hz_true = foot, hz
+    return {"cube": cube, "horizons": hz_true, "tau_ref": tau_ref, "hang": hang, "fxl": fxl, "wedge": wedge,
+            "g": g}

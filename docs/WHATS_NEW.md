@@ -2,6 +2,21 @@
 
 Newest first. Each section: what it does, how to use it, what to test.
 
+## v0.5.0 - RGT model, step B: mesh + global solve (PLAN item 4)
+- Interpret > Compute RGT (current 3D volume) / (all 2D lines): settings dialog (node spacing, interval,
+  correlation window, min correlation, links across faults, max throw, horizons/faults as constraints),
+  runs in the background; display box "RGT" shows the result on any section.
+- Dip-guided node links + correlation, cross-fault ties away from the fault, horizon constraints, 2D line
+  ties, global least-squares solve (CGLS in numpy) with a coarse-to-fine start.
+- Synthetic tests (fold + pinch-out + fault): iso-RGT surfaces match 60 true horizons, median error
+  0.15 ms (4 ms sampling); across the fault p95 < 3.5 ms above the wedge; 2D tied lines median 0.10 ms.
+- Real data: NPRA R-2 + R-3 (12,000 traces, 1.1 M unknowns) in ~100 s at 8 traces / 8 ms nodes; iso-RGT
+  contours follow the reflectors through the folds (see test checklist).
+- Known limits: between node columns the RGT is interpolated bilinearly (fine detail at node spacing);
+  NPRA R-2 / R-3 don't cross, so 2D ties were only tested on synthetics; a big 3D (millions of nodes) needs
+  minutes per 100 iterations - multi-threading/bricking in item 15. Stored as uint16, not float16 (float16
+  has only ~2-4 ms resolution at 2-6 s).
+
 ## v0.4.0 - Dip field, RGT step A (PLAN item 3)
 - Interpret > Compute dip field: inline/crossline dip (ms/trace) + planarity volumes for the 3D volume
   (background job with progress). Toolbar display box: Seismic / Inline dip / Crossline dip / Planarity,

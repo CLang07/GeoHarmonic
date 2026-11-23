@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.4: loading, viewing, horizons, faults, dip field
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.5: loading, viewing, horizons, faults, dip field, RGT model
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -67,7 +67,21 @@ Starter projects:
 - The display box in the section toolbar switches between **Seismic**, **Inline dip**, **Crossline dip**,
   **Planarity**. On 2D lines either dip choice shows the dip along the line, computed on the fly (a few
   seconds per line) and cached in `<project>_seismic\rgt\`.
-- This dip field drives the RGT model (next steps).
+- This dip field drives the RGT model.
+
+## Relative geologic time (RGT) model (PaleoScan-style, step B)
+- **Interpret > Compute RGT (current 3D volume)** / **Compute RGT (all 2D lines)**. Settings: node spacing
+  (traces) and interval (ms) of the model mesh (4 traces / 8 ms default; long 2D lines or big 3D: 8 / 8-16 is
+  much faster), correlation window, min correlation, links across faults (correlate / none), max throw,
+  use visible horizons as constraints, use visible faults.
+- How it works: nodes are linked to their neighbours by following the dip field trace by trace and
+  refining with a small cross-correlation; across faults the tie is correlated a few traces away from the
+  fault (so the window does not mix the blocks). A global least-squares solve (all nodes at once) gives the
+  geologic age of every node; interpreted horizons are hard constraints (one age per horizon); 2D lines are
+  solved together and tied at intersections. Result: an RGT value for every sample (display box **RGT**).
+- Iso-RGT surfaces are the model's horizons (horizon stack / Wheeler view come next).
+- Files: 3D `<volume store>\rgt\rgt.npy` (uint16, ~0.1 ms resolution) + `rgt.json` + `rgt_nodes.npz`;
+  2D `<project>_seismic\rgt\<line>_rgt.npz`.
 
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.

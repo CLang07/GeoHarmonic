@@ -11,7 +11,7 @@ from .. import faults as flt  # noqa: E402
 from .. import horizons as hz  # noqa: E402
 
 MODES = ["Inline", "Crossline", "Time slice"]
-ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity"]  # 2D lines: either dip = dip along the line
+ATTRS = ["Seismic", "Inline dip", "Crossline dip", "Planarity", "RGT"]  # 2D lines: either dip = dip along the line
 
 
 class PickViewBox(pg.ViewBox):
@@ -319,7 +319,25 @@ class SectionPanel(QtWidgets.QWidget):
     def _attribute_section(self):
         """(array, x, y, xlabel, ylabel) of the selected attribute on the current section."""
         from ..rgt.dip import DipField, line_dip
+        from ..rgt.solve import RGTVolume, load_rgt_line
         kind, name = self.source
+        if self.attr == "RGT":
+            if kind == "2D":
+                l = self.project.line(name)
+                arr = load_rgt_line(os.path.join(self.project.seismic_dir(), "rgt"), name)
+                if arr is None:
+                    raise RuntimeError("no RGT for this line yet - Interpret > Compute RGT (2D lines)")
+                return arr.T, l.cdp, l.times, "CDP", "TWT (ms)"
+            v = self.project.volume(name)
+            folder = os.path.join(v.store, "rgt")
+            if not RGTVolume.exists(folder):
+                raise RuntimeError("no RGT for this volume yet - Interpret > Compute RGT (3D)")
+            arr = RGTVolume(folder).section(v, self.mode, self.number)
+            if self.mode == "Inline":
+                return arr, v.xlines, v.times, "Crossline", "TWT (ms)"
+            if self.mode == "Crossline":
+                return arr, v.inlines, v.times, "Inline", "TWT (ms)"
+            return arr, v.xlines, v.inlines, "Crossline", "Inline"
         if kind == "2D":
             l = self.project.line(name)
             dip, plan = line_dip(l, os.path.join(self.project.seismic_dir(), "rgt") if self.project.path else None)
@@ -342,6 +360,9 @@ class SectionPanel(QtWidgets.QWidget):
         """(lo, hi) display levels: symmetric percentile clip, or 0..1 for planarity."""
         if self.attr == "Planarity":
             return 0.0, 1.0
+        if self.attr == "RGT":
+            a = self._data[np.isfinite(self._data)]
+            return (float(a.min()), float(a.max())) if a.size else (0.0, 1.0)
         a = np.abs(self._data[np.isfinite(self._data)])
         clip = float(np.percentile(a, self.clip_spin.value() or 99.0)) if a.size else 1.0
         clip = clip or 1.0

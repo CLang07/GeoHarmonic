@@ -20,4 +20,8 @@
 - Item 3 DONE - dip field (v0.4.0): rgt/dip.py, test_dip.py, section display box (dip/planarity),
   Interpret > Compute dip field (threaded job). Tests: synthetic 3D dips within 0.6%, block == whole volume,
   2D fold dip max err 0.034 ms/trace; --selftest/--guitest PASS; NPRA R-2 dip visually sensible (4.7 s).
-- Working on PLAN item 4 next.
+- Item 4 DONE - RGT mesh + global solve (v0.5.0): rgt/solve.py, test_rgt.py, synth.rgt_geology, RGT
+  display, Interpret > Compute RGT 3D/2D with settings dialog. Tests: iso-RGT vs 60 true horizons median
+  0.15 ms; fault case p95 < 3.5 ms above the wedge; horizon constraint ties blocks (p95 23 -> 4.3 ms);
+  2D network median 0.10 ms; all self-tests + guitest PASS. NPRA R-2+R-3: 100 s, contours follow reflectors.
+- Working on PLAN item 5 next.

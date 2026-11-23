@@ -73,6 +73,65 @@ class Import3DDialog(QtWidgets.QDialog):
             return None
 
 
+class RGTDialog(QtWidgets.QDialog):
+    """Settings for the relative geologic time (RGT) model."""
+
+    def __init__(self, parent=None, is3d=True, n_hz=0, n_flt=0):
+        super().__init__(parent)
+        self.setWindowTitle("Compute RGT (relative geologic time)")
+        form = QtWidgets.QFormLayout(self)
+        self.node_tr = QtWidgets.QSpinBox()
+        self.node_tr.setRange(1, 64)
+        self.node_tr.setValue(4 if is3d else 8)
+        self.node_tr.setSuffix(" traces")
+        self.node_ms = QtWidgets.QDoubleSpinBox()
+        self.node_ms.setRange(2, 100)
+        self.node_ms.setValue(8)
+        self.node_ms.setSuffix(" ms")
+        self.win = QtWidgets.QDoubleSpinBox()
+        self.win.setRange(4, 200)
+        self.win.setValue(24)
+        self.win.setPrefix("+/- ")
+        self.win.setSuffix(" ms")
+        self.corr = QtWidgets.QDoubleSpinBox()
+        self.corr.setRange(0.0, 0.99)
+        self.corr.setSingleStep(0.05)
+        self.corr.setValue(0.5)
+        self.flinks = QtWidgets.QComboBox()
+        self.flinks.addItems(["correlate", "none"])
+        self.flinks.setToolTip("correlate: tie the blocks across faults by waveform correlation away from the fault;"
+                               " none: only horizons tie blocks across faults")
+        self.throw = QtWidgets.QDoubleSpinBox()
+        self.throw.setRange(0, 1000)
+        self.throw.setValue(80)
+        self.throw.setSuffix(" ms")
+        self.use_hz = QtWidgets.QCheckBox(f"Use visible horizons as constraints ({n_hz})")
+        self.use_hz.setChecked(n_hz > 0)
+        self.use_flt = QtWidgets.QCheckBox(f"Use visible faults ({n_flt})")
+        self.use_flt.setChecked(n_flt > 0)
+        form.addRow("Node spacing", self.node_tr)
+        form.addRow("Node interval", self.node_ms)
+        form.addRow("Correlation window", self.win)
+        form.addRow("Min correlation", self.corr)
+        form.addRow("Links across faults", self.flinks)
+        form.addRow("Max fault throw", self.throw)
+        form.addRow(self.use_hz)
+        form.addRow(self.use_flt)
+        form.addRow(QtWidgets.QLabel("3D: the dip field is computed first if missing. Results: display box 'RGT'."
+                                     if is3d else "All 2D lines are solved together and tied at intersections."))
+        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        form.addRow(bb)
+
+    def params(self):
+        from ..rgt.solve import RGTParams
+        return RGTParams(node_traces=int(self.node_tr.value()) or 4, node_ms=float(self.node_ms.value()) or 8.0,
+                         window_ms=float(self.win.value()) or 24.0, min_corr=float(self.corr.value()),
+                         fault_links=self.flinks.currentText() or "correlate",
+                         max_throw_ms=float(self.throw.value()) or 80.0)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, path=None):
         super().__init__()
@@ -139,6 +198,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&End fault stick (Enter)", lambda: self.section.end_stick())
         m.addSeparator()
         self._act(m, "Compute &dip field (current 3D volume)...", self.compute_dip)
+        self._act(m, "Compute &RGT (current 3D volume)...", self.compute_rgt_3d)
+        self._act(m, "Compute RGT (all &2D lines)...", self.compute_rgt_2d)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
@@ -419,6 +480,64 @@ class MainWindow(QtWidgets.QMainWindow):
             self.section.set_attr("Inline dip")
 
         self.run_job(f"Dip field {src[1]}", fn, done)
+
+    def _rgt_inputs(self, dlg):
+        hz = [h for h in self.project.horizons.items if h.visible] if dlg.use_hz.isChecked() else []
+        fl = self.project.faults.visible_faults() if dlg.use_flt.isChecked() else []
+        return hz, fl
+
+    def compute_rgt_3d(self):
+        src = self.section.source
+        if not src or src[0] != "3D":
+            QtWidgets.QMessageBox.information(self, "RGT", "Show a 3D volume first.")
+            return
+        dlg = RGTDialog(self, True, sum(h.visible for h in self.project.horizons.items),
+                        len(self.project.faults.visible_faults()))
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
+            return
+        from ..rgt.solve import compute_rgt_3d
+        vol = self.project.volume(src[1])
+        params = dlg.params()
+        hz, fl = self._rgt_inputs(dlg)
+
+        def fn(progress, cancel):
+            _, sysm = compute_rgt_3d(vol, params, fl, hz, progress, cancel, vol_name=src[1])
+            self._rgt_stats = sysm.stats
+
+        def done():
+            self.section.attr_combo.setCurrentText("RGT")
+            self.section.set_attr("RGT")
+            self.statusBar().showMessage(f"RGT done: {getattr(self, '_rgt_stats', {})}", 15000)
+
+        self.run_job(f"RGT {src[1]}", fn, done)
+
+    def compute_rgt_2d(self):
+        names = [l["name"] for l in self.project.lines]
+        if not names:
+            QtWidgets.QMessageBox.information(self, "RGT", "The project has no 2D lines.")
+            return
+        if not self.project.path:
+            QtWidgets.QMessageBox.information(self, "RGT", "Save the project first (results are stored next to it).")
+            return
+        dlg = RGTDialog(self, False, sum(h.visible for h in self.project.horizons.items),
+                        len(self.project.faults.visible_faults()))
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
+            return
+        from ..rgt.solve import compute_rgt_2d
+        params = dlg.params()
+        hz, fl = self._rgt_inputs(dlg)
+
+        def fn(progress, cancel):
+            _, sysm = compute_rgt_2d(self.project, names, params, fl, hz, progress, cancel)
+            self._rgt_stats = sysm.stats
+
+        def done():
+            if self.section.source and self.section.source[0] == "2D":
+                self.section.attr_combo.setCurrentText("RGT")
+                self.section.set_attr("RGT")
+            self.statusBar().showMessage(f"RGT done ({len(names)} lines): {getattr(self, '_rgt_stats', {})}", 15000)
+
+        self.run_job("RGT 2D lines", fn, done)
 
     def closeEvent(self, ev):
         if self._job:

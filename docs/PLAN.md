@@ -24,7 +24,7 @@ Kingdom-like interaction; large data.
    - `rgt/dip.py`: local inline & crossline dip (ms/trace) from gradient structure tensor with Gaussian
      smoothing (separable numpy convolution), plus coherence/planarity; chunked over the memmap; store as
      float16 volumes. Tests: synthetic dips recovered within 5 %.
-4. **RGT step B - mesh + global solve** - status: todo
+4. **RGT step B - mesh + global solve** - status: done (run 1, 2026-11-23; v0.5.0; RGT stored as uint16 not float16 for precision)
    - Seed grid of nodes (every N il/xl, every M ms), link neighbours by dip-guided waveform correlation
      (cross-correlation search, confidence weights), fault-aware (no links across fault planes, or links
      allowed with offset); solve relative geologic time for all nodes by sparse weighted least squares

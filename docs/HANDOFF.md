@@ -70,6 +70,17 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `line_dip(line, folder)` (npz cache). Speed ~3 us/voxel 3D, 0.6 us/sample 2D. `test_dip.py`.
   Panel `attr` / `set_attr` + toolbar combo (Seismic / Inline dip / Crossline dip / Planarity);
   `MainWindow.run_job(label, fn(progress, cancel), done)` = generic threaded job with progress bar.
+- `rgt/solve.py` (v0.5): `RGTParams`; `NodeSystem` (unknowns = tau at node columns x node times; `_Eq` COO
+  rows; `add_links`, `add_horizon` (extra unknown per horizon), `add_regularisation` (weak vertical rate prior
+  + ONE dense datum row mean(tau)=mean(t) - per-node 'tau=t' damping flattened structure on fine grids, see
+  lessons), `solve` (column-scaled CGLS, `cgls()`), `node_values` (monotonic)); `dip_path` (Heun integration
+  of dip with fault-crossing detection via `EdgeBarrier.hit(axis, line, k, t, extra)`), `refine_corr`,
+  `links_along` (shared 2D/3D), `fault_links` (step 2/4/8 traces away from the fault, correlate +/- max
+  throw with clean windows), `build_3d` / `solve_3d_multires` (coarse-to-fine start) / `write_rgt_3d`
+  (uint16 + rgt.json + rgt_nodes.npz) / `compute_rgt_3d`, `RGTVolume` (decode, trace, section,
+  `iso_surface`), `iso_from_traces`, `build_2d` (ties as extra node columns) / `solve_2d_multires` /
+  `write_rgt_2d` / `load_rgt_line` / `compute_rgt_2d`. `synth.rgt_geology` (random reflectivity, fold,
+  pinch-out wedge, low-angle fault) + `test_rgt.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +
@@ -116,4 +127,8 @@ key results with matplotlib to PNG and look at them.
 - Trace-to-trace tracking on the NPRA land 2D lines fails within tens of traces on raw data (static
   jitter, noise); a 5-9 trace lateral mix + gap bridging makes it track 1000+ traces. Synthetic tests alone
   would not have shown this - always try new algorithms on the real data in data/.
+- RGT solve: a per-node damping 'tau = t' looks harmless but its influence grows with node density (the
+  lateral chain stiffness falls as 1/n links) - it flattened structure by several ms; one global datum row
+  fixed it (median error 2.7 -> 0.15 ms). Correlation windows that straddle a fault lock onto the wrong
+  reflector (errors = throw); always tie across faults away from the fault plane.
 - Chris wants Kingdom/GeoGraphix-style behaviour and speed with big datasets; avoid per-trace Python loops.

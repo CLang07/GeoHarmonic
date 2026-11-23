@@ -225,6 +225,32 @@ class EdgeBarrier:
             self._arr[ax] = (k[o], lo[o], hi[o])
         return self
 
+    def hit(self, axis, line, k, t, extra=0.0):
+        """Vectorised: is the unit edge k -> k+1 on grid line `line` (axis 1: along j on row i=line; axis 0:
+        along i on column j=line) crossed by a fault at time t (sample units)? Arrays broadcast together.
+        extra widens the time test (t +/- extra) - e.g. 'does the fault come within a correlation window'."""
+        line, k, t = np.broadcast_arrays(np.asarray(line), np.asarray(k), np.asarray(t, float))
+        out = np.zeros(t.shape, bool)
+        keys, lo, hi = self._arr[axis]
+        if not len(keys):
+            return out
+        n_along = self.nj if axis == 1 else self.ni
+        q = (line * n_along + k).ravel()
+        l_ = np.searchsorted(keys, q, "left")
+        r_ = np.searchsorted(keys, q, "right")
+        tf = t.ravel()
+        flat = out.ravel()
+        cand = np.nonzero(r_ > l_)[0]
+        if len(cand):
+            width = int((r_ - l_)[cand].max())
+            for w in range(width):  # usually 1-2 ranges per edge
+                idx = l_[cand] + w
+                ok = idx < r_[cand]
+                idx = np.where(ok, idx, 0)
+                inside = ok & (tf[cand] >= lo[idx] - self.tol - extra) & (tf[cand] <= hi[idx] + self.tol + extra)
+                flat[cand[inside]] = True
+        return flat.reshape(t.shape)
+
     def blocked(self, grid_idx):
         """Returns fn(pi, pj, ci, cj) for track_grid, using the parent's current time from grid_idx."""
         def fn(pi, pj, ci, cj):
