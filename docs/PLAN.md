@@ -105,6 +105,30 @@ Kingdom-like interaction; large data.
      PHID/Vsh) and any per-well target CSV (production / EUR later). Prep: missing-value report +
      imputation (median / kNN), scaling, outlier flags, correlation matrix, multicollinearity (VIF),
      crossplot matrix with regression lines, PCA.
+   13a+. Engineering + production data (`analytics/engineering.py`), joined to wells by API/UWI
+     (normalise API-10/12/14, strip dashes) or name:
+     - Import CSV/Excel-exported CSV with a column-mapping dialog and saved mapping presets (Enverus/IHS
+       exports, Texas RRC, FracFocus, NDIC, Colorado ECMC, NM OCD, OCC layouts). Units detected/converted
+       (lb vs t, bbl vs m3, ft vs m).
+     - Completion table: completion date, lateral length (or computed from survey), stage count, stage
+       spacing, cluster spacing, total proppant + proppant/ft, total fluid + bbl/ft, fluid system,
+       landing zone (from item 14 % in zone), perforated interval, well spacing to nearest neighbours
+       (computed from laterals, same zone, parent/child flag by first-production date).
+     - Monthly production (oil, gas, water, days on): derived features cum 3/6/9/12/24-month and total
+       CUM per stream and BOE (6:1 configurable), peak month, IP30/IP90-equivalents, per-1,000-ft lateral
+       normalised versions, GOR, water cut, months on production; month 1 = first month with production
+       (option: skip partial first month). Optional Arps decline fit (qi, Di, b) + EUR with fit quality.
+     - FracFocus helper: total water volume and proppant mass estimated from ingredient mass % (flagged as
+       estimate). Texas RRC caveat: oil is reported by lease - allocation by well (equal / by test / by
+       days) with a clear "allocated" flag.
+     - All of it lands in the analytics table (inputs or targets), is filterable on the dashboard, and can
+       colour laterals/bubbles (e.g. 12-month cum per ft).
+     - QC specific to engineering data: completion design changes over time confound geology (vintage
+       trend plot, time-split validation from 13d, partial-dependence with date as a control), parent/
+       child effects, outlier and unit-error flags (e.g. proppant/ft > 5,000 lb/ft), wells with < N months
+       excluded from N-month targets.
+     - Test data: synthetic engineering + monthly production set (dev/make_synthetic_engineering.py,
+       generated at test time) with known geology + completion effects that the models must recover.
    13b. Models + validation (numpy implementations, sklearn-like API: fit / predict / get_params):
      linear, ridge, lasso (coordinate descent); k-nearest neighbours; random forest; **gradient-boosted
      trees in the XGBoost style** (second-order gradients, histogram split finding, L1/L2 regularisation,
