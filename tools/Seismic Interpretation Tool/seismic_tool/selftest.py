@@ -195,6 +195,8 @@ def run_gui():
         test_explain.run_gui(check, os.path.join(tmp, "angui"))
         from . import test_qc
         test_qc.run_gui(check, tmp)
+        from . import test_engineering
+        test_engineering.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

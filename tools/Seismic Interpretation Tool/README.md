@@ -179,8 +179,10 @@ Starter projects:
   One-page HTML. More QC functions (quantile GBM intervals, calibration, applicability domain, temporal / blind
   designs, paired model comparison) are in `seismic_tool/analytics/qc.py`.
 - Engineering / production helpers (CSV presets for Enverus, IHS, Texas RRC, FracFocus, NDIC, ECMC, NM OCD, OCC;
-  units; cums, IP, GOR, Arps EUR, parent/child) are in `seismic_tool/analytics/engineering.py` - a GUI import
-  dialog comes next. `python dev/make_synthetic_engineering.py OUT` writes a synthetic data set to try.
+  units; cums, IP, GOR, Arps EUR, parent/child): **Import engineering / production CSV...** in the Analytics
+  window - pick a preset, check the column mapping and units (save the mapping for next time), Import.
+  Completions give lateral length, stages, proppant/fluid per ft (+ a QC flag for unit errors); monthly
+  production gives cums, IP30/90, GOR, water cut, Arps + EUR (per 1000 ft when completions are loaded first). `python dev/make_synthetic_engineering.py OUT` writes a synthetic data set to try.
 - Optional: `Install analytics extras (optional).bat` installs xgboost, scikit-learn, shap;
   `python -m seismic_tool --check-ml` compares them with the built-in numpy models.
 

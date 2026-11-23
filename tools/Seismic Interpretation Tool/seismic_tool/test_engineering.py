@@ -63,3 +63,61 @@ def run(check, tmp):
     j2 = E.join_on_api(allc, pf)
     check("cum12_boe" in j2.cols and np.isfinite(j2.cols["cum12_boe"]).mean() > 0.9, "completion + production joined by API")
     return j2, truth
+
+
+def run_gui(check, tmp):
+    """Engineering / production import dialog (presets, mapping, units, saved mappings) + Analytics window join."""
+    from .analytics import engineering as E
+    from .analytics.synthetic import make
+    from .gui.engineering_dialog import EngineeringImportDialog
+    from .gui.analytics_window import AnalyticsWindow
+    d = os.path.join(tmp, "enggui")
+    truth = make(d)
+    dlg = EngineeringImportDialog(os.path.join(d, "completions_metric.csv"))
+    check(dlg.kind == "completions" and dlg.mapping.get("api") == "API14" and dlg.units.get("fluid") == "m3",
+          "import dialog: completions detected, API mapped, fluid unit m3 from the header")
+    dlg.set_preset("Enverus")
+    ct = dlg.build()
+    k = int(np.nonzero(truth["metric"])[0][0])
+    check(abs(ct.cols["fluid_bbl_ft"][k] - truth["fpf"][k]) < 0.05 * truth["fpf"][k] and "qc_flag" in ct.cols,
+          "import dialog: metric fluid converted to bbl/ft + QC flags")
+    dlg.set_unit("fluid", "bbl")  # wrong unit on purpose -> 6.29x smaller
+    ct_bad = dlg.build()
+    check(abs(ct_bad.cols["fluid_bbl_ft"][k] * E.BBL_PER_M3 - ct.cols["fluid_bbl_ft"][k]) < 1e-6 * ct.cols["fluid_bbl_ft"][k],
+          "import dialog: unit override applied")
+    dlg.set_column("api", None)
+    dlg.set_column("well", None)
+    try:
+        dlg.build()
+        ok = False
+    except ValueError as e:
+        ok = "API" in str(e)
+    check(ok, "import dialog: refuses to import without an id column")
+    mp_path = os.path.join(tmp, "mapping.json")
+    E.save_mapping({"kind": "completions", "mapping": {"api": "API14", "proppant": "Proppant_LBS", "x": "NOPE"},
+                    "units": {"fluid": "m3"}}, mp_path)
+    dlg.apply_saved(E.load_mapping(mp_path))
+    check(dlg.mapping == {"api": "API14", "proppant": "Proppant_LBS"} and dlg.units["fluid"] == "m3",
+          "import dialog: saved mapping applied (missing columns dropped)")
+
+    class _P:
+        well_project = None
+
+        def base(self):
+            return tmp
+
+    win = AnalyticsWindow(_P())
+    c = EngineeringImportDialog(os.path.join(d, "completions.csv"))
+    win.add_table(c.build())
+    p = EngineeringImportDialog(os.path.join(d, "production.csv"))
+    p.lateral_ft = win.lateral_lengths()
+    check(p.kind == "production" and p.mapping.get("month") == "ProdDate", "import dialog: monthly production detected")
+    pt = p.build()
+    t = win.add_table(pt)
+    check(len(t) == len(c.rows) and "lateral_ft" in t.cols and "cum12_boe" in t.cols and
+          "cum12_boe_per1000ft" in t.cols and np.isfinite(t.cols["cum12_boe"]).mean() > 0.9,
+          f"analytics window: completions + production joined by API without a well project ({len(t.names)} columns)")
+    r = win.train(["lateral_ft", "proppant_lb_ft", "fluid_bbl_ft"], "cum12_boe", "linear", "group 5-fold")
+    check(np.isfinite(r["r2"]) and r["r2"] > 0.1, f"analytics window: model on imported engineering data (CV R2 {r['r2']:.2f})")
+    check(p.summary().startswith(f"{len(truth['api'])} wells"), "import dialog: summary")
+    return True

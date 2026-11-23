@@ -22,7 +22,9 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 6. Maui 3D (when imported): link the NZ well project; wells + tops on inlines; Interpret > Well tie for
    Maui-5/6 (time-depth = sonic anchored to Tui-1's checkshot), Auto tie, Save; Interpret > Horizon maps.
 7. Analytics: Interpret > Analytics, add 2-3 basemap grids + a CSV target, Train (GBM, leave one well out),
-   then **Model QC...** - read the summary (baselines / leakage / Moran) and open the HTML.
+   then **Model QC...** - read the summary (baselines / leakage / Moran) and open the HTML. Try
+   **Import engineering / production CSV...** on `python dev/make_synthetic_engineering.py C:\temp\eng`
+   (completions.csv first, then production.csv) - the mapping form (combo per column) is new real-Qt code.
 8. Horizon maps on the NPRA horizon (survey "2D"), export CPS-3 and load it in Kingdom/Petrel to confirm
    orientation (top row first).
 
@@ -35,6 +37,11 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 - The Maui checkshot LAS files hold no time-depth pairs (mislabelled export).
 
 ## Change log (newest first)
+
+## Seismic v0.15.1 - engineering / production import dialog
+- Analytics window: **Import engineering / production CSV...** (presets Enverus, IHS, Texas RRC, FracFocus,
+  NDIC, ECMC, NM OCD, OCC; editable column mapping + units; save/load mapping). Works without a well project
+  (wells come from the CSV, joined by API).
 
 ## Seismic v0.15.0 - Analytics 13d: model QC toolkit
 - `analytics/qc.py`: baselines (mean, IDW of the target, best single input), y-randomisation, random-noise

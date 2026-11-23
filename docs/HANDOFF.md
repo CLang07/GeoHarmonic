@@ -158,6 +158,11 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   coverage, calibration (reliability bins + Brier), applicability (Mahalanobis + kNN distance),
   importance_stability, hyperparameter_sensitivity, pdp_direction_checks, paired_comparison, qc_report).
   `test_qc.py` (run + run_gui). Window QC degrades to 'n/a' per check when wells are too few.
+  `gui/engineering_dialog.EngineeringImportDialog` (preset, completions/production auto-detect, per-column
+  combos + unit combos, save/load mapping JSON {kind, mapping, units}; logic in plain attributes: load,
+  set_preset, set_kind, set_column, set_unit, problems, build, summary, apply_saved). AnalyticsWindow.add_table /
+  lateral_lengths; build_table uses the first imported table as rows when there is no well project.
+  Tests: `test_engineering.run_gui`.
   `prep` (missing_report, impute median/kNN, Scaler, outlier_flags (MAD), correlation
   Pearson/Spearman, vif, pca, regression_line). `test_analytics.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),

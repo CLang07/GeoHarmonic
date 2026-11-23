@@ -32,7 +32,8 @@ class AnalyticsWindow(QtWidgets.QDialog):
         self.b_csv = QtWidgets.QPushButton("Load well CSV (targets / engineering)...")
         self.zone = QtWidgets.QComboBox()
         self.b_zone = QtWidgets.QPushButton("Add zone statistics")
-        for w in (self.b_grid, self.b_csv, self.zone, self.b_zone):
+        self.b_eng = QtWidgets.QPushButton("Import engineering / production CSV...")
+        for w in (self.b_grid, self.b_csv, self.b_eng, self.zone, self.b_zone):
             row.addWidget(w)
         lay.addLayout(row)
         form = QtWidgets.QFormLayout()
@@ -66,6 +67,7 @@ class AnalyticsWindow(QtWidgets.QDialog):
             self.zone.addItems([f["name"] for f in ws.wcp.formations])
         self.b_grid.clicked.connect(self._add_basemap_grid)
         self.b_csv.clicked.connect(self._load_csv_dialog)
+        self.b_eng.clicked.connect(self._engineering_dialog)
         self.b_zone.clicked.connect(lambda: self.add_zone(self.zone.currentText()))
         self.b_explore.clicked.connect(lambda: self._show(self.explore()))
         self.b_train.clicked.connect(self._train_clicked)
@@ -93,6 +95,29 @@ class AnalyticsWindow(QtWidgets.QDialog):
         self.extra.append(AttributeTable.from_csv(path, id_col))
         self.build_table()
 
+    def add_table(self, t):
+        """Join an AttributeTable (engineering / production features, ...) by API / well name."""
+        self.extra.append(t)
+        self.build_table()
+        return self.table
+
+    def lateral_lengths(self):
+        """{normalised id: lateral ft} from any imported completions table (for per-1000-ft production)."""
+        from ..analytics.table import normalise_id
+        out = {}
+        for e in self.extra:
+            if "lateral_ft" in e.cols:
+                out.update({normalise_id(i): float(v) for i, v in zip(e.ids, e.cols["lateral_ft"])})
+        return out
+
+    def _engineering_dialog(self):
+        from .engineering_dialog import EngineeringImportDialog
+        dlg = EngineeringImportDialog(parent=self)
+        dlg.lateral_ft = self.lateral_lengths() or None
+        if dlg.exec() and dlg.table is not None:
+            self.add_table(dlg.table)
+            self._show(dlg.summary())
+
     def _load_csv_dialog(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Well CSV", self.project.base(), "CSV (*.csv)")
         if path:
@@ -110,6 +135,9 @@ class AnalyticsWindow(QtWidgets.QDialog):
     def build_table(self):
         t = AttributeTable.from_maps_at_wells(self.wells(), self.grids) if self.project.well_project else AttributeTable()
         for e in self.extra:
+            if len(t) == 0:  # no wells from the well project: the first imported table defines the rows
+                t = AttributeTable(e.ids)
+                t.xy = e.xy
             t = t.join(e)
         self.table = t
         self.inputs.clear()
