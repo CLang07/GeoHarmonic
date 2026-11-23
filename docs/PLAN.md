@@ -128,7 +128,28 @@ Kingdom-like interaction; large data.
    TreeSHAP values sum to prediction minus expected value (local accuracy) and match brute-force Shapley
    on small trees exactly; KernelSHAP close to exact; GBM beats linear on the nonlinear case; group CV
    gives a worse (honest) score than random CV on spatially correlated synthetic wells.
-14. **Hardening** - status: todo
+14. **Dashboard with lateral (horizontal-well) attribute maps** - status: todo
+   - Dashboard window (dockable, linked panels, Spotfire-style): map, histogram, crossplot, data table,
+     well strip view; selecting wells/points in one panel highlights them in all others; filters
+     (formation, operator, date, attribute ranges); save/restore layouts; export PNG + standalone HTML.
+   - Map: background grid (structure, isochron, attribute or predicted-property map) with contours, fault
+     polygons, 2D lines / 3D outline; wells as surface + bottom-hole symbols with **full trajectories**
+     (min-curvature from deviation surveys, geo.py) drawn as polylines **coloured segment-by-segment by an
+     attribute along MD** with a colour bar and range control. Attribute sources along the wellbore:
+     any log curve; seismic attribute/amplitude sampled along the trajectory in the 3D volume (via the
+     well's time-depth); predicted property from the analytics models; formation/zone the bore is in
+     (landing-zone % in target); stage/completion CSV (stage intervals with values, e.g. proppant per ft).
+     Optional bubbles/pies per well (e.g. production or EUR from a CSV).
+   - Per-lateral statistics (mean/P10/P90 of the colouring attribute, % in zone, lateral length) written
+     to the analytics attribute table (item 13) so they can be model inputs/targets.
+   - Well strip / geosteering view: log vs MD along the lateral with the target zone top/base and the
+     seismic section along the wellbore underneath.
+   - Fast with many wells: decimate trajectories by view (LOD), draw coloured segments as one
+     ImageItem-free batched item (pyqtgraph PlotCurveItem per colour bin or a custom QPainterPath item).
+   - Test data: synthetic horizontal wells (build section + 2-3 km lateral) through the synthetic 3D
+     volume, with synthetic logs and stage CSV; the NZ deviated wells (Maui-5/6/7 surveys) for real
+     trajectories. Tests: trajectory colours match the sampled attribute at MD; per-lateral stats correct.
+15. **Hardening** - status: todo
    - Read every module for bugs, edge cases (irregular 3D geometry, missing traces, dead traces, IBM vs
      IEEE, big files > 2 GB on Windows), performance on a 2 GB synthetic, docs/WHATS_NEW.md refresh.
 
