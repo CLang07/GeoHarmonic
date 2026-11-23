@@ -208,6 +208,9 @@ Kingdom-like interaction; large data.
    hardening (NaN/inf samples -> 0, holes + crossline step tested). LEFT: run bench at 5-20 GB on Chris's PC; wire
    the well index into basemap/dashboard for >2,000 wells; parallel import if the PC bench shows import is CPU-bound;
    overview volume only if zoomed-out display is slow there)
+   PC bench 2026-11-23 (5 GB, docs/BENCHMARKS.md): inline 13.5 ms, time slice 15 ms, crossline 95 ms (fix: crossline
+   access is strided - add an xline-major store or 64x64xns bricks, opt-in at import if disk allows), import 48 MB/s
+   (50 GB ~18 min; check SSD vs HDD before parallelising), well index / laterals fine. Windows RAM probe fixed.
    - Scale targets (Chris wants big datasets): 3D volume 20-50 GB SEG-Y, 1,000+ 2D lines, 10,000 wells,
      1,000 laterals on the dashboard, all responsive on a 16-32 GB RAM PC.
    - Seismic: import in parallel (threads over trace chunks; numpy releases the GIL in I/O/copy), bricked

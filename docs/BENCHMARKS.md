@@ -23,3 +23,23 @@ the volume size (one inline / crossline / time slice is read, never the volume).
 of the memory-mapped SEG-Y and stores that the import touched (file-backed, given back by the OS under memory
 pressure); arrays held by the import itself are about 0.1-0.4 GB (trace chunk of 20,000 traces + header arrays).
 On Chris's PC: run `python dev/bench.py --gb 5 --dir D:\bench` (needs about 3x the size free) and compare.
+
+## 2026-11-23 - Chris's PC (Windows), --gb 5, work folder C:\bench_tmp
+
+| step | detail | time (s) |
+|---|---|---|
+| write synthetic SEG-Y | 5.00 GB, 971 x 1214 x 1000 | 257.605 |
+| import 3D (two float16 stores) | 48 MB/s | 104.566 |
+| inline section (random, x10) | 13.5 ms each | 0.135 |
+| crossline section (random, x10) | 95.4 ms each | 0.954 |
+| time slice (random, x10) | 15.1 ms each | 0.151 |
+| arbitrary line corner to corner |  | 0.221 |
+| well index build (10,000 wells) |  | 0.128 |
+| well index box query (view) | 102 wells | 0.001 |
+| build 1,000 synthetic laterals |  | 0.220 |
+| colour-batch laterals for the map (LOD 25 m) | 16 curves | 0.202 |
+| peak RAM of the benchmark process | 0 MB (Windows RAM probe bug, fixed after this run) |  |
+
+Reading: inline and time slice fine (~15 ms). Crossline 95 ms is the outlier: the inline-major store makes a
+crossline gather nil small strided reads (971 here; scales with the number of inlines, not volume size).
+Import 48 MB/s -> 50 GB in ~17-18 min; disk type (SSD/HDD) still to confirm before deciding on parallel import.

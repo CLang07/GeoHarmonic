@@ -35,7 +35,13 @@ def peak_ram_mb():
                             ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
             c = PMC()
             c.cb = ctypes.sizeof(PMC)
-            ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb)
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            k32.GetCurrentProcess.restype = wintypes.HANDLE
+            fn = getattr(k32, "K32GetProcessMemoryInfo", None) or ctypes.WinDLL("psapi").GetProcessMemoryInfo
+            fn.argtypes = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD]
+            fn.restype = wintypes.BOOL
+            if not fn(k32.GetCurrentProcess(), ctypes.byref(c), c.cb):
+                return float("nan")
             return c.PeakWorkingSetSize / 2 ** 20
         except Exception:
             return float("nan")
