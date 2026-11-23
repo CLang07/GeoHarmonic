@@ -140,12 +140,13 @@ class WellLayer:
     are in view. Below `index_from` wells a numpy box test is used, above it an in-memory WellIndex (grid buckets).
     """
 
-    def __init__(self, wells, max_labels=150, index_from=2000, bucket=None):
+    def __init__(self, wells, max_labels=150, index_from=2000, bucket=None, label_all_below=500):
         wells = [w for w in (wells or []) if w[1] is not None and w[2] is not None
                  and math.isfinite(float(w[1])) and math.isfinite(float(w[2]))]
         self.names = [w[0] for w in wells]
         self.xy = np.array([[float(w[1]), float(w[2])] for w in wells], float).reshape(-1, 2)
         self.max_labels = int(max_labels)
+        self.label_all_below = int(label_all_below)  # small projects: every well in view keeps its name
         self.index = None
         if len(wells) >= index_from:
             if bucket is None:  # ~ 30 wells per bucket on average
@@ -162,12 +163,13 @@ class WellLayer:
         """(x, y) arrays of every well - one scatter item."""
         return self.xy[:, 0], self.xy[:, 1]
 
-    def in_view(self, x0, x1, y0, y1):
-        """Row numbers of the wells inside the box."""
+    def in_view(self, x0, x1, y0, y1, limit=False):
+        """Row numbers of the wells inside the box (limit: stop early - enough to know there are too many)."""
         if not len(self.names):
             return np.zeros(0, int)
         if self.index is not None:
-            return np.array(sorted(self._row[r[0]] for r in self.index.in_box(x0, x1, y0, y1)), int)
+            hit = self.index.in_box(x0, x1, y0, y1, limit=max(self.max_labels, 1) * 20 if limit else None)
+            return np.array(sorted(self._row[r[0]] for r in hit), int)
         x0, x1, y0, y1 = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
         m = (self.xy[:, 0] >= x0) & (self.xy[:, 0] <= x1) & (self.xy[:, 1] >= y0) & (self.xy[:, 1] <= y1)
         return np.nonzero(m)[0]
@@ -178,8 +180,8 @@ class WellLayer:
             rows = np.arange(len(self.names))
         else:
             (x0, x1), (y0, y1) = view
-            rows = self.in_view(x0, x1, y0, y1)
-        if len(rows) > self.max_labels:
+            rows = self.in_view(x0, x1, y0, y1, limit=True)
+        if len(rows) > self.max_labels and len(self.names) > self.label_all_below:
             return []
         return [(self.names[k], float(self.xy[k, 0]), float(self.xy[k, 1])) for k in rows]
 

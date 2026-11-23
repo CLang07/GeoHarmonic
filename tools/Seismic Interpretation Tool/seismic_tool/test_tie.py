@@ -324,6 +324,19 @@ def run_gui(check, tmp):
     ok = dlg.pick_event(8.0, t0 + 3.0)
     check(ok and len(dlg.state.pairs) == 1 and abs(float(dlg.tied_times()[200]) - (t0 + 3.0)) < 1e-6,
           "dialog: event pair picked on synthetic then seismic")
+    shown = float(dlg.tied_times()[280])  # displayed (warped) time of a deeper synthetic event
+    dlg.pick_event(2.0, shown)
+    ok2 = dlg.pick_event(8.0, shown + 5.0)
+    check(ok2 and len(dlg.state.pairs) == 2 and abs(float(dlg.tied_times()[280]) - (shown + 5.0)) < 0.05,
+          "dialog: second event pair lands where clicked (click mapped back through the existing warp)")
+    dlg.undo()
+    tt = dlg.tied_times()
+    dlg.window = (float(tt[100]), float(tt[300]))
+    m = dlg._win_mask()
+    check(m.sum() == 201 and m[100] and m[300] and not m[99], "dialog: window read in tied (displayed) time")
+    dlg.window = (99990.0, 99999.0)
+    check(dlg._win_mask().all() and dlg.correlate() is not None, "dialog: empty window falls back to the whole log")
+    dlg.window = None
     dlg.save()
     tie = sp.display["well_ties"]["W-1"]
     td = sp.wellset().td_for("W-1")

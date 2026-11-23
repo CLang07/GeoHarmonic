@@ -16,11 +16,16 @@ IL_XL_CANDIDATES = [(189, 193), (9, 21), (5, 21), (17, 21), (13, 17), (221, 225)
 
 def ibm2ieee(u32):
     """IBM System/360 float (as uint32) -> float32, vectorised."""
-    u = u32.astype(np.uint32)
-    sign = np.where(u >> 31, -1.0, 1.0)
-    expo = ((u >> 24) & 0x7F).astype(np.int32) - 64
-    mant = (u & 0x00FFFFFF).astype(np.float64) / 16777216.0
-    return (sign * mant * np.power(16.0, expo)).astype(np.float32)
+    u = u32.astype(np.uint32, copy=False)
+    # float32 throughout (no float64 temporaries: the threaded import converts several chunks at once).
+    # value = mant / 2^24 * 16^(e - 64); the 24-bit mantissa is exact in float32
+    expo = ((u >> 24) & 0x7F).astype(np.int32)
+    expo *= 4
+    expo -= 256 + 24
+    with np.errstate(over="ignore"):
+        out = np.ldexp((u & 0x00FFFFFF).astype(np.float32), expo)
+    np.negative(out, out=out, where=(u >> 31).astype(bool))
+    return out
 
 
 class SegyFile:

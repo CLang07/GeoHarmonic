@@ -52,16 +52,18 @@ def import_3d(segy_path, store_dir, il_byte=None, xl_byte=None, x_byte=181, y_by
     """Scan headers, then write the two float16 stores. progress(fraction, text) and cancel() -> bool are
     optional; a cancelled import removes its partial store and raises RuntimeError('cancelled').
     workers: threads for the trace conversion and the time-slice copy (None = up to 4, 1 = serial)."""
+    t_start = time.time() - 2.0
     try:
         return _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_byte, chunk, progress, cancel,
                           workers, xline_store)
-    except RuntimeError as e:
-        if str(e) == "cancelled":
-            for fn in ("data_ilxl.npy", "data_t.npy", "data_xl.npy", "filled.npy", "meta.json"):
-                try:
-                    os.remove(os.path.join(store_dir, fn))
-                except OSError:
-                    pass
+    except BaseException:  # cancelled or failed: a partial store is useless (and would look like a volume)
+        for fn in ("data_ilxl.npy", "data_t.npy", "data_xl.npy", "filled.npy", "meta.json"):
+            p = os.path.join(store_dir, fn)
+            try:
+                if os.path.getmtime(p) >= t_start:  # only files this import wrote (never an older, valid store)
+                    os.remove(p)
+            except OSError:
+                pass
         raise
 
 
@@ -168,12 +170,12 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
                     if job is not None:
                         pending.add(ex.submit(fn, *job))
 
-    chunk = max(1, min(int(chunk), int(64e6 // max(1, ns * 4))))  # <= ~64 MB of float32 per chunk
+    chunk = max(1, min(int(chunk), int(64e6 // max(1, ns * 4))))  # <= ~64 MB of float32 per chunk (+ ~3x temporaries)
     jobs = [(s, min(n, s + chunk)) for s in range(0, n, chunk)]
     try:
         run_parallel(jobs, write_chunk, 0.1, 0.7, lambda d, t: f"Writing traces {min(n, d * chunk):,}/{n:,}")
-    except RuntimeError:
-        del ilxl
+    except BaseException:
+        del ilxl  # release the memmap so the partial file can be removed (Windows)
         raise
     ilxl.flush()
     # time-major copy, built from blocks of inlines (contiguous reads, contiguous writes)
@@ -192,7 +194,7 @@ def _import_3d(segy_path, store_dir, il_byte, xl_byte, x_byte, y_byte, scalar_by
     try:
         run_parallel([(a, min(nil, a + blk)) for a in range(0, nil, blk)], transpose_block, 0.7, 1.0,
                      lambda d, t: f"Building time slices {d}/{t} blocks")
-    except RuntimeError:
+    except BaseException:
         del tm, ilxl, xm
         raise
     tm.flush()

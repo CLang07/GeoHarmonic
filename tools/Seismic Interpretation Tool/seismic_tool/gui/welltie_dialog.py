@@ -141,6 +141,7 @@ class WellTieDialog(QtWidgets.QDialog):
         self.btn_save.clicked.connect(lambda: self.save())
         self.win_top.valueChanged.connect(lambda *_: self._win_changed())
         self.win_base.valueChanged.connect(lambda *_: self._win_changed())
+        self.nbest_spin.valueChanged.connect(lambda *_: self._nbest_changed())
         self.btn_corr.clicked.connect(lambda: self.correlate())
         self.btn_best.clicked.connect(lambda: self.find_best_trace())
         self.btn_dtw.clicked.connect(lambda: self.dtw())
@@ -203,9 +204,14 @@ class WellTieDialog(QtWidgets.QDialog):
         self.compute()
         self.draw()
 
+    def _nbest_changed(self):
+        self.trace_offset = 0  # the trace grid around the well changed size
+        self.compute()
+        self.draw()
+
     def _win_changed(self):
         a, b = float(self.win_top.value()), float(self.win_base.value())
-        self.window = (a, b) if b > a > 0 else None
+        self.window = (a, b) if b > a else None  # both 0 ("all") = whole log
         self.draw()
 
     def _tie_changed(self):
@@ -228,7 +234,8 @@ class WellTieDialog(QtWidgets.QDialog):
             self._data = None
             return None
         t, ai = r
-        nb = max(1, int(self.nbest_spin.value()) if isinstance(self.nbest_spin.value(), (int, float)) else 1)
+        v = self.nbest_spin.value()
+        nb = max(0, int(v)) if isinstance(v, (int, float)) else 1
         ts, trs = ws.trace_at_well(self.source[0], self.survey, n, n_around=nb)
         if self.wavelet_kind == "Statistical":
             wav = WT.statistical_wavelet(trs, dt_ms, 128.0, (t[0], t[-1]), ts)
@@ -274,8 +281,16 @@ class WellTieDialog(QtWidgets.QDialog):
         return self.state.apply(self._data["t"] if t is None else t)
 
     def _win_mask(self):
+        """Samples inside the window. The window is read off the tie display, i.e. in tied (seismic) time; a
+        window holding fewer than 10 samples is ignored (whole log) rather than crashing the tools."""
         t = self._data["t"]
-        return TK.window_mask(t, self.window) if self.window else np.ones(len(t), bool)
+        if not self.window:
+            return np.ones(len(t), bool)
+        m = TK.window_mask(self.tied_times(), self.window)
+        if m.sum() < 10:
+            self.info.setText("Window holds no synthetic samples - using the whole log")
+            return np.ones(len(t), bool)
+        return m
 
     def tie_corr(self):
         d = self._data
@@ -298,6 +313,9 @@ class WellTieDialog(QtWidgets.QDialog):
         self.last_corr = res
         try:
             self.p_cc.clear()
+            self.p_cc.setYLink(None)  # the angle gather links it to the time axis
+            self.p_cc.setTitle("Correlation vs lag (ms)")
+            self.p_cc.enableAutoRange()
             self.p_cc.plot(res["lags_ms"], res["corr"], pen=pg.mkPen((0, 0, 160)))
             self.p_cc.plot(res["lags_ms"], res["envelope"], pen=pg.mkPen((150, 150, 150), style=QtCore.Qt.DashLine))
             self.p_ph.clear()
@@ -361,7 +379,7 @@ class WellTieDialog(QtWidgets.QDialog):
         return ok
 
     def _plot_clicked(self, ev):
-        if not self.btn_pair.isChecked() or self._data is None:
+        if not self.btn_pair.isChecked() or self._data is None or ev.button() != QtCore.Qt.LeftButton:
             return
         vb = self.p_sy.getViewBox()
         if not vb.sceneBoundingRect().contains(ev.scenePos()):
@@ -370,8 +388,14 @@ class WellTieDialog(QtWidgets.QDialog):
         self.pick_event(p.x(), p.y())
 
     def pick_event(self, x, t):
-        """x < 7.5: a synthetic event (first click); x >= 7.5: the matching seismic event (second click)."""
-        if x < 7.5:
+        """x < 6.25: a synthetic event (first click); further right: the matching seismic event (second click).
+        The synthetic click is at its displayed time (bulk + current warp); pairs are stored after the bulk tie only,
+        so the click is mapped back through the current warp."""
+        if x < 6.25:
+            d = self._data
+            if d is not None and self.state.warp_in is not None:
+                tr = d["t"]
+                t = float(np.interp(t, self.tied_times(tr), self.state.bulk(tr)))
             self._pending = float(t)
             self.info.setText(f"Synthetic event at {t:.1f} ms - now click the matching seismic event")
             return None
@@ -521,13 +545,20 @@ class WellTieDialog(QtWidgets.QDialog):
         name, ok = QtWidgets.QInputDialog.getText(self, "Save wavelet", "Name:", text=f"{self.well_name} deterministic")
         if ok and name:
             self.save_wavelet(name)
-            self.info.setText(f"Wavelet '{name}' saved to the project library")
+            self.info.setText(f"Wavelet '{name}' saved to the project library" if self.library.path else
+                              f"Wavelet '{name}' kept for this session (save the project to keep a library)")
 
     def use_library_wavelet(self, name):
         if not name or name not in self.library.items:
             return None
         self.wavelet = self.library.get(name, self.survey.dt * 1000.0)
         self.wavelet_kind = "Deterministic"
+        try:  # keep the wavelet box in step, or the next frequency / well change would switch back to Ricker
+            self.wav_combo.blockSignals(True)
+            self.wav_combo.setCurrentText("Deterministic (from tie)")
+            self.wav_combo.blockSignals(False)
+        except Exception:
+            pass
         self.compute()
         self.draw()
         return self.wavelet
@@ -582,7 +613,8 @@ class WellTieDialog(QtWidgets.QDialog):
         self.info.setText(f"Batch: {summ.get('n', 0)} of {len(rows)} wells tied"
                           + (f", bulk shift {summ['shift_mean']:+.1f} +/- {summ['shift_std']:.1f} ms, mean corr "
                              f"{summ['corr_mean']:.2f}" if summ.get("n") else "")
-                          + (f"; table {path}" if path else "") + "; average wavelet saved to the library")
+                          + (f"; table {path}" if path else "")
+                          + ("; average wavelet in the library" if summ.get("n") else ""))
         return rows, summ
 
     def _export_dialog(self):
@@ -643,8 +675,8 @@ class WellTieDialog(QtWidgets.QDialog):
             self.p_sy.plot(7.5 + 2.5 * k + s / sc, d["ts"][m], pen=pg.mkPen((0, 0, 0)))
         for a, b in self.state.pairs:
             self.p_sy.plot([2.5, 7.5], [a, b], pen=pg.mkPen((0, 140, 0), width=2))
+        self.p_dr.clear()
         if self.state.warp_in is not None:
-            self.p_dr.clear()
             self.p_dr.plot(self.state.warp_in, self.state.warp_out - self.state.warp_in, pen=pg.mkPen((0, 0, 160)))
             self.p_dr.setTitle("Lag of the warp (ms) vs TWT")
         self.corr_lbl.setText(f"corr {self.corr:.2f}")

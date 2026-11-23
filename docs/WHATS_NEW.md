@@ -42,6 +42,17 @@ tests under the Qt mock, but **no real Qt window has been opened yet** - the GUI
 
 ## Change log (newest first)
 
+## Seismic v0.21.1 - review of today's new code
+- Well tie: a second / later event pair now lands where you click (the click is mapped back through the existing
+  warp); the tie window is read in displayed (tied) time and an empty window falls back to the whole log (crash
+  before); "best trace within N" re-computes when changed (0 = the well's trace only); Correlate after Angle
+  gather shows correctly again; the warp-lag plot clears after Clear warp / Undo; picking a library wavelet keeps
+  the wavelet box in step; batch tie reads every well path once and falls back to the vertical trace.
+- Basemap: projects with up to 500 wells keep all names in view (the 150-label cap only applies to big projects).
+- 3D import: IBM conversion in float32 (no float64 temporaries - lower peak RAM with threads; bit-identical
+  results); a failed or cancelled import removes only the files it wrote itself.
+- Calibrated sonic with no checkshot level inside the sonic: drift from the checkshot extended at its end velocity.
+
 ## Seismic v0.21.0 - fast crosslines + faster import (from Chris's PC benchmark)
 - New imports write a third copy laid out by crossline (`data_xl.npy`, +50% disk): crosslines read as one
   contiguous block instead of ~1,000 small reads (Chris's PC: 95 ms per crossline before).

@@ -477,9 +477,18 @@ def calibrate_sonic(z_son, t_son, z_cs, t_cs):
     z_cs = np.asarray(z_cs, float)
     t_cs = np.asarray(t_cs, float)
     inside = (z_cs >= z_son[0]) & (z_cs <= z_son[-1])
-    if not inside.any():
-        d = float(np.interp(z_son[0], z_cs, t_cs) - t_son[0])
-        return t_son + d, (np.array([z_son[0]]), np.array([d]))
+    if not inside.any():  # no level inside the sonic: one bulk shift at the sonic end nearest to the checkshot,
+        # with the checkshot function extended linearly (end interval velocity) to that depth
+        below = z_cs.min() > z_son[-1]
+        zk = float(z_son[-1] if below else z_son[0])
+        if len(z_cs) > 1:
+            i0, i1 = (0, 1) if below else (-2, -1)
+            sl = (t_cs[i1] - t_cs[i0]) / max(1e-9, z_cs[i1] - z_cs[i0])
+            tk = float(t_cs[i0] + (zk - z_cs[i0]) * sl)
+        else:
+            tk = float(t_cs[0])
+        d = tk - float(np.interp(zk, z_son, t_son))
+        return t_son + d, (np.array([zk]), np.array([d]))
     zc = z_cs[inside]
     d = t_cs[inside] - np.interp(zc, z_son, t_son)
     t_cal = t_son + np.interp(z_son, zc, d)
@@ -831,6 +840,10 @@ def batch_tie(ws, kind, survey, wells=None, wavelet=None, freq=30.0, max_shift_m
     from . import welltie as WT
     dt_ms = survey.dt * 1000.0
     rows = []
+    trajs = {}
+    if deviated and kind == "3D":  # every well path once (not once per well)
+        from .laterals import trajectories_from_wellset
+        trajs = {tr.name: tr for tr in trajectories_from_wellset(ws)}
     for n in (wells or ws.names):
         w = ws.well(n)
         row = {"well": n, "x": w.x, "y": w.y}
@@ -845,12 +858,10 @@ def batch_tie(ws, kind, survey, wells=None, wavelet=None, freq=30.0, max_shift_m
             t, ai = r
             wav = WT.ricker(freq, dt_ms) if wavelet is None else wavelet
             rc, syn = WT.synthetic(t, ai, wav)
-            if deviated and kind == "3D":
-                from .laterals import trajectories_from_wellset
-                traj = next((tr for tr in trajectories_from_wellset(ws) if tr.name == n), None)
+            if deviated and kind == "3D" and trajs.get(n) is not None:
                 ts = survey.times
-                seis, _, _ = seismic_along_wellbore(traj, td, survey, ts)
-            else:
+                seis, _, _ = seismic_along_wellbore(trajs[n], td, survey, ts)
+            else:  # vertical / no path: the trace at the surface location
                 ts, trs = ws.trace_at_well(kind, survey, n, strict=True)
                 seis = trs[0]
             if not np.isfinite(seis).any():

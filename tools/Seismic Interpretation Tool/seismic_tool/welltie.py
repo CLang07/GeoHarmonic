@@ -262,7 +262,8 @@ class WellSet:
         above, below = cs[0] < z[0], cs[0] > z[-1]
         td = WellTD(name, np.r_[cs[0][above], z, cs[0][below]], np.r_[cs[1][above], tcal, cs[1][below]],
                     f"sonic calibrated to checkshot {cs[2]}")
-        keep = np.r_[True, np.diff(td.t) > 0] & np.r_[True, np.diff(td.z) > 0]
+        keep = (td.t > np.maximum.accumulate(np.r_[-np.inf, td.t[:-1]])) & \
+            (td.z > np.maximum.accumulate(np.r_[-np.inf, td.z[:-1]]))  # strictly increasing in both
         td.z, td.t = td.z[keep], td.t[keep]
         tie = (self.sp.display.get("well_ties") or {}).get(name)
         if tie:
