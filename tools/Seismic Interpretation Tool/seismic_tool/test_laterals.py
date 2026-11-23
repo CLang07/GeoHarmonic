@@ -204,6 +204,8 @@ def run_gui(check, tmp):
     check(np.isfinite(vs["B-1"]).mean() > 0.5 and abs(vs["B-1"][k] - direct) < 1e-6,
           "dashboard: colour by seismic amplitude along the wellbore (well time-depth)")
     win.color_by("TVDSS")
+    gx, gy = win.grey_paths()
+    check(np.isnan(gx).sum() == 3 and len(gx) == sum(len(t.x) for t in trajs) + 3, "dashboard: all wellbores in one curve")
     bat = win.map_batches()
     check(0 < len(bat) <= 16, "dashboard: batched colour curves")
     st = win.add_lateral_stats()
@@ -246,6 +248,12 @@ def run_gui(check, tmp):
     check(win.model.visible().all(), "dashboard: text filter removed")
     win.model.select([1])
     check(win.model.selected == {1}, "dashboard: linked selection")
+    win.MAX_TABLE_ROWS = 2
+    win.model.select([2])
+    win.fill_table()
+    check(win._table_rows == [2, 0], "dashboard: table capped for big well counts, selected rows kept")
+    win.MAX_TABLE_ROWS = 3000
+    win.model.select([1])
     win.filter_from_region("eur", 1.5, 10.0, (1.0, 3.0))
     check(win.model.filters["eur"] == ("range", 1.5, None) and list(np.nonzero(win.model.visible())[0]) == [1, 2],
           "dashboard: histogram range handles filter the wells")

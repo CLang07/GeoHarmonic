@@ -16,6 +16,7 @@ N_BINS = 16
 
 
 class DashboardWindow(QtWidgets.QMainWindow):
+    MAX_TABLE_ROWS = 3000
     def __init__(self, project=None, basemap=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Dashboard - wells and laterals")
@@ -278,9 +279,9 @@ class DashboardWindow(QtWidgets.QMainWindow):
             return
         vis = self.model.visible() if len(self.model) else np.ones(len(self.trajs), bool)
         sel = self.model.selected
-        for k, t in enumerate(self.trajs):  # thin grey paths (also wells without colour values)
-            if vis[k]:
-                self.map.plot(t.x, t.y, pen=pg.mkPen((180, 180, 180), width=1))
+        gx, gy = self.grey_paths(vis, self._pixel())  # all wellbores as one NaN-separated curve
+        if len(gx):
+            self.map.plot(gx, gy, pen=pg.mkPen((180, 180, 180), width=1), connect="finite")
         if self.color_values:
             show = {t.name: v for k, (t, v) in enumerate(zip(self.trajs, [self.color_values.get(t.name) for t in self.trajs]))
                     if vis[k] and v is not None}
@@ -297,6 +298,17 @@ class DashboardWindow(QtWidgets.QMainWindow):
         self.status.setText(f"{int(vis.sum())} of {len(self.trajs)} wells, {len(sel)} selected"
                             + (f"; colour: {self.color_name} {self.vrange[0]:.4g} - {self.vrange[1]:.4g}"
                                if self.color_name else ""))
+
+    def grey_paths(self, vis=None, pixel=None):
+        """Every visible wellbore (decimated to the pixel size) in one NaN-separated polyline."""
+        xs, ys = [], []
+        for k, t in enumerate(self.trajs):
+            if vis is not None and not vis[k]:
+                continue
+            idx = L.lod_indices(t.x, t.y, pixel) if pixel else np.arange(len(t.x))
+            xs += [t.x[idx], [np.nan]]
+            ys += [t.y[idx], [np.nan]]
+        return (np.concatenate(xs), np.concatenate(ys)) if xs else (np.zeros(0), np.zeros(0))
 
     def draw_histogram(self):
         self.hist.clear()
@@ -337,6 +349,10 @@ class DashboardWindow(QtWidgets.QMainWindow):
     def fill_table(self):
         cols = self.model.columns()
         rows = self.model.table_rows(cols)
+        if len(rows) > self.MAX_TABLE_ROWS:  # QTableWidget gets slow beyond a few thousand rows
+            sel = [r for r in rows if r[0] in self.model.selected]
+            rows = sel + [r for r in rows if r[0] not in self.model.selected][:self.MAX_TABLE_ROWS - len(sel)]
+            self.status.setText(f"Table shows {len(rows)} wells - filter to see the others")
         self._table_rows = [r for r, _ in rows]
         self.table.blockSignals(True)
         self.table.setRowCount(len(rows))
