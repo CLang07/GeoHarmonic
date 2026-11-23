@@ -6,3 +6,4 @@ __pycache__/
 *.tmp
 *.npy
 *.npz
+test_results.txt
