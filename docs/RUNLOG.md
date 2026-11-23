@@ -108,3 +108,7 @@ What Chris should test first:
 
 Next: item 15 leftovers after the PC benchmark; then "Later (Chris back)" items (Maui subset cut, mistie with
 the 2D lines, Tui-1/Amokura-1 wells).
+
+## 2026-11-23 run 2 (scheduled) - started 12:19 UTC, branch dev - IN PROGRESS
+- Working on item 15 leftovers that do not need Chris's PC (well index in basemap/dashboard, overview
+  volume, parallel import option), then hardening.
