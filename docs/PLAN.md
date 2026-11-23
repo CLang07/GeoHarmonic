@@ -70,6 +70,13 @@ Kingdom-like interaction; large data.
      bulk time shift, phase rotation and amplitude scalar by cross-correlation in a window; apply and show
      before/after; integrate with the Mistie Tool network solve (2D-2D + 2D-3D ties). Tests: synthetic 2D
      made from the 3D with a known shift/phase/gain - recovered within tolerance.
+   - Match industry mistie features: simultaneous time + phase + amplitude estimation at each tie
+     (Bishop & Nunns 1994 style, envelope cross-correlation for the time part), network least squares with
+     reference lines held fixed (0 shift, 0 deg, gain 1), per-survey "key line" option for multi-vintage
+     2D, horizon-based misties (from picked horizons at ties) as an alternative to waveform, constant or
+     time-variant (windowed) corrections, max-shift and correlation-window limits, outlier tie rejection,
+     residual-mistie map/table before vs after, and corrections applied on the fly to BOTH seismic display
+     and interpretation (horizons) without rewriting SEG-Y (optional export of corrected SEG-Y).
 11. **Seismic attributes** - status: todo
    - Volume attributes computed in chunks to new float16 stores, viewable like any volume: envelope,
      instantaneous phase/frequency (Hilbert via numpy FFT), RMS amplitude, coherence/semblance, dip-steered
