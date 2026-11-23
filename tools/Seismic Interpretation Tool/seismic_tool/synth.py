@@ -75,3 +75,35 @@ def make_project(folder, nil=50, nxl=70, ns=250, dt_us=4000, noise=0.05, lines=T
             truth["2D:" + name] = tt.astype(np.float32)
     proj.save()
     return proj, truth
+
+
+def faulted_cube(nil=40, nxl=60, ns=250, dt_s=0.004, throw_ms=40.0, spacing_ms=40.0, noise=0.03, seed=1):
+    """Layer-cake of identical reflectors every spacing_ms, cut by a planar normal fault that dips towards
+    +crossline.  Fault position: xl index xf(t) = 25 + 0.04 * (t_ms - 200) + 0.1 * il.  Hanging wall (xl > xf)
+    is shifted down by throw_ms - with throw = spacing a tracker that ignores the fault jumps to the wrong
+    reflector.  Returns (cube, fault_xl(il, t) function, footwall top surface ms (nil, nxl) for the reflector
+    at 300 ms, hanging-wall truth)."""
+    i, j = np.meshgrid(np.arange(nil), np.arange(nxl), indexing="ij")
+    base = 300 + 0.3 * j + 0.2 * i
+    t = np.arange(ns) * dt_s * 1000.0
+    fxl = lambda il, tm: 25 + 0.04 * (tm - 200) + 0.1 * il  # noqa: E731
+    surf = [base + k * spacing_ms for k in range(-4, 8)]
+    foot = traces_from_surfaces(surf, [1.0] * len(surf), ns, dt_s, noise=noise, seed=seed)
+    hang = traces_from_surfaces([s + throw_ms for s in surf], [1.0] * len(surf), ns, dt_s, noise=noise,
+                                seed=seed + 1)
+    is_hang = j[..., None] > fxl(i[..., None], t[None, None, :])
+    cube = np.where(is_hang, hang, foot).astype(np.float32)
+    return cube, fxl, base
+
+
+def fault_sticks_from(fxl, vol, ils_idx, t_ms=(150.0, 600.0)):
+    """Sticks (map x, y, t) along the synthetic fault on the given inline indices."""
+    sticks = []
+    for i in ils_idx:
+        pts = []
+        for tm in t_ms:
+            xl = vol.xl0 + vol.xl_step * fxl(i, tm)
+            x, y = vol.xy(vol.il0 + vol.il_step * i, xl)
+            pts.append((float(x), float(y), tm))
+        sticks.append(pts)
+    return sticks

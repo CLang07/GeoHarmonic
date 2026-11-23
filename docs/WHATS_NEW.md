@@ -2,6 +2,16 @@
 
 Newest first. Each section: what it does, how to use it, what to test.
 
+## v0.3.0 - Fault sticks + fault surfaces (PLAN item 2)
+- Faults panel + Interpret menu: N = new fault, F = fault mode; click points, Enter ends a stick, Esc
+  cancels, Shift+click deletes a stick, Ctrl+Z undoes (shared with horizon edits, most recent first).
+- Sticks are joined into a triangulated fault surface; its cut is drawn on every inline, crossline, time
+  slice and 2D line. Fault traces on the basemap.
+- The horizon autotracker stops at visible faults (tick box in the Horizons panel). On a synthetic with
+  throw = reflector spacing, tracking without the fault mis-ties 100% of the hanging wall; with the fault 0%.
+- Known limits: sticks always go to the active fault (no "re-assign stick" yet); faults with a single
+  stick have no surface (stick only shown on its own section, no tracker barrier).
+
 ## v0.2.0 - Horizon picking + autotracking (PLAN item 1)
 - Horizons panel (right dock) + Interpret menu: New / Rename / Colour / Delete, visibility tick boxes,
   pick count per horizon.

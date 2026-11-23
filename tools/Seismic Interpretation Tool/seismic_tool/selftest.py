@@ -104,6 +104,9 @@ def run():
         # ---- horizons: snapping, 3D/2D autotracking, ties, undo, save/load
         from . import test_horizons
         test_horizons.run(check, tmp)
+        # ---- faults: sticks, surfaces, section cuts, tracker barrier
+        from . import test_faults
+        test_faults.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -127,6 +130,8 @@ def run_gui():
     tmp = tempfile.mkdtemp(prefix="seis_guitest_")
     try:
         test_horizons.run_gui(check, tmp)
+        from . import test_faults
+        test_faults.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

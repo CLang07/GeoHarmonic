@@ -1,4 +1,4 @@
-# Seismic Interpretation Tool (Geo Tool Kit) - v0.2: loading, viewing, horizon picking + autotracking
+# Seismic Interpretation Tool (Geo Tool Kit) - v0.3: loading, viewing, horizons, faults
 
 2D lines and 3D volumes in one project, PySide6 + pyqtgraph (same setup as the Well Correlation Tool).
 
@@ -46,10 +46,23 @@ Starter projects:
   is drawn on the basemap (3D as an image, 2D as coloured dots; red = shallow).
 - Saved with the project: `<project>_seismic\horizons\<name>\*.npy` + list in the project file.
 
+## Faults (Faults panel; Interpret menu)
+- **N** = new fault (also turns on **Fault mode, F**). In fault mode click points down the fault on an
+  inline, crossline or 2D line; **Enter** ends the stick, **Esc** cancels it, **Ctrl+Z** removes the last
+  point. Shift+click deletes the nearest stick of the active fault. Sticks go to the active fault (select
+  it in the list first).
+- Draw sticks on several lines along strike: they are ordered along strike and joined into a triangulated
+  surface. The surface is drawn (thin line) wherever it cuts the section shown - inlines, crosslines, time
+  slices and 2D lines, including surveys the sticks were not drawn on. The sticks themselves show
+  (thick, with dots) on the section they were drawn on. Basemap: stick traces + a line joining the stick tops.
+- **Tracker stops at faults** (Horizons panel, on by default): the autotracker does not link traces across
+  a visible fault surface (also not by gap bridging). Hide a fault (untick) to track across it.
+- Saved inside the project file (sticks in map X, Y, TWT).
+
 ## Command line
 `python -m seismic_tool --info FILE.sgy` (header summary), `--selftest`, `--guitest` (GUI logic checks), `--png PROJECT OUT.png`.
 
 ## Coming next
-2. Fault sticks and planes (tracker stops at faults), relative geologic time (RGT) workflow.
+2. Relative geologic time (RGT) workflow: dip field, global solve, horizon stack, Wheeler view.
 3. Wells on seismic: tops in time via checkshots, synthetics from DT/RHOB.
 4. Time/structure maps from horizons, amplitude extractions, mistie integration for 2D.

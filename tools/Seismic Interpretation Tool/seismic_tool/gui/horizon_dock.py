@@ -92,6 +92,10 @@ class HorizonDock(QtWidgets.QWidget):
         for b in (self.btn_track, self.btn_undo, self.btn_clear):
             row.addWidget(b)
         lay.addLayout(row)
+        self.stop_chk = QtWidgets.QCheckBox("Tracker stops at faults")
+        self.stop_chk.setChecked(True)
+        self.stop_chk.setToolTip("Links that cross a visible fault surface are not tracked")
+        lay.addWidget(self.stop_chk)
         self.map_chk = QtWidgets.QCheckBox("Show time map on basemap")
         self.map_chk.setChecked(True)
         lay.addWidget(self.map_chk)
@@ -115,7 +119,9 @@ class HorizonDock(QtWidgets.QWidget):
             w.currentTextChanged.connect(lambda *_: self.apply_settings())
         for w in (self.snap_ms, self.win, self.jump, self.corr, self.mix2d, self.mix3d, self.gap):
             w.valueChanged.connect(lambda *_: self.apply_settings())
+        self.stop_chk.toggled.connect(lambda *_: self.apply_settings())
         section.horizonsEdited = self._edited
+        section.modeChanged.append(self._mode_changed)
 
     # ------------------------------------------------------------ state
     def set_project(self, project):
@@ -165,6 +171,7 @@ class HorizonDock(QtWidgets.QWidget):
         s.mix_2d = max(1, int(self.mix2d.value()))
         s.mix_3d = max(1, int(self.mix3d.value()))
         p.max_gap = max(1, int(self.gap.value()))
+        s.track_faults = bool(self.stop_chk.isChecked())
 
     def _active_changed(self):
         it = self.list.currentItem()
@@ -236,12 +243,19 @@ class HorizonDock(QtWidgets.QWidget):
         self.refresh()
         self.changed.emit()
 
-    def set_pick_mode(self, on):
-        self.section.pick_mode = bool(on)
-        if bool(self.pick_btn.isChecked()) != bool(on):
+    def _mode_changed(self, mode):
+        on = mode == "horizon"
+        if bool(self.pick_btn.isChecked()) != on:
             self.pick_btn.blockSignals(True)
-            self.pick_btn.setChecked(bool(on))
+            self.pick_btn.setChecked(on)
             self.pick_btn.blockSignals(False)
+
+    def set_pick_mode(self, on):
+        if on:
+            self.section.set_mode("horizon")
+        elif self.section.pick_mode:
+            self.section.set_mode(None)
+        self._mode_changed("horizon" if on else None)
         if on and not self.active():
             self.section.cursorInfo.emit("Pick mode: create a horizon first (New).")
         elif on:

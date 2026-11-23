@@ -7,6 +7,7 @@ import numpy as np  # noqa: E402
 import pyqtgraph as pg  # noqa: E402
 
 from . import colormaps  # noqa: E402
+from .. import faults as flt  # noqa: E402
 from .. import horizons as hz  # noqa: E402
 
 MODES = ["Inline", "Crossline", "Time slice"]
@@ -25,6 +26,11 @@ class PickViewBox(pg.ViewBox):
         return self.panel.pick_mode and ev.button() == QtCore.Qt.LeftButton
 
     def mouseClickEvent(self, ev):
+        if self.panel.fault_mode and ev.button() == QtCore.Qt.LeftButton:
+            pt = self.mapToView(ev.pos())
+            self.panel.fault_click(pt.x(), pt.y(), erase=bool(ev.modifiers() & QtCore.Qt.ShiftModifier))
+            ev.accept()
+            return
         if self._picking(ev):
             pt = self.mapToView(ev.pos())
             erase = bool(ev.modifiers() & QtCore.Qt.ShiftModifier)
@@ -74,6 +80,15 @@ class SectionPanel(QtWidgets.QWidget):
         self.seeds = []  # [(key, i, j)]
         self._hz_items = []
         self.horizonsEdited = None  # optional callback after any edit (dock/basemap refresh)
+        self.track_faults = True  # horizon tracker stops at visible faults
+        # fault interpretation
+        self.fault_mode = False
+        self.active_fault = None
+        self.stick = []  # points (x, y, t) of the stick being drawn
+        self.stick_key = None  # (source, mode, number) the stick is drawn on
+        self.faultsEdited = None
+        self.modeChanged = []  # callbacks(mode) when pick/fault mode switches
+        self._flt_items = []
 
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -127,6 +142,10 @@ class SectionPanel(QtWidgets.QWidget):
             s = QtGui.QShortcut(QtGui.QKeySequence(key), self)
             s.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
             s.activated.connect(lambda d=d: self.step(d))
+        for key, fn in (("Return", self.end_stick), ("Enter", self.end_stick), ("Escape", self.cancel_stick)):
+            s = QtGui.QShortcut(QtGui.QKeySequence(key), self)
+            s.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+            s.activated.connect(fn)
 
     # ------------------------------------------------------------ setup
     def set_project(self, project):
@@ -262,7 +281,9 @@ class SectionPanel(QtWidgets.QWidget):
         self.plot.getPlotItem().invertY(self.mode != "Time slice" or kind == "2D")
         self._apply_colors()
         self._hz_items = []
+        self._flt_items = []
         self.draw_horizons()
+        self.draw_faults()
         if view and not reset_view:
             self.vb.setRange(xRange=view[0], yRange=view[1], padding=0)
         else:
@@ -409,26 +430,231 @@ class SectionPanel(QtWidgets.QWidget):
         line_only = self.track_scope == "This line only"
         if key.startswith("2D:"):
             if line_only:
-                n = pk.track(h, key, seeds or None, p)
+                n = pk.track(h, key, seeds or None, p, faults=self._track_faults())
             else:
-                res = pk.track_2d_network(h, [self.source[1]], p)
+                res = pk.track_2d_network(h, [self.source[1]], p, faults=self._track_faults())
                 n = sum(res.values())
                 self.cursorInfo.emit(f"Tracked {h.name} on {len(res)} line(s): {n:,} traces")
         else:
             scope = (self.mode, self.number) if line_only and self.mode in ("Inline", "Crossline") else None
-            n = pk.track(h, key, seeds or None, p, scope=scope)
+            n = pk.track(h, key, seeds or None, p, scope=scope, faults=self._track_faults())
         self.seeds = [s for s in self.seeds if s[0] != key]
         if not key.startswith("2D:") or line_only:
             self.cursorInfo.emit(f"Tracked {h.name}: {n:,} new picks")
         self._edited()
         return n
 
+    def _track_faults(self):
+        fs = self.fset()
+        return fs.visible_faults() if (fs is not None and self.track_faults) else None
+
     def undo(self):
-        hs = self.hset()
-        if hs is not None:
+        """Ctrl+Z: undo the most recent horizon or fault edit."""
+        if self.stick:
+            self.stick = self.stick[:-1]
+            self.cursorInfo.emit("Removed last stick point")
+            self.draw_faults()
+            return
+        hs, fs = self.hset(), self.fset()
+        hseq = hs.last_seq() if hs is not None else 0
+        fseq = fs.last_seq() if fs is not None else 0
+        if not hseq and not fseq:
+            self.cursorInfo.emit("Nothing to undo")
+            return
+        if fseq > hseq:
+            name = fs.undo()
+            if self.active_fault and not fs.get(self.active_fault):
+                self.active_fault = fs.names()[-1] if fs.items else None
+            self.cursorInfo.emit(f"Undo fault edit ({name})")
+            self._faults_edited()
+        else:
             name = hs.undo()
-            self.cursorInfo.emit(f"Undo ({name})" if name else "Nothing to undo")
+            self.cursorInfo.emit(f"Undo ({name})")
             self._edited()
+
+    # ------------------------------------------------------------ modes
+    def set_mode(self, mode):
+        """mode: 'horizon', 'fault' or None. Horizon picking and fault sticks are exclusive."""
+        if mode != "fault" and self.stick:
+            self.end_stick()
+        self.pick_mode = mode == "horizon"
+        self.fault_mode = mode == "fault"
+        for cb in self.modeChanged:
+            cb(mode)
+
+    # ------------------------------------------------------------ faults
+    def fset(self):
+        return getattr(self.project, "faults", None) if self.project else None
+
+    def section_point(self, xval, t):
+        """Section coordinates -> map (x, y, t), or None on a time slice."""
+        kind, name = self.source
+        if kind == "2D":
+            l = self.project.line(name)
+            return float(np.interp(xval, l.cdp, l.x)), float(np.interp(xval, l.cdp, l.y)), float(t)
+        v = self.project.volume(name)
+        if self.mode == "Inline":
+            X, Y = v.xy(self.number, xval)
+        elif self.mode == "Crossline":
+            X, Y = v.xy(xval, self.number)
+        else:
+            return None
+        return float(X), float(Y), float(t)
+
+    def _section_id(self):
+        return (tuple(self.source), self.mode, self.number)
+
+    def fault_click(self, x, t, erase=False):
+        """Fault mode: click adds a point to the current stick (Enter ends it); Shift+click deletes the
+        nearest stick of the active fault on this section."""
+        fs = self.fset()
+        if fs is None or not self.source:
+            return
+        if erase:
+            return self.delete_stick_near(x, t)
+        f = fs.get(self.active_fault) if self.active_fault else None
+        if f is None:
+            f = fs.new()
+            self.active_fault = f.name
+            if self.faultsEdited:
+                self.faultsEdited()
+        p = self.section_point(x, t)
+        if p is None:
+            self.cursorInfo.emit("Draw fault sticks on an inline, crossline or 2D line.")
+            return
+        if self.stick and self.stick_key != self._section_id():
+            self.end_stick()
+        self.stick_key = self._section_id()
+        self.stick.append(p)
+        self.cursorInfo.emit(f"{f.name}: stick point {len(self.stick)} - Enter ends the stick, Esc cancels")
+        self.draw_faults()
+
+    def end_stick(self):
+        fs = self.fset()
+        pts, self.stick = self.stick, []
+        if fs is None or len(pts) < 2:
+            if pts:
+                self.cursorInfo.emit("A stick needs at least 2 points - discarded")
+            self.draw_faults()
+            return None
+        f = fs.get(self.active_fault)
+        if f is None:
+            return None
+        fs.snapshot(f)
+        k = f.add_stick(pts)
+        self.cursorInfo.emit(f"{f.name}: stick {k + 1} saved ({len(pts)} points)")
+        self._faults_edited()
+        return k
+
+    def cancel_stick(self):
+        self.stick = []
+        self.draw_faults()
+
+    def _sticks_here(self, f):
+        """[(stick index, xs, ts)] of the fault's sticks lying on the current section."""
+        kind, name = self.source
+        out = []
+        if kind == "2D":
+            l = self.project.line(name)
+            for k, s in enumerate(f.sticks):
+                r = flt.sticks_on_line(_One(f, s), l.x, l.y)
+                if r:
+                    out.append((k, np.interp(r[0][0], np.arange(len(l.cdp)), l.cdp), r[0][1]))
+            return out
+        if self.mode not in ("Inline", "Crossline"):
+            return out
+        v = self.project.volume(name)
+        for k, s in enumerate(f.sticks):
+            r = flt.sticks_on_section_3d(_One(f, s), v, self.mode, self.number)
+            if r:
+                out.append((k, r[0][0], r[0][1]))
+        return out
+
+    def delete_stick_near(self, x, t, tol=0.03):
+        fs = self.fset()
+        f = fs.get(self.active_fault) if fs is not None and self.active_fault else None
+        if f is None or self._xaxis is None:
+            return None
+        xr = max(1e-9, float(np.ptp(self._xaxis)))
+        tr = max(1e-9, float(np.ptp(self._yaxis)))
+        best = None
+        for k, xs, ts in self._sticks_here(f):
+            d = np.min(np.hypot((np.asarray(xs) - x) / xr, (np.asarray(ts) - t) / tr))
+            if d <= tol and (best is None or d < best[0]):
+                best = (d, k)
+        if best is None:
+            self.cursorInfo.emit("No stick of the active fault near the cursor")
+            return None
+        fs.snapshot(f)
+        del f.sticks[best[1]]
+        f.invalidate()
+        self.cursorInfo.emit(f"{f.name}: stick deleted")
+        self._faults_edited()
+        return best[1]
+
+    def _faults_edited(self):
+        self.draw_faults()
+        if self.faultsEdited:
+            self.faultsEdited()
+
+    def fault_lines(self):
+        """Pure-data fault overlay for the current section: list of (fault name, kind, xs, ys) where kind is
+        'cut' (pairs of points, surface intersection), 'stick' (polyline) or 'new' (stick being drawn)."""
+        fs = self.fset()
+        out = []
+        if fs is None or not self.source or self._data is None:
+            return out
+        kind, name = self.source
+        for f in fs.items:
+            if not f.visible:
+                continue
+            if kind == "2D":
+                l = self.project.line(name)
+                seg = flt.section_segments_line(f, l.x, l.y)
+                if seg is not None and len(seg[0]):
+                    k = np.arange(len(l.cdp))
+                    x0, x1 = np.interp(seg[0], k, l.cdp), np.interp(seg[2], k, l.cdp)
+                    out.append((f.name, "cut", np.c_[x0, x1].ravel(), np.c_[seg[1], seg[3]].ravel()))
+            else:
+                seg = flt.section_segments_3d(f, self.project.volume(name), self.mode, self.number)
+                if seg is not None and len(seg[0]):
+                    out.append((f.name, "cut", np.c_[seg[0], seg[2]].ravel(), np.c_[seg[1], seg[3]].ravel()))
+            for _, xs, ts in self._sticks_here(f):
+                out.append((f.name, "stick", np.asarray(xs, float), np.asarray(ts, float)))
+        if self.stick and self.stick_key == self._section_id():
+            xs = []
+            for X, Y, t in self.stick:
+                if kind == "2D":
+                    l = self.project.line(name)
+                    xs.append(float(l.cdp[int(np.argmin(np.hypot(l.x - X, l.y - Y)))]))
+                else:
+                    v = self.project.volume(name)
+                    il, xl = v.ilxl_at(X, Y)
+                    xs.append(float(xl if self.mode == "Inline" else il))
+            out.append((self.active_fault, "new", np.array(xs), np.array([p[2] for p in self.stick])))
+        return out
+
+    def draw_faults(self):
+        for it in self._flt_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._flt_items = []
+        fs = self.fset()
+        cols = {f.name: f.color for f in fs.items} if fs is not None else {}
+        for fname, kind, xs, ys in self.fault_lines():
+            c = cols.get(fname, (220, 30, 30))
+            if kind == "cut":
+                it = pg.PlotCurveItem(xs, ys, connect="pairs", pen=pg.mkPen(c, width=2))
+            elif kind == "stick":
+                it = pg.PlotDataItem(xs, ys, pen=pg.mkPen(c, width=3), symbol="o", symbolSize=6,
+                                     symbolBrush=pg.mkBrush(*c), symbolPen=None)
+            else:
+                it = pg.PlotDataItem(xs, ys, pen=pg.mkPen(c, width=2, style=QtCore.Qt.DashLine), symbol="s",
+                                     symbolSize=7, symbolBrush=pg.mkBrush(255, 255, 255), symbolPen=pg.mkPen(c))
+            self.plot.addItem(it)
+            self._flt_items.append(it)
 
     def draw_horizons(self):
         for it in self._hz_items:
@@ -497,3 +723,11 @@ class SectionPanel(QtWidgets.QWidget):
         if self.mode == "Crossline":
             return v.xy([v.inlines[0], v.inlines[-1]], [self.number, self.number])
         return None
+
+
+class _One:
+    """A single stick wrapped as a fault (for the sticks_on_* helpers)."""
+
+    def __init__(self, f, stick):
+        self.sticks = [stick]
+        self.name = f.name

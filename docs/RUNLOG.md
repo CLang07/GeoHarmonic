@@ -13,4 +13,8 @@
   checks PASS (incl. 3D folded-reflector autotrack max err 1.45 ms / mean 0.22 ms at 4 ms sampling, 2D tie
   propagation, gap bridging, lateral mix, save/load), --guitest under fakeqt PASS; Mistie + Well
   Correlation self-tests PASS. Real-data check: NPRA R-2 tracks 1,000-2,600 traces with lateral mix 5-9.
-- Working on PLAN item 2 next.
+- Item 2 DONE - fault sticks + fault surfaces (v0.3.0): new faults.py, gui/fault_dock.py, test_faults.py;
+  section_panel fault mode/overlays, basemap fault traces, project saves faults, tracker barrier.
+  Tests: --selftest 59 checks PASS (fault cut positions < 0.05 trace, tracker 0% across fault vs 100%
+  without), --guitest PASS, other tools PASS.
+- Working on PLAN item 3 next.

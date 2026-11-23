@@ -38,6 +38,7 @@ class Basemap(QtWidgets.QWidget):
         self._current = None
         self._hz_name = None  # horizon shown as a time-structure map
         self._hz_items = []
+        self._flt_items = []
         self.hz_range = None  # (vmin, vmax) of the last map, for the legend text
         self.plot.scene().sigMouseClicked.connect(self._clicked)
 
@@ -87,7 +88,9 @@ class Basemap(QtWidgets.QWidget):
                 t.setPos(x, y)
                 self.plot.addItem(t, ignoreBounds=True)
         self._hz_items = []
+        self._flt_items = []
         self._draw_horizon_map()
+        self.draw_faults()
         self._current = pg.PlotCurveItem(pen=pg.mkPen((220, 0, 0), width=3))
         self.plot.addItem(self._current)
         self.plot.getPlotItem().getViewBox().autoRange(padding=0.05)
@@ -151,6 +154,34 @@ class Basemap(QtWidgets.QWidget):
             self._hz_items.append(it)
         self.legend.setText(f"Time map {self._hz_name}: {self.hz_range[0]:.0f} ms (red, shallow) to "
                             f"{self.hz_range[1]:.0f} ms (purple, deep)" if self.hz_range else "")
+
+    def fault_map_lines(self):
+        """[(name, colour, xs, ys)] - each stick projected on the map plus a line joining the stick tops."""
+        p = self.project
+        out = []
+        if not p or not getattr(p, "faults", None):
+            return out
+        for f in p.faults.items:
+            if not f.visible:
+                continue
+            for s in f.sticks:
+                out.append((f.name, f.color, s[:, 0], s[:, 1]))
+            st = f.ordered_sticks()
+            if len(st) > 1:
+                out.append((f.name, f.color, np.array([s[0, 0] for s in st]), np.array([s[0, 1] for s in st])))
+        return out
+
+    def draw_faults(self):
+        for it in self._flt_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._flt_items = []
+        for _, c, xs, ys in self.fault_map_lines():
+            it = pg.PlotCurveItem(np.asarray(xs, float), np.asarray(ys, float), pen=pg.mkPen(c, width=2))
+            self.plot.addItem(it)
+            self._flt_items.append(it)
 
     def show_current(self, xy):
         if self._current is None:

@@ -16,7 +16,7 @@ Kingdom-like interaction; large data.
      sections as lines and on time slices as intersection points; time-structure map in the basemap
      (colour image of the grid).
    - Tests: synthetic dipping/folded reflector -> autotrack recovers it < 1 sample error; peak snap.
-2. **Fault sticks + fault planes** - status: todo
+2. **Fault sticks + fault planes** - status: done (run 1, 2026-11-23; v0.3.0)
    - Draw sticks on sections (click points, Enter ends stick, N new fault), assign to named faults,
      display on intersecting sections; triangulated fault surface per fault; horizon autotracker stops at
      faults. Tests: synthetic faulted volume - tracker does not jump across the fault.

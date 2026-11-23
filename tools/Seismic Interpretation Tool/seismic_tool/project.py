@@ -7,6 +7,7 @@ import json
 import os
 
 from . import __version__
+from .faults import FaultSet
 from .horizons import HorizonSet
 from .volume import Line2D, Volume3D, match_nav, read_nav_csv
 
@@ -23,6 +24,7 @@ class SeisProject:
         self.well_project = None  # path to a Well Correlation project (.wcproj.json)
         self.display = {"cmap": "seismic", "clip": 99.0, "reverse": False}
         self.horizons = HorizonSet()
+        self.faults = FaultSet()
         self._hz_saved_to = None
         self._vol_cache = {}
         self._line_cache = {}
@@ -62,11 +64,12 @@ class SeisProject:
              "lines": [dict(l, segy=self._rel(l["segy"])) for l in self.lines],
              "nav_files": [self._rel(n) for n in self.nav_files],
              "well_project": self._rel(self.well_project), "display": self.display,
-             "horizons": self.horizons.to_json(self._rel(hz_dir))}
+             "horizons": self.horizons.to_json(self._rel(hz_dir)), "faults": self.faults.to_json()}
         tmp = self.path + ".tmp"
         with open(tmp, "w") as fh:
             json.dump(d, fh, indent=1)
         os.replace(tmp, self.path)
+        self.faults.dirty = False
 
     @classmethod
     def open(cls, path):
@@ -85,6 +88,10 @@ class SeisProject:
             p._hz_saved_to = os.path.join(p.seismic_dir(), "horizons")
         except Exception as e:  # never block opening the project because of interpretation files
             print("Could not load horizons:", e)
+        try:
+            p.faults = FaultSet.from_json(d.get("faults"))
+        except Exception as e:
+            print("Could not load faults:", e)
         return p
 
     # ------------------------------------------------------------ data access

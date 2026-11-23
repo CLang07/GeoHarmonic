@@ -55,12 +55,21 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `line_intersections`), display helpers `section_curve`, `slice_points`, `grid_transform`,
   `structure_rgba`. `synth.py` builds synthetic projects (folded 3D + crossing 2D lines) for tests;
   `test_horizons.py` holds the horizon tests (`run` in --selftest, `run_gui` in --guitest).
+- `faults.py` (v0.3): `Fault` (name, color, visible, `sticks` [(n,3) x, y, t ms], `ordered_sticks()` along
+  strike by PCA, `triangles()` zipped between consecutive sticks), `FaultSet` (undo with a sequence number
+  shared with HorizonSet so Ctrl+Z undoes the latest edit of either; JSON in the project under "faults"),
+  `plane_cut` (triangles x plane; a plane through an end stick is cut just inside), section cuts
+  `section_segments_3d(fault, vol, mode, number)` / `section_segments_line(fault, x, y)`, sticks on a section,
+  `EdgeBarrier` + `barrier_3d` / `barrier_line` -> `blocked(grid_idx)` for `track_grid` (edges crossed by
+  the fault cut on every inline/crossline, stored as time ranges). `Picker.track(..., faults=[...])`.
+  `synth.faulted_cube` (throw = reflector spacing) + `test_faults.py`.
 - GUI (`gui/`): `main_window.MainWindow` (File menu: new/open/save, Import 3D (threaded, QTimer poll),
   Add 2D lines, Add nav CSV, Link well project; docks: Data tree, Basemap), `section_panel.SectionPanel`
   (ImageItem row-major (rows = time), toolbar: source combo, Inline/Crossline/Time slice, number spin +
   slider + step, colormap, clip %, reverse polarity; PgUp/PgDn; signals positionChanged, cursorInfo;
   `current_trace_line()` for basemap; `PickViewBox` routes left click/drag to `pick_at`/`pick_drag` in pick
-  mode; `track()`, `undo()`, `draw_horizons()`), `horizon_dock.HorizonDock` (list, settings, buttons), `basemap.Basemap` (outlines, 2D lines, wells, red current line, horizon time map via `show_horizon`;
+  mode; `track()`, `undo()`, `draw_horizons()`), `horizon_dock.HorizonDock` (list, settings, buttons), `fault_dock.FaultDock`; panel `set_mode('horizon'|'fault'|None)`,
+  `fault_click`, `end_stick`, `fault_lines()` (pure data for the overlay), `basemap.Basemap` (outlines, 2D lines, wells, red current line, horizon time map via `show_horizon`;
   signals openLine(name), openInline(vol, il, xl)), `colormaps.lut(name, reverse)`.
 - `__main__`: `--selftest`, `--info FILE.sgy`, `--png PROJECT OUT.png` (matplotlib render, no Qt).
 - `selftest.write_segy(path, traces, headers{byte: int array}, dt_us, fmt)` makes synthetic SEG-Y (IBM or

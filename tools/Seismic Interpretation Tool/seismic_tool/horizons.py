@@ -16,6 +16,11 @@ import os
 
 import numpy as np
 
+def _next_seq():
+    from .faults import next_seq
+    return next_seq()
+
+
 SNAP_MODES = ["Peak", "Trough", "Zero + to -", "Zero - to +", "None"]
 DEFAULT_COLORS = [(255, 200, 0), (0, 200, 255), (60, 220, 60), (255, 80, 200), (255, 120, 0), (150, 100, 255),
                   (0, 140, 70), (200, 0, 0)]
@@ -401,7 +406,7 @@ class HorizonSet:
         if h:
             pos = self.items.index(h)
             self.items.remove(h)
-            self.undo_stack.append(("delete", h, pos))
+            self.undo_stack.append((_next_seq(), "delete", h, pos))
             self.dirty = True
 
     def rename(self, old, new):
@@ -415,20 +420,23 @@ class HorizonSet:
     # -- undo: snapshot an array before an edit
     def snapshot(self, h, key):
         a = h.data.get(key)
-        self.undo_stack.append(("data", h, key, None if a is None else a.copy()))
+        self.undo_stack.append((_next_seq(), "data", h, key, None if a is None else a.copy()))
         del self.undo_stack[:-self.max_undo]
         self.dirty = True
+
+    def last_seq(self):
+        return self.undo_stack[-1][0] if self.undo_stack else 0
 
     def undo(self):
         if not self.undo_stack:
             return None
         e = self.undo_stack.pop()
-        if e[0] == "delete":
-            h = e[1]
+        if e[1] == "delete":
+            h = e[2]
             if not self.get(h.name):
-                self.items.insert(min(e[2], len(self.items)), h)
+                self.items.insert(min(e[3], len(self.items)), h)
             return h.name
-        _, h, key, old = e
+        _, _, h, key, old = e
         if old is None:
             h.data.pop(key, None)
         else:
@@ -580,7 +588,17 @@ class Picker:
             g[:] = np.nan
 
     # -- tracking
-    def track(self, h, key, seeds_ij=None, params=None, scope=None, snapshot=True, progress=None):
+    def barrier(self, key, faults, tol_samples=2.0):
+        """EdgeBarrier for a survey from a list of Fault objects (None if no faults)."""
+        from . import faults as flt
+        faults = [f for f in (faults or []) if len(f.triangles())]
+        if not faults:
+            return None
+        s = self.survey(key)
+        return flt.barrier_3d(faults, s, tol_samples) if key.startswith("3D:") else \
+            flt.barrier_line(faults, s, tol_samples)
+
+    def track(self, h, key, seeds_ij=None, params=None, scope=None, snapshot=True, progress=None, faults=None):
         """Autotrack on one survey from seed traces (list of (i, j); None = all current picks).
         scope: None (whole survey) or ("Inline", il) / ("Crossline", xl) for 3D. Returns nodes added."""
         params = params or TrackParams()
@@ -606,12 +624,14 @@ class Picker:
             else:
                 allowed[:] = True
         get = self._traces(key, params.smooth)
-        n = track_grid(get, idx, seeds, params, s.dt * 1000.0, s.ns, allowed=allowed, progress=progress)
+        eb = self.barrier(key, faults)
+        n = track_grid(get, idx, seeds, params, s.dt * 1000.0, s.ns, allowed=allowed, progress=progress,
+                       blocked=eb.blocked(idx) if eb else None)
         new = idx_to_ms(idx, s.t0, s.dt).astype(np.float32)
         g[...] = new if g.ndim == 2 else new[0]
         return n
 
-    def track_2d_network(self, h, start_lines, params=None, snap_ms=None, progress=None):
+    def track_2d_network(self, h, start_lines, params=None, snap_ms=None, progress=None, faults=None):
         """Track the start lines, then follow every line tie: where a tracked line crosses a line without a
         pick at the tie, seed that line with the (snapped) time and track it too.  Returns {line: added}."""
         params = params or TrackParams()
@@ -633,7 +653,7 @@ class Picker:
             key = f"2D:{a}"
             if h.get(key) is None or not np.isfinite(h.get(key)).any():
                 continue
-            done[a] = done.get(a, 0) + self.track(h, key, None, params, progress=progress)
+            done[a] = done.get(a, 0) + self.track(h, key, None, params, progress=progress, faults=faults)
             ga = h.get(key)
             for (p, ip, q, iq) in ties:
                 if a not in (p, q):
