@@ -136,3 +136,63 @@ def run_seeds(check, tmp):
     s0, s1 = spread(rv0), spread(rv1)
     check(s1 < 2.0 and s0 > 10, f"24d: RGT honours the well seeds across the fault (RGT spread at the 5 wells "
           f"{s0:.1f} -> {s1:.2f})")
+
+
+def run_predictive(check, tmp):
+    """24c: rock physics of the pseudo-wells, AVO maths, Bayesian classifier on a synthetic section."""
+    from . import predictive as PR
+    from .welltie import ricker
+    sc = PR.Scenario()
+    vb, sb, rb = PR.sand_elastic(0.25, 0.1, "brine", sc)
+    vg, sg, rg = PR.sand_elastic(0.25, 0.1, "gas", sc)
+    vf, sf, rf = PR.sand_elastic(0.25, 0.1, "fizz", sc)
+    check(vg < 0.9 * vb and rg < rb and sg > sb, f"24c: gas sand slower, lighter, Vs slightly up (Vp {vb:.0f} -> {vg:.0f})")
+    check(vf < vb - 0.7 * (vb - vg) and abs(rf - rb) < 0.25 * abs(rb - rg),
+          "24c: fizz gas - Vp drops nearly like full gas, density hardly")
+    r0 = PR.aki_richards(3000, 1500, 2.3, 3300, 1650, 2.4, 0.0)
+    z1, z2 = 3000 * 2.3, 3300 * 2.4
+    check(abs(r0 - (z2 - z1) / (z2 + z1)) < 2e-3, "24c: Aki-Richards at normal incidence = AI reflectivity")
+    A, B = PR.shuey_ab(PR.aki_richards(3000, 1500, 2.3, 2600, 1600, 2.1, 10.0),
+                       PR.aki_richards(3000, 1500, 2.3, 2600, 1600, 2.1, 30.0), 10.0, 30.0)
+    th = 20.0
+    pred = A + B * np.sin(np.radians(th)) ** 2
+    check(abs(pred - PR.aki_richards(3000, 1500, 2.3, 2600, 1600, 2.1, th)) < 3e-3 and A < 0 and B < 0,
+          "24c: two-term Shuey from near / far reproduces mid angles (class III gas sand: A < 0, B < 0)")
+    w = ricker(30.0, 2.0)
+    sim = PR.simulate(400, sc, w, 2.0)
+    rows = PR.stats_table(sim)
+    g = next(r for r in rows if r["fluid"] == "gas")
+    b = next(r for r in rows if r["fluid"] == "brine")
+    check(g["far_mean"] < b["far_mean"] and g["ai_mean"] < b["ai_mean"] and g["vpvs_mean"] < b["vpvs_mean"],
+          "24c: amplitude statistics - gas: softer far amplitude, lower AI and Vp/Vs")
+    clf = PR.BayesClassifier().fit(sim["X"], sim["fluid"])
+    test = PR.simulate(300, sc, w, 2.0, seed=5)
+    acc = float(np.mean(clf.predict(test["X"]) == test["fluid"]))
+    check(acc > 0.8, f"24c: Bayesian classifier on independent pseudo-wells: {100 * acc:.0f} % correct")
+    P = clf.predict_proba(test["X"])
+    check(np.allclose(P.sum(1), 1) and P.min() >= 0, "24c: posteriors sum to 1")
+    # synthetic 2D section: brine on the left, gas on the right, random porosity / thickness, noisy near / far stacks
+    rng = np.random.default_rng(11)
+    n_tr, k_top = 60, 50
+    truth, near, far = [], [], []
+    for j in range(n_tr):
+        fl = "brine" if j < n_tr // 2 else "gas"
+        pw = PR.pseudo_well(rng, sc, fl)
+        times, tr, _ = PR.pw_traces(pw, (10.0, 30.0), w, 2.0, t_top=k_top * 2.0)
+        tr = tr + rng.normal(0, 0.005, tr.shape)
+        truth.append(fl)
+        near.append(tr[0])
+        far.append(tr[1])
+    near, far = np.array(near).T, np.array(far).T  # (ns, ntr) like a section
+    Ps = PR.classify_stacks(near, far, clf, (10.0, 30.0), min_amp=0.01)
+    pg = Ps["gas"][k_top]
+    lab = np.where(pg > 0.5, "gas", "brine")  # NaN (no top reflection: soft brine sand ~ shale) -> brine
+    acc_s = float(np.mean(lab == np.array(truth)))
+    check(acc_s > 0.8 and np.nanmean(pg[n_tr // 2:]) > 0.65 and np.nanmean(pg[:n_tr // 2]) < 0.35,
+          f"24c: fluid of a synthetic section recovered at the reservoir top ({100 * acc_s:.0f} % of traces; mean "
+          f"P(gas) {np.nanmean(pg[n_tr // 2:]):.2f} in gas, {np.nanmean(pg[:n_tr // 2]):.2f} in brine)")
+    check(np.mean(np.isnan(Ps["gas"][5])) > 0.75, "24c: samples without a reflection are not classified")
+    times, wsec, bases = PR.wedge_section(sc, "gas", 0.25, (1.0, 40.0), 20, w, 2.0)
+    amp = np.abs(wsec[0]).max(0)
+    check(wsec.shape == (2, len(times), 20) and 0 < int(np.argmax(amp)) < 19, "24c: gas-sand wedge section (tuning "
+          "inside the wedge)")

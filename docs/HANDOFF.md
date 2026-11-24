@@ -368,6 +368,28 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   "dashboard" (DashboardWindow.show_cursor), "petro_strip" (PetroStripDialog.show_cursor, follow flag); basemap
   cursorMoved -> section. MainWindow layout_state / apply_layout (base64 saveState when available) / save_layout /
   restore_layout. Tests `test_blend.py` (run incl. run_hub, run_gui).
+- `resolution.py` (24a/b, v0.46): `spectrum_stats` (avg spectrum, noise floor from a noise window or the top 20 % of
+  the band, usable band = contiguous S/N >= 2 around the peak, f_dom / centroid / octaves), `frequency_map` (MapGrid per
+  block), `tuning_thickness`, `wavelet_from_spectrum`, `band_wavelet`, `wedge_model` (exact interface times; 30 Hz Ricker
+  tuning = Kallweit-Wood 1/(2.31 fp)), `bed_thicknesses`, `spectral_balance`, `recommend` (needed f for lambda/4 = P50 bed,
+  tuning now vs balanced from wedges, % beds resolved, verdict). `rotate_phase`, `stretch`, `single_well_inversion`
+  (MC over wavelet phase / frequency / scale, LFM cut-off, noise -> P10/P50/P90 AI, coverage of the band-limited log,
+  corr_inv (seismic-band detail), corr_full vs corr_lfm, optional property via the well AI regression, verdict YES if
+  corr_inv >= 0.6 and coverage >= 0.5). InversionDialog.single_well / resolution (buttons on the QC row).
+- `wellseeds.py` (24d): `synthetic_events` (|syn| maxima >= min_rel (0.5: Ricker side lobes are 0.45), max_n),
+  `snap` (nearest extreme of a sign, parabolic), `seed_patch` (ring-by-ring dip-following snap), `seed_horizons`
+  ({name: [(x, y, t[, sign])]} -> SeedHorizon with .get(key)), `well_seeds(project, vol, source tops | synthetic,
+  add_to_project)` (synthetic: log ends trimmed by half a wavelet). MainWindow.well_seeds (Interpret menu): horizons
+  "seed: ..." -> Compute RGT uses visible horizons as control. Synthetic check: RGT spread at 5 wells across a fault
+  with no fault links 23 -> 0.7.
+- `predictive.py` (24c, v0.47): `Scenario` (ranges h / phi / vsh, fluids + priors, shale, T / P / salinity, phic,
+  frame_exp (dry = mineral (1 - phi/phic)^frame_exp, default 2 = soft Tertiary)), `sand_elastic` (VRH quartz-clay,
+  Batzle-Wang via well_correlation.petro.rockphysics, Wood mix, Gassmann), `aki_richards`, `shuey_ab`, `interface_trace`,
+  `pseudo_well`, `pw_traces`, `simulate` (features at the sand-top sample: near, far, A, B; plus AI, Vp/Vs),
+  `wedge_section`, `BayesClassifier` (Gaussian full covariance + priors; to_dict), `classify_stacks` (min_amp ->
+  NaN), `classify_volumes` (write_volumes '<near> [P(fluid)]'), `probability_map` (max in a window around a horizon),
+  `stats_table`. InversionDialog.predictive (Pre-stack tab button; nearest / farthest stack; min_amp default 0.3 x
+  median |near| of the simulation). Tests `test_resolution.py` (run, run_seeds, run_predictive) + test_inversion GUI.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

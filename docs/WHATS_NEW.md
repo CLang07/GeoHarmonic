@@ -668,3 +668,19 @@ Test first: Send map to QGIS, open it in QGIS with the plugin, connect, select t
   name in the project; built-in templates Interpretation, Mapping, Well review.
 Test first: open an inline of a 3D, View > Co-blend (10 / 20 / 40 Hz, rgb); then move the mouse over it and watch the cross
 on the basemap.
+
+## Resolution, single-well inversion, predictive modelling, well seeds (PLAN item 24, Seismic v0.46.0-v0.47.0)
+- Interpret > Seismic inversion > Resolution...: dominant frequency and usable band (spectrum vs noise floor) in a time
+  window, lambda/4 and lambda/8, wedge-model tuning thickness now and after spectral balancing, and - if you type the bed
+  thicknesses from the logs - the frequency the reservoir needs and the share of beds resolved now / after balancing.
+- Same window, "Single-well inversion (Monte-Carlo)": inverts the trace at the selected well 40 times with perturbed
+  wavelet (phase, frequency, scale), low-frequency cut-off and noise; reports P10-P90 band vs the log, how much of the
+  seismic-band detail is recovered and a YES / NO verdict ("can the seismic see the reservoir here?").
+- Pre-stack tab, "Predictive modelling + fluid probability": hundreds of pseudo-wells (sand thickness, porosity, Vsh,
+  brine / gas / oil / fizz via Batzle-Wang + Gassmann), near / far synthetics, intercept-gradient statistics, a Bayesian
+  classifier, and probability volumes '<near> [P(gas)]', '<near> [P(brine)]' from your nearest and farthest stacks
+  (samples without a reflection are left at 0).
+- Interpret > Well seeds from tied tops: small snapped horizon patches ("seed: <formation>") around every tied well;
+  Compute RGT then honours them (also across faults) and T grows a seed into a full horizon.
+Test first: on a 3D with tied wells, Seismic inversion > set wavelet > Resolution (window around the reservoir), then
+Single-well inversion at a well with a known pay zone.

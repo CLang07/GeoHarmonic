@@ -374,3 +374,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
   amplitude on structure, bump-mapped sections; map hub blend layer + shade-by-structure; section co-blend / overlay /
   bump; `linking.py` linked cursor (section <-> basemap, dashboard, petro strip), attribute parameter scan (movie),
   saved window layouts + templates.
+- Item 24 done (Seismic v0.46.0-v0.47.0): `resolution.py` (spectrum + usable band vs noise floor, frequency map, tuning,
+  wedge (30 Hz Ricker tuning 14.0 ms = Kallweit-Wood 14.4), bed thicknesses, spectral balancing, recommendation;
+  single-well Monte-Carlo inversion: clean synthetic r 0.93 with 91 % of the band-limited log inside P10-P90, noisy
+  case flagged NO), `wellseeds.py` (tops / synthetic events -> snapped seed horizons; RGT spread at 5 wells across a
+  fault 23 -> 0.7 with seeds), `predictive.py` (pseudo-wells with Gassmann, Aki-Richards / Shuey, Bayesian classifier:
+  86 % on independent pseudo-wells, 95 % of traces of a synthetic brine / gas section, P(fluid) volumes).

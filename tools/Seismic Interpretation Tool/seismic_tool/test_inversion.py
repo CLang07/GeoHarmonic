@@ -418,6 +418,11 @@ def run_gui(check, tmp):
     check(ok, "19d: pre-stack needs two or more stacks")
     for n, a in ANGLES:
         dlg.add_stack(n, a)
+    sim, clf, rows, pnames = dlg.predictive(("brine", "gas"), n=200)
+    pv = w.project.volume(pnames[0])
+    vals = np.asarray(pv.ilxl[:, :, :], np.float32) * pv.inv
+    check(pnames == ["Near [P(brine)]", "Near [P(gas)]"] and vals.min() >= -1e-3 and vals.max() <= 1.001 and
+          len(rows) == 2, "24c GUI: predictive modelling -> P(brine) / P(gas) volumes from the near / far stacks")
     out_p = dlg.run_prestack()
     check(len(out_p) == 6 and "Near [SI VpVs]" in out_p, "19d: simultaneous inversion -> 6 volumes")
     cp = dlg.crossplot("Near [SI Zp]", "Near [SI VpVs]", "log: GR")

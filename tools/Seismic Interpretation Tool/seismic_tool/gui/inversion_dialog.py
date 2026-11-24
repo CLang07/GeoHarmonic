@@ -143,6 +143,13 @@ class InversionDialog(QtWidgets.QDialog):
                    QtWidgets.QLabel("prior weights"), self.lam3, self.b_pre):
             s_row.addWidget(w_)
         l3.addLayout(s_row)
+        b_row = QtWidgets.QHBoxLayout()
+        self.b_bayes = QtWidgets.QPushButton("Predictive modelling + fluid probability (nearest / farthest stack)...")
+        self.b_bayes.setToolTip("Stochastic pseudo-wells (thickness, porosity, Vsh, fluid via Gassmann) -> near / far "
+                                "amplitude statistics -> Bayesian classifier -> P(fluid) volumes (PLAN 24c)")
+        self.b_bayes.clicked.connect(lambda *_: self._safe(self._bayes_dialog))
+        b_row.addWidget(self.b_bayes)
+        l3.addLayout(b_row)
         tabs.addTab(t3, "Pre-stack")
         # ---- cross-plot / export
         t4 = QtWidgets.QWidget()
@@ -462,6 +469,39 @@ class InversionDialog(QtWidgets.QDialog):
         return out
 
     # ------------------------------------------------------------------ pre-stack
+    # ------------------------------------------------------------------ predictive modelling (PLAN 24c)
+    def predictive(self, fluids=("brine", "gas"), n=400, scenario=None, write=True, min_amp=None):
+        """Simulate pseudo-wells with the current wavelet and the nearest / farthest angle stacks, fit the Bayesian
+        classifier and (write=True) write P(fluid) volumes.  Returns (sim, clf, stats rows, volume names)."""
+        from .. import predictive as PR
+        if self.wavelet is None:
+            raise RuntimeError("set the wavelet first")
+        if len(self.stacks) < 2:
+            raise RuntimeError("add a near and a far angle stack first")
+        vol = self.project.volume(self.vol_name)
+        dt = vol.dt * 1000.0
+        (near, a0), (far, a1) = self.stacks[0], self.stacks[-1]
+        sc = scenario or PR.Scenario(fluids=fluids)
+        w = np.asarray(self.wavelet, float)  # scaled at the wells: simulated amplitudes are in seismic units
+        sim = PR.simulate(n, sc, w, dt, (a0, a1))
+        clf = PR.BayesClassifier().fit(sim["X"], sim["fluid"])
+        if min_amp is None:  # samples without a reflection are not classified
+            min_amp = 0.3 * float(np.median(np.abs(sim["near"])))
+        names = PR.classify_volumes(self.project, near, far, clf, (a0, a1), 1.0, min_amp) if write else []
+        self.predictive_result = (sim, clf, PR.stats_table(sim), names)
+        acc = float(np.mean(clf.predict(sim["X"]) == sim["fluid"]))
+        self._set_info(f"Predictive model: {n} pseudo-wells ({', '.join(fluids)}), angles {a0:g} / {a1:g} deg, "
+                       f"classifier self-accuracy {100 * acc:.0f} %" + (f"; wrote {', '.join(names)}" if names else ""))
+        return self.predictive_result
+
+    def _bayes_dialog(self):
+        t, ok = QtWidgets.QInputDialog.getText(self, "Predictive modelling", "Fluids (comma separated: brine, gas, oil, "
+                                               "fizz)", text="brine, gas")
+        if not ok:
+            return None
+        fl = tuple(f.strip() for f in t.split(",") if f.strip())
+        return self.predictive(fl)
+
     def add_stack(self, vol_name, angle):
         if vol_name not in self.volume_names():
             raise ValueError(f"unknown volume {vol_name!r}")

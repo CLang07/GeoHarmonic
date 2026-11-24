@@ -188,6 +188,7 @@ def run():
         from . import test_resolution
         test_resolution.run(check, tmp)
         test_resolution.run_seeds(check, tmp)
+        test_resolution.run_predictive(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
