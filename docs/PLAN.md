@@ -431,6 +431,25 @@ all consume their per-zone results. Design decisions (Chris can override):
           via sqlite3). Optional web tiles (satellite / topo) cached to disk with urllib, off by default.
         - GIS export so final layouts can also be made in ArcGIS Pro / QGIS: grids as GeoTIFF with CRS, contours / fault
           polygons / wells / laterals / prospects as shapefile + GeoPackage + KML, .prj from the project CRS.
+        - Any vector layer (Chris 2026-11-24: "any other shapefile data like township / range, county, infrastructure"):
+          generic shapefile / GeoPackage / KML / CSV-with-WKT layer loader, not tied to one data set. Examples Chris
+          will use: BLM PLSS (CadNSDI township / range / section, with "T12N R3W S14" labels by zoom level), US Census
+          TIGER counties / states, pipelines + processing plants + compressor stations (EIA / state), roads, railroads,
+          leases / units / DSUs, field outlines, protected areas, NZ equivalents (LINZ parcels, NZP&M permits).
+          Per-layer style: symbol / line / fill / hatch, categorised or graduated colour by an attribute field, label
+          by field(s) with halo and scale-dependent visibility, filter by attribute expression, identify-on-click
+          (attribute table row), layer in legend. Attribute table dock (sort, filter, select -> highlight on map,
+          linked to the dashboard selection). "Go to" search by PLSS legal description (Sec / Twp / Rng / meridian)
+          or county name; well spots from legal description + footage calls where no X/Y.
+          Coordinate systems: read .prj WKT and reproject in numpy - geographic, transverse Mercator / UTM, Lambert
+          conformal conic (most State Plane zones), Albers equal area, NZTM / NZGD2000; NAD27 -> NAD83 by a
+          clearly flagged approximate shift (no NADCON grids), EPSG lookup for the common codes. Large layers
+          (statewide PLSS sections, national pipelines): grid-bucket spatial index (as wellindex.py), clip to view,
+          Douglas-Peucker simplification per zoom, cached as npz next to the source.
+          Tests: synthetic shapefiles with points / multi-part polygons with holes / polylines + dbf attributes
+          (written by our writer, read back), LCC + Albers + TM against published EPSG test points (< 1 m), PLSS
+          legal-description lookup on a synthetic township grid, filter + categorised style, 1M-vertex layer draws
+          with simplification under the target time.
         - Tests: shapefile + GeoTIFF round trip (write -> read -> identical), inverse TM against forward TM < 1 mm,
           legend lists exactly the visible layers, layout geometry at each page size (no overlapping panels).
    Tests: layer state save/restore, contours never cross a fault polygon, label boxes do not overlap, cokriging against an analytic case (secondary perfectly correlated -> matches

@@ -289,3 +289,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
   permit, 2D lines, 3D outline, hillshaded structure inset, title block, locator inset, legend, scale bar, north
   arrow, lat/long graticule) and added PLAN 21g (layout composer, offline cartographic context, GIS export to
   ArcGIS Pro / QGIS). No code changed.
+
+## 2026-11-24 - interactive (Chris): any shapefile layers
+- Chris: keep the plan order as is; include any other shapefile data (township / range, county, infrastructure).
+  Added to PLAN 21g: generic vector layer loader + styling by attribute, labels, attribute table, PLSS legal-
+  description search, reprojection (TM / UTM, LCC State Plane, Albers, geographic, NZTM) in numpy, large-layer
+  spatial index + simplification. No code changed.
