@@ -542,3 +542,94 @@ def run_multimin(check, tmp, fwd_project=None):
                       f"{zc[0]['Misfit_med']}, mean V quartz {zc[0].get('V_quartz')} illite {zc[0].get('V_illite')}")
     else:
         print("SKIP real-data multimin (data/nz not found)")
+
+
+def run_rockphysics(check, tmp, fwd_project=None):
+    """20d: Batzle-Wang fluids, Gassmann round trips, Greenberg-Castagna, fizz gas, elastic identities, well run."""
+    from ..project import Project
+    from . import rockphysics as R
+    rb, vb, kb = R.brine(20.0, 0.1, 0.0)
+    check(abs(float(rb) - 0.998) < 0.003 and abs(float(vb) - 1482.3) < 2.0, f"Batzle-Wang pure water 20 degC: "
+          f"{float(rb):.4f} g/cc, {float(vb):.1f} m/s (0.998, 1482)")
+    rb2, vb2, _ = R.brine(80.0, 30.0, 100000.0)
+    check(1.03 < float(rb2) < 1.09 and 1550 < float(vb2) < 1800, f"brine 100k ppm 80 degC 30 MPa: {float(rb2):.3f} g/cc, "
+          f"{float(vb2):.0f} m/s")
+    rg, kg = R.gas(100.0, 30.0, 0.6)
+    check(0.15 < float(rg) < 0.25 and 0.04 < float(kg) < 0.2, f"Batzle-Wang gas G 0.6, 100 degC, 30 MPa: {float(rg):.3f} g/cc, "
+          f"K {float(kg) * 1000:.0f} MPa")
+    ro, vo, ko = R.oil(15.6, 0.1, 35.0, 0.0)
+    check(abs(float(ro) - 141.5 / 166.5) < 0.012 and 1300 < float(vo) < 1600, f"dead oil API 35 at surface: {float(ro):.3f} g/cc "
+          f"(0.850), {float(vo):.0f} m/s")
+    ro2, _, _ = R.oil(80.0, 30.0, 35.0, 100.0)
+    check(float(ro2) < float(ro), "live oil at reservoir conditions lighter than dead oil at surface")
+    km = 37.0
+    ks = np.array([12.0, 18.0, 25.0])
+    phi = np.array([0.3, 0.2, 0.1])
+    kd = R.gassmann_dry(ks, km, 2.5, phi)
+    check(np.allclose(R.gassmann_sat(kd, km, 2.5, phi), ks, rtol=1e-12) and np.all(kd < ks), "Gassmann sat -> dry -> sat round trip")
+    vp, vs, rho = np.array([3000.0, 3500.0]), np.array([1500.0, 1900.0]), np.array([2.2, 2.35])
+    ph = np.array([0.25, 0.18])
+    kb_, rb_ = 2.6, 1.03
+    kh_, rh_ = R.fluid_mix(0.2, 2.6, 0.08, 1.03, 0.2)
+    a = R.substitute(vp, vs, rho, ph, km, kb_, rb_, kh_, rh_)
+    b = R.substitute(a[0], a[1], a[2], ph, km, kh_, rh_, kb_, rb_)
+    check(np.allclose(b[0], vp) and np.allclose(b[1], vs) and np.allclose(b[2], rho) and np.all(a[0] < vp) and np.all(a[1] > vs),
+          "fluid substitution brine -> gas -> brine round trip (gas: Vp down, Vs up)")
+    v1 = R.vs_greenberg_castagna(np.array([3000.0]), {"sandstone": np.array([1.0])})
+    check(abs(float(v1[0]) - (0.80416 * 3 - 0.85588) * 1000) < 1e-6, "Greenberg-Castagna sandstone line")
+    v2 = R.vs_greenberg_castagna(np.array([3000.0]), {"sandstone": np.array([0.5]), "shale": np.array([0.5])})
+    s1, s2 = 0.80416 * 3 - 0.85588, 0.76969 * 3 - 0.86735
+    hand = 500 * (0.5 * s1 + 0.5 * s2 + 1 / (0.5 / s1 + 0.5 / s2))
+    check(abs(float(v2[0]) - hand) < 1e-6, "Greenberg-Castagna lithology mix (arithmetic + harmonic average)")
+    # fizz gas: 7 % gas saturation drops Vp almost as much as 80 % gas, density barely
+    kf, rf = R.fluid_mix(0.93, 2.6, 0.08, 1.03, 0.2)
+    kg8, rg8 = R.fluid_mix(0.2, 2.6, 0.08, 1.03, 0.2)
+    fz = R.substitute(vp, vs, rho, ph, km, kb_, rb_, kf, rf)
+    g8 = R.substitute(vp, vs, rho, ph, km, kb_, rb_, kg8, rg8)
+    dvp_f, dvp_g = vp - fz[0], vp - g8[0]
+    drho_f, drho_g = rho - fz[2], rho - g8[2]
+    check(np.all(dvp_f > 0.7 * dvp_g) and np.all(drho_f < 0.15 * drho_g),
+          f"fizz gas: Vp drop {100 * dvp_f[0] / dvp_g[0]:.0f}% of commercial gas, density drop {100 * drho_f[0] / drho_g[0]:.0f}% "
+          "(only density separates them)")
+    e = R.elastic(np.array([3000.0 * np.sqrt(3)]), np.array([3000.0]), np.array([2.4]))
+    K, mu = R.moduli(3000.0 * np.sqrt(3), 3000.0, 2.4)
+    check(abs(e["PR"][0] - 0.25) < 1e-12 and abs(e["YM"][0] - 9 * K * mu / (3 * K + mu)) < 1e-9
+          and abs(e["LR"][0] - 2.4 * (K - 2 / 3 * mu)) < 1e-9 and abs(e["MR"][0] - 2.4 * mu) < 1e-9,
+          "elastic identities: PR 0.25 at Vp/Vs sqrt(3); E = 9K mu / (3K + mu); lambda-rho, mu-rho")
+    e2 = R.elastic(np.array([4500.0, 3000.0]), np.array([2900.0, 1300.0]), np.array([2.6, 2.3]))
+    check(e2["BI"][0] > e2["BI"][1], "brittleness: stiff low-PR rock more brittle")
+    if fwd_project is not None:
+        from .store import load_curves
+        r = R.rock_physics_well(fwd_project, "Fwd-1")
+        c = r["curves"]
+        zz = r["depth"]
+        pay = (zz > 1002) & (zz < 1038)
+        sh = (zz > 960) & (zz < 990)
+        check(np.isfinite(c["VS"][pay]).all() and "Greenberg" in r["vs_source"][0], f"Vs predicted ({r['vs_source'][0]})")
+        check(np.nanmean(c["AI_BRINE"][pay]) > np.nanmean(c["AI_GAS"][pay]) and np.nanmean(c["VPVS_GAS"][pay]) < np.nanmean(c["VPVS_BRINE"][pay]),
+              f"forward well scenarios: AI brine {np.nanmean(c['AI_BRINE'][pay]):.0f} > gas {np.nanmean(c['AI_GAS'][pay]):.0f}, "
+              f"Vp/Vs gas {np.nanmean(c['VPVS_GAS'][pay]):.2f} < brine {np.nanmean(c['VPVS_BRINE'][pay]):.2f}")
+        check(np.allclose(c["AI_BRINE"][sh], c["AI"][sh], equal_nan=True), "shale (not net reservoir) unchanged by substitution")
+        check(np.nanmean(c["RHO_FIZZ"][pay]) > np.nanmean(c["RHO_GAS"][pay]) + 0.08, "fizz keeps brine-like density")
+        _, saved = load_curves(fwd_project, "Fwd-1")
+        check("RP_AI" in saved and "RP_VP_FIZZ" in saved and "PHIE" in saved, "RP_ curves saved next to the petro curves")
+        rows = R.scenario_table(r, I_zone_rows(fwd_project, "Fwd-1"))
+        check(rows and rows[0]["AI_GAS"] is not None, "scenario table per zone")
+    here = os.path.dirname(os.path.abspath(__file__))
+    nz = os.path.normpath(os.path.join(here, "..", "..", "..", "..", "data", "nz", "NZ Well Correlation.wcproj.json"))
+    if os.path.exists(nz):
+        pr = Project.open(nz)
+        pr.petro_out = os.path.join(tmp, "nz_petro")
+        if "Tui-1" in pr.wells and pr.tops.get("Tui-1"):
+            r = R.rock_physics_well(pr, "Tui-1", save=False)
+            vv = r["curves"]["VPVS"]
+            check(np.isfinite(vv).sum() > 100 and 1.4 < np.nanmedian(vv) < 2.6,
+                  f"Tui-1 rock physics: Vs from {r['vs_source']}, median Vp/Vs {np.nanmedian(vv):.2f}, "
+                  f"median brittleness {np.nanmedian(r['curves']['BI']):.0f}")
+    else:
+        print("SKIP real-data rock physics (data/nz not found)")
+
+
+def I_zone_rows(project, well):
+    from . import interp as I
+    return I.interpret_well(project, well, save=False)["zones"]

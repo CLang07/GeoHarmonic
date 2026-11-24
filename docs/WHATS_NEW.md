@@ -554,4 +554,10 @@ Interpret > Well tie has a second button row:
 - `python -m well_correlation --petromc "NZ Well Correlation.wcproj.json" Maui-7 --n 200` -> P90 / P50 / P10 of net pay,
   PHIH and SoPhiH per zone (Rw x lognormal 0.08 decades, m +/- 0.1, n +/- 0.15, rho_ma +/- 0.01, cut-offs); add
   `--method multimin` to perturb the mineral end-points too.
+20d Rock physics at wells (v0.9.0):
+- `python -m well_correlation --rockphysics "NZ Well Correlation.wcproj.json" Tui-1` -> Vs (measured DTSM where present,
+  else Greenberg-Castagna iterated through Gassmann in hydrocarbons), AI / SI / Vp/Vs / lambda-rho / mu-rho / Poisson /
+  Young's / brittleness, and Gassmann brine / oil / gas / fizz (7 % gas) versions of Vp, Vs, density, AI, Vp/Vs
+  (RP_* curves). Fluids from Batzle-Wang at the zone's temperature and hydrostatic pressure; set salinity, api, gor,
+  gas_gravity, rp_hc (gas / oil), rp_lith (sandstone / limestone / dolomite) per zone in params.json.
 

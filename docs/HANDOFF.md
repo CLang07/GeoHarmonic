@@ -349,6 +349,14 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   written into every zone of a copied parameter set; P90 = 10th percentile), `mc_table`. qc.py also flags barite mud
   (median PE > 4 / > 2.9 b/e in clean low-density rock -> barite_suspected likely / possible). CLI `--multimin`,
   `--petromc`. Tests `run_multimin`.
+  `rockphysics.py` (20d, v0.9): Batzle-Wang `brine(T, P, ppm)`, `gas(T, P, G)` (Z factor, adiabatic K via numerical
+  dZ/dPpr), `oil(T, P, api, gor, G)`; `vrh`, `fluid_mix` (Wood or Brie e), `gassmann_dry` / `gassmann_sat`, `moduli`,
+  `velocities`, `substitute` (fluid 1 -> 2; phi < phi_min unchanged), `vs_greenberg_castagna` (lithology mix),
+  `vs_with_fluid` (GC iterated through Gassmann for hydrocarbon zones), `elastic` (AI SI VPVS LR MR PR YM BI Rickman),
+  `rock_physics_well` (per zone RP_DEFAULTS < parameter set: salinity, api, gor, gas_gravity, rp_hc, pressure_gradient,
+  rp_sw_hc, rp_fizz_sg, brie_e, rp_lith; measured shear from DTSM-type raw curves else GC; scenarios brine / oil / gas
+  / fizz substituted only in 20b NET_RES rock; saves RP_* curves), `scenario_table(res, zone_rows, net)`. CLI
+  `--rockphysics`. Tests `run_rockphysics`.
 
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.

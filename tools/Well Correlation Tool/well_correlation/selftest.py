@@ -142,6 +142,7 @@ def run():
         test_petro.run_qc(check, tmp)
         fwd = test_petro.run_interp(check, tmp)
         test_petro.run_multimin(check, tmp, fwd)
+        test_petro.run_rockphysics(check, tmp, fwd)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")

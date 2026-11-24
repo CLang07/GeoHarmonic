@@ -319,4 +319,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
   zone; barite-mud PE warning in QC (Rahi-1 flagged). Real data: Maui-7 C-sands deterministic PHIE 0.176 vs multimin 0.169
   (without PE); with PE the solver invents ~40 % calcite (PE ~3 in clean sand) - hence the warning. Maui-7 C-sands
   Monte-Carlo SoPhiH P90 / P50 / P10 = 4.9 / 5.4 / 5.8 m.
+- 20d done (v0.9.0): `petro/rockphysics.py` - Batzle-Wang brine / gas / oil, VRH, Wood / Brie fluid mixing, Gassmann,
+  brine / oil / gas / fizz substitution, Greenberg-Castagna Vs (iterated with Gassmann in hydrocarbons), elastic logs +
+  Rickman brittleness; CLI `--rockphysics`. Checks: pure water 1482 m/s / 0.997 g/cc, Gassmann + substitution round
+  trips exact, fizz (7 % gas) gives 84 % of the commercial-gas Vp drop but 9 % of its density drop. Real data: Tui-1
+  uses measured DTSM where logged, median Vp/Vs 1.76.
 

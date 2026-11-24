@@ -16,6 +16,7 @@
                                in params.json; default quartz + illite + oil)
     python -m well_correlation --petromc PROJECT WELL [--n 200] [--method deterministic|multimin] [--out DIR]
                                Monte-Carlo P90 / P50 / P10 of net pay, PHIH, SoPhiH per zone
+    python -m well_correlation --rockphysics PROJECT WELL [--out DIR]     elastic logs, Vs, Gassmann brine/oil/gas/fizz
 """
 import argparse
 import os
@@ -40,6 +41,7 @@ def main(argv=None):
     ap.add_argument("--petro", nargs="+", metavar=("PROJECT", "WELL"))
     ap.add_argument("--multimin", nargs=2, metavar=("PROJECT", "WELL"))
     ap.add_argument("--petromc", nargs=2, metavar=("PROJECT", "WELL"))
+    ap.add_argument("--rockphysics", nargs=2, metavar=("PROJECT", "WELL"))
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--method", default="deterministic")
     a = ap.parse_args(argv)
@@ -67,6 +69,25 @@ def main(argv=None):
             for note in r.get("notes", []):
                 print(f"{n:12s} ! {note}")
         print("\nsummary.csv, params.json and curves in", petro_dir(p))
+        return
+    if a.rockphysics:
+        from .project import Project
+        from .petro import rockphysics as RP, interp
+        from .petro.store import petro_dir
+        p = Project.open(a.rockphysics[0])
+        if a.out:
+            p.petro_out = a.out
+        det = interp.interpret_well(p, a.rockphysics[1], save=False)
+        r = RP.rock_physics_well(p, a.rockphysics[1], det=det)
+        print("Vs:", "; ".join(r["vs_source"]))
+        print("Zone means over net reservoir (20b cut-offs):")
+        for row in RP.scenario_table(r, det["zones"], det["curves"]["NET_RES"]):
+            print("  " + "  ".join(f"{k} {v}" for k, v in row.items()))
+        for zn, f in r["fluids"].items():
+            if zn:
+                print(f"  {zn[:24]:24s} T {f['T']:.0f} degC  P {f['P']:.1f} MPa  brine {f['brine_rho']:.3f} g/cc K {f['brine_k']:.2f}"
+                      f"  gas {f['gas_rho']:.3f} K {f['gas_k']:.3f}  oil {f['oil_rho']:.3f} K {f['oil_k']:.2f} GPa")
+        print("\nRP_ curves saved in", petro_dir(p))
         return
     if a.multimin or a.petromc:
         from .project import Project
