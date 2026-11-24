@@ -496,7 +496,7 @@ all consume their per-zone results. Design decisions (Chris can override):
         "movie" scan (slider redraws the section for a parameter range); saved window layouts / templates.
    Tests: blend channel maths, hillshade against an analytic plane / dome, cursor link messages under fakeqt.
 
-24. **Seismic resolution, single-well inversion, predictive 2D modelling** - status: todo
+24. **Seismic resolution, single-well inversion, predictive 2D modelling** - status: partial (run 5: 24a, 24b, 24d done in Seismic v0.46.0; left: 24c predictive 2D modelling + Bayesian classification)
    24a. Recommended frequency from existing data: dominant frequency + usable bandwidth (spectrum vs noise floor)
         per window and per area, interval velocities from the wells / velocity model, tuning thickness (lambda/4,
         lambda/8) maps, bed-thickness distribution from the logs (20a) -> recommended target frequency / bandwidth

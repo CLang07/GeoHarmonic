@@ -108,6 +108,14 @@ class InversionDialog(QtWidgets.QDialog):
         q_row.addWidget(QtWidgets.QLabel("Well"))
         q_row.addWidget(self.qc_well, 1)
         q_row.addWidget(self.b_qc)
+        self.b_swi = QtWidgets.QPushButton("Single-well inversion (Monte-Carlo)")
+        self.b_swi.setToolTip("Invert the trace at the well 40 times with perturbed wavelet / LFM / noise: P10-P90 band "
+                              "vs the log - can the seismic see the reservoir here? (PLAN 24b)")
+        self.b_res = QtWidgets.QPushButton("Resolution...")
+        self.b_res.setToolTip("Dominant frequency, usable band, tuning thickness, beds resolved now / after spectral "
+                              "balancing (PLAN 24a)")
+        q_row.addWidget(self.b_swi)
+        q_row.addWidget(self.b_res)
         l2.addLayout(q_row)
         self.qc_plot = pg.PlotWidget(title="Log (black) / LFM (blue) / inversion (red)")
         self.res_plot = pg.PlotWidget(title="Seismic (black) / synthetic of the result (red)")
@@ -167,6 +175,8 @@ class InversionDialog(QtWidgets.QDialog):
             self.p_kind.currentText(), self.p_lfm.currentText(), float(self.lam.text()), float(self.mu.text()),
             float(self.lateral.text() or 0))))
         self.b_blind.clicked.connect(lambda *_: self._safe(lambda: self.blind_test(float(self.lam.text()))))
+        self.b_swi.clicked.connect(lambda *_: self._safe(lambda: self.single_well(self.qc_well.currentText())))
+        self.b_res.clicked.connect(lambda *_: self._safe(self._resolution_dialog))
         self.b_qc.clicked.connect(lambda *_: self._safe(lambda: self.qc_at_well(self.qc_well.currentText())))
         self.b_st_add.clicked.connect(lambda *_: self._safe(lambda: self.add_stack(self.st_vol.currentText(),
                                                                                    float(self.st_ang.text()))))
@@ -237,6 +247,62 @@ class InversionDialog(QtWidgets.QDialog):
         fn(lambda f, t: None, lambda: False)
         done()
         return True
+
+    # ------------------------------------------------------------------ resolution + single-well inversion (PLAN 24)
+    def single_well(self, well, n_mc=40, lam=None, prop=None):
+        """Monte-Carlo single-well inversion at `well` (needs the wavelet).  prop: optional property log on the
+        volume time axis (default: none - AI only)."""
+        from .. import resolution as R
+        if self.wavelet is None:
+            raise RuntimeError("set the wavelet first")
+        c = next((c for c in self.load_curves() if c.name == well), None)
+        if c is None:
+            raise ValueError(f"{well}: no elastic logs at this volume")
+        vol = self.project.volume(self.vol_name)
+        il, xl = vol.ilxl_at(c.x, c.y)
+        s = np.asarray(vol.ilxl[vol.il_index(il), vol.xl_index(xl)], np.float32).astype(float) * vol.inv
+        try:
+            fc = float(self.fc.text())
+        except Exception:
+            fc = 8.0
+        r = R.single_well_inversion(s, c.values["ai"], self.wavelet, vol.dt * 1000.0, n_mc=n_mc,
+                                    lam=float(lam if lam is not None else 0.05), fc=fc, prop=prop)
+        r["well"] = well
+        r["times"] = np.asarray(vol.times, float)
+        self.single_well_result = r
+        self._set_info(f"{well}: {r['verdict']}")
+        return r
+
+    def resolution(self, t0_ms=None, t1_ms=None, v_int=3000.0, beds_m=None, n_traces=400):
+        """Spectrum statistics of the volume in a window (random traces) + recommendation (PLAN 24a)."""
+        from .. import resolution as R
+        vol = self.project.volume(self.vol_name)
+        times = np.asarray(vol.times, float)
+        a = int(np.searchsorted(times, t0_ms)) if t0_ms is not None else 0
+        b = int(np.searchsorted(times, t1_ms)) if t1_ms is not None else len(times)
+        rng = np.random.default_rng(0)
+        idx = rng.choice(vol.nil * vol.nxl, min(n_traces, vol.nil * vol.nxl), replace=False)
+        tr = np.asarray(vol.ilxl[idx // vol.nxl, idx % vol.nxl], np.float32)[:, a:b] * vol.inv
+        st = R.spectrum_stats(tr, vol.dt * 1000.0)
+        rec = R.recommend(st, v_int, beds_m, vol.dt * 1000.0)
+        self.resolution_result = (st, rec)
+        self._set_info(f"Resolution {times[a]:.0f}-{times[b - 1]:.0f} ms: {rec['verdict']}")
+        return st, rec
+
+    def _resolution_dialog(self):
+        t0, ok = QtWidgets.QInputDialog.getDouble(self, "Resolution", "Window top (ms)", 0, 0, 1e5, 0)
+        if not ok:
+            return None
+        t1, ok = QtWidgets.QInputDialog.getDouble(self, "Resolution", "Window base (ms)", 4000, 0, 1e5, 0)
+        if not ok:
+            return None
+        v, ok = QtWidgets.QInputDialog.getDouble(self, "Resolution", "Reservoir interval velocity (m/s)", 3000, 500, 8000, 0)
+        if not ok:
+            return None
+        beds, ok = QtWidgets.QInputDialog.getText(self, "Resolution", "Bed thicknesses from logs (m, comma separated; "
+                                                  "Well Correlation > Petrophysics gives them) - optional")
+        b = [float(x) for x in beds.replace(";", ",").split(",") if x.strip()] if ok else []
+        return self.resolution(t0, t1, v, b or None)
 
     def load_curves(self):
         if self.curves is None:

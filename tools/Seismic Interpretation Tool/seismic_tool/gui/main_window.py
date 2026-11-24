@@ -261,6 +261,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Fast &crosslines for current 3D volume (adds a crossline copy)...", self.add_xline_store)
         self._act(m, "Compute &dip field (current 3D volume)...", self.compute_dip)
         self._act(m, "Compute attri&bute volume (current 3D volume)...", self.compute_attribute_volume)
+        self._act(m, "Well seeds from tied tops (horizon seeds + RGT control)", lambda *_: self.well_seeds())
         self._act(m, "Compute &RGT (current 3D volume)...", self.compute_rgt_3d)
         self._act(m, "Compute RGT (all &2D lines)...", self.compute_rgt_2d)
         self._act(m, "Build horizon &stack (3D)...", self.build_stack_3d)
@@ -959,6 +960,20 @@ class MainWindow(QtWidgets.QMainWindow):
         hz = [h for h in self.project.horizons.items if h.visible] if dlg.use_hz.isChecked() else []
         fl = self.project.faults.visible_faults() if dlg.use_flt.isChecked() else []
         return hz, fl
+
+    def well_seeds(self, source="tops", radius=6, wavelet=None, vol_name=None):
+        """PLAN 24d: tied-well tops (or synthetic events) -> snapped horizon patches 'seed: <name>' in the project;
+        Compute RGT uses visible horizons as control, T grows a seed into a full horizon."""
+        from ..wellseeds import well_seeds
+        src = ("3D", vol_name) if vol_name else self.section.source
+        if not src or src[0] != "3D" or not self.project.well_project:
+            self.statusBar().showMessage("Well seeds: show a 3D volume and link a well project with tops and ties")
+            return []
+        hs = well_seeds(self.project, src[1], source=source, radius=radius, wavelet=wavelet, add_to_project=True)
+        self.horizon_dock.refresh(hs[0].name if hs else None)
+        self._horizons_changed()
+        self.statusBar().showMessage(f"{len(hs)} seed horizon(s) from the wells: " + ", ".join(h.name for h in hs[:6]))
+        return hs
 
     def compute_rgt_3d(self):
         src = self.section.source

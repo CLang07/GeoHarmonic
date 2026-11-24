@@ -391,6 +391,19 @@ def run_gui(check, tmp):
     qc = dlg.qc_at_well("W-1")
     check(qc["error_pct"] < 4.0 and qc["nrms"] < 30.0, f"19d: QC at W-1: {qc['error_pct']:.1f} % AI error, residual "
           f"NRMS {qc['nrms']:.0f} %")
+    sw = dlg.single_well("W-1", n_mc=20, lam=0.02)
+    check(sw["corr_inv"] > 0.6 and sw["coverage"] > 0.6 and sw["verdict"].startswith("YES"),
+          f"24b GUI: single-well Monte-Carlo inversion at W-1 (r {sw['corr_inv']:.2f}, log in band {100 * sw['coverage']:.0f} %)")
+    st, rec = dlg.resolution(300, 1400, 3000.0, [5.0, 10.0, 30.0])
+    check(15 < st["f_dom"] < 35 and rec["tuning_balanced_m"] <= rec["tuning_m"] and "needs" in rec["verdict"],
+          f"24a GUI: resolution of the volume (dominant {st['f_dom']:.0f} Hz, tuning {rec['tuning_m']:.0f} m -> "
+          f"{rec['tuning_balanced_m']:.0f} m balanced)")
+    seeds = w.well_seeds(source="synthetic", radius=3, wavelet=dlg.wavelet, vol_name="S")
+    sh = [h for h in w.project.horizons.items if h.name.startswith("seed: ")]
+    check(len(seeds) >= 4 and len(sh) == len(seeds) and all(np.isfinite(h.data["3D:S"]).sum() >= 9 for h in sh),
+          f"24d GUI: {len(seeds)} seed horizons from the wells' synthetic events added to the project")
+    for h in sh:  # keep the rest of the test (LFM horizons) unchanged
+        w.project.horizons.delete(h.name)
     rows = dlg.blind_test(0.02, ["H1", "H2"], 8.0)
     check(len(rows) == 4 and np.median([r["error_pct"] for r in rows]) < 4.0,
           "19d: blind-well test table (" + ", ".join(f"{r['error_pct']:.1f} %" for r in rows) + ")")
