@@ -139,6 +139,10 @@ def run_gui(check, tmp):
     n_vis = len(bm._layer_items)
     panel.set_visible(pid, True)
     check(len(bm._layer_items) > n_vis, "21a GUI: visibility toggles redraw")
+    panel.apply_preset("Print")
+    out = panel.export_map(os.path.join(d, "panel_map.png"), title="t", dpi=60)
+    check(proj.display.get("map_style") == "Print" and os.path.exists(out["path"]), "21f GUI: style preset + map export from "
+          "the Map layers dock")
     panel.remove(pid)
     check(all(l["id"] != pid for l in st.layers) and not bm.layer_errors, "21a GUI: remove; no layer errors")
     mw = MainWindow(proj.path)
@@ -244,3 +248,70 @@ def run_gui_hub(check, tmp):
           "21b GUI: Show on map hub request applied by the Seismic tool (layer + selection)")
     sd = mw.well_clicked("W-1")
     check(sd is not None and mw._petro_strip is not None, "21b GUI: clicking a well with petro results opens its petro strip")
+
+
+def run_carto(check, tmp):
+    """21f: style presets, hillshade, contour labels, fault-polygon blanking + ticks, well symbols, print export."""
+    from . import maplayers as ML
+    from . import mapexport as MX
+    from .maps import horizon_grid
+    from .welltie import wc
+    wc()
+    from well_correlation import carto as C
+    proj, truth, d = _setup(tmp, "carto")
+    with open(proj.well_project) as fh:
+        wj = json.load(fh)
+    for w, stt in zip(wj["wells"], ["Gas condensate discovery", "Dry hole", "Oil producer"]):
+        w["info"] = {"Status": stt}
+    with open(proj.well_project, "w") as fh:
+        json.dump(wj, fh)
+    st = ML.LayerStack.load(proj)
+    gid, cid = st.add_grid(horizon_grid(proj, proj.horizons.get("Top"), "3D:Synth"), "Top time", interval=5.0)
+    vol = proj.volume("Synth")
+    xs, ys = vol.outline()
+    cx, cy = float(np.mean(xs)), float(np.mean(ys))
+    poly = {"name": "F1", "x": [cx - 20, cx + 20, cx + 60, cx + 20], "y": [cy - 200, cy - 200, cy + 200, cy + 200], "down": "W"}
+    fid = st.add("polygons", "Fault polygons", src={"polygons": [poly]}, style={"fault": True})
+    st.set_style(gid, blank=True)
+    MX.apply_preset(st, "Classic")
+    check(st.get(gid)["style"]["hillshade"] and st.get(gid)["style"]["ramp"] == "depth" and st.get(cid)["style"]["labels"]
+          and proj.display["map_style"] == "Classic", "21f: style preset applied (hillshade, depth ramp, labelled contours)")
+    prims = ML.render(st)
+    check(not [q for q in prims if q[0] == "error"], "21f: styled map renders without layer errors")
+    labs = [q for q in prims if q[0] == "text" and q[1] == cid and len(q) > 7]
+    check(len(labs) >= 2, f"21f: {len(labs)} contour labels along the lines")
+    boxes = [C.label_box(q[2], q[3], q[7], q[4], 1.0, 1.4) for q in labs]
+    check(not C.boxes_overlap(boxes) or len(labs) < 2, "21f: contour label boxes do not overlap")
+    hatched = [q for q in prims if q[0] == "polygon" and q[1] == fid and len(q) > 6 and q[6].get("hatch")]
+    ticks = [q for q in prims if q[0] == "curve" and q[1] == fid and q[6] == "pairs"]
+    tx = np.concatenate([q[2] for q in ticks]) if ticks else np.array([])
+    check(hatched and ticks and np.all(tx[1::2] <= tx[0::2] + 1e-9), "21f: fault heave polygon hatched, ticks only on the "
+          "downthrown (west) side")
+    crosses = 0
+    px_, py_ = np.append(poly["x"], poly["x"][0]), np.append(poly["y"], poly["y"][0])
+    for q in prims:
+        if q[0] == "curve" and q[1] == cid:
+            x, y = q[2], q[3]
+            n = len(x) // 2 * 2
+            for k in range(len(px_) - 1):
+                crosses += int(C._seg_cross(x[0:n:2], y[0:n:2], x[1:n:2], y[1:n:2], px_[k], py_[k], px_[k + 1], py_[k + 1]).sum())
+    check(crosses == 0, "21f: contours never cross the fault polygon (grid blanked + dilated)")
+    img = next(q for q in prims if q[0] == "image" and q[1] == gid)
+    g = st.grid(gid)
+    X, Y = g.node_xy()
+    inside = ML.blank_polygons_grid(g, [(poly["x"], poly["y"])])
+    check(np.isnan(inside.z).sum() > 0 and img[2][..., 3][np.isnan(inside.z)].max() == 0, "21f: grid blanked inside the fault polygon")
+    syms = {q[6] for q in prims if q[0] == "points" and st.get(q[1])["kind"] == "wells"}
+    check(syms == {"star", "x", "o"}, f"21f: well status symbols on the map {syms}")
+    for page in ("A4 landscape", "A3 portrait", "A1 landscape"):
+        bb = MX.layout_boxes(page)
+        check(not MX.boxes_overlap(bb.values()), f"21f/g: {page} layout panels do not overlap")
+    png = os.path.join(d, "map.png")
+    out = MX.export_map(st, png, title="Top time", author="test", page="A4 landscape", dpi=80, crs="NZTM2000 (EPSG:2193)",
+                        contour_interval=5.0)
+    vis = [l["id"] for l in reversed(st.ordered()) if l["visible"]]
+    check(os.path.getsize(png) > 20000 and [e["id"] for e in out["legend"]] == vis, "21f: print export (title block, legend = the "
+          "visible layers, scale bar, north arrow)")
+    pdf = os.path.join(d, "map.pdf")
+    MX.export_map(st, pdf, title="Top time", dpi=72)
+    check(os.path.getsize(pdf) > 5000, "21f: PDF export")

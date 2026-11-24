@@ -603,4 +603,13 @@ depth model. Low-frequency models for inversion are only flagged - rebuild them 
 layers (attribute, inversion slice, structure ...): cross-plot with the regression line, r, residual sigma and
 leave-one-out RMSE; Add predicted maps posts P50, P90 / P10 (80 % prediction interval), the residual map and the
 residual-corrected map; Send to Analytics hands the well table to the Analytics window (GBM / SHAP / Model QC).
+21f Better-looking maps (Seismic v0.41.0, Well Correlation v0.11.0):
+- Map layers dock: pick a style (Classic / Print / Flat colour / Contours only) > Apply style: hillshaded perceptual
+  colour fill (light = shallow for depth / time), bold index contours with labels along the lines (no overlaps), wells
+  with industry status symbols (from the Status / Result column of wells_header.csv). Export map...: PDF / PNG at 300 dpi
+  with title block, legend of the visible layers, scale bar and north arrow.
+- Fault polygons: a polygons layer with style fault = true is drawn hatched with downthrown ticks (set "down": "W" etc.);
+  a grid with style blank = true is blanked inside them so contours stop at the faults.
+- Well Correlation Tool map: structure / isopach maps are now hillshaded with labels along the contours (set
+  display "map" > "carto": false in the project file to get the old look).
 

@@ -63,6 +63,21 @@ class LayersPanel(QtWidgets.QWidget):
             b.clicked.connect(fn)
             row2.addWidget(b)
         lay.addLayout(row2)
+        row3 = QtWidgets.QHBoxLayout()
+        self.preset = QtWidgets.QComboBox()
+        from ..welltie import wc
+        wc()
+        from well_correlation.carto import STYLE_PRESETS
+        self.preset.addItems(list(STYLE_PRESETS))
+        self.preset.setToolTip("Map style preset: hillshaded perceptual colour fill, labelled index contours, well symbols")
+        b_style = QtWidgets.QPushButton("Apply style")
+        b_style.clicked.connect(lambda *_: self.apply_preset(self.preset.currentText()))
+        b_exp = QtWidgets.QPushButton("Export map...")
+        b_exp.setToolTip("PNG / PDF at 300 dpi with title block, legend, scale bar and north arrow")
+        b_exp.clicked.connect(lambda *_: self._export_dialog())
+        for w in (self.preset, b_style, b_exp):
+            row3.addWidget(w)
+        lay.addLayout(row3)
         self._xplot = None
         if basemap is not None:
             basemap.polygonDrawn.connect(lambda xy: self.polygon_drawn(*xy))
@@ -309,6 +324,35 @@ class LayersPanel(QtWidgets.QWidget):
         dlg = CrossCheckDialog(self.stack, self, self)
         dlg.show()
         return dlg
+
+    def apply_preset(self, name):
+        from ..mapexport import apply_preset
+        apply_preset(self.stack, name)
+        self._apply(f"style {name}")
+        return name
+
+    def export_map(self, path, **kw):
+        from ..mapexport import export_map
+        out = export_map(self.stack, path, **kw)
+        self.status.setText(f"wrote {path}")
+        return out
+
+    def _export_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export map", "map.pdf", "PDF (*.pdf);;PNG (*.png)")
+        if not path:
+            return
+        title, ok = QtWidgets.QInputDialog.getText(self, "Export map", "Title")
+        if not ok:
+            return
+        page, ok = QtWidgets.QInputDialog.getItem(self, "Export map", "Page", ["A4 landscape", "A4 portrait", "A3 landscape",
+                                                                             "A3 portrait", "A1 landscape"], 0, False)
+        if not ok:
+            return
+        try:
+            self.export_map(path, title=title, page=page, crs=(self.stack.project.display.get("crs") or "")
+                            if self.stack.project is not None else "")
+        except Exception as e:
+            self.status.setText(f"export failed: {e}")
 
     def crossplot(self):
         from .petro_strip import PetroCrossplotDialog

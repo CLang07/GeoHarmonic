@@ -312,6 +312,15 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `to_attribute_table` (AttributeTable for AnalyticsWindow.add_table). `gui/propgrid_dialog.CrossCheckDialog` (compute,
   add_maps, send_to_analytics via `LayersPanel.analytics_hook`, set by MainWindow to analytics().add_table). Tests
   `test_crosscheck.py`.
+- 21f in the Seismic tool (v0.41): maplayers styles - grid ramp (carto) + hillshade / ve / shade_strength + blank
+  (polygon layer ids or True = fault polygon layers) via `display_grid` / `blank_polygons_grid` (NaN inside + within 0.75
+  cell of the edges => no contour crosses); contours labels (text primitives with an 8th element = angle); polygons style
+  fault (hatched polygon primitive {"hatch": True} + ticks on edges facing "down" compass / azimuth); wells style symbols
+  (`well_status` from the wcproj header info Status / Result / Purpose -> `QT_WELL_SYMBOLS`). `mapexport.py`:
+  `page_size_in`, `layout_boxes` (map + title / legend / scale / north panel), `boxes_overlap`, `apply_preset` (sets
+  display["map_style"]), `export_map(stack, path, title, subtitle, author, page, dpi, crs, ref_latlon, lon0,
+  contour_interval, symbols)` (exact industry well symbols via carto.symbol_paths, legend = stack.legend()).
+  LayersPanel: preset combo, Apply style, Export map.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,
@@ -412,6 +421,15 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   `FAMILY_INFO` entries, `SectionLayout.log_values` falls back to `petro.store.well_curves` (npz cached on the Well
   by path + mtime). `python -m well_correlation --guitest` (real Qt offscreen or PYTHONPATH=dev/fakeqt; monkeypatches
   SectionView._apply_lod under the mock).
+
+- `carto.py` (21f, v0.11): shared cartography (dict grids {z, x0, y0, dx, dy}): `hillshade` (multi-directional, ve),
+  `ramp_lut` (depth / thickness / property / diverging / terrain / bathymetry), `default_ramp`, `shaded_rgba`,
+  `chain_segments` (pairs -> polylines; drops zero-length segments), `contour_polylines`, `label_candidates`,
+  `label_box`, `place_labels` (greedy, priority), `boxes_overlap`, `point_in_polygon`, `blank_polygons` (dilated),
+  `fault_blocks` (BFS over node graph with fault-crossing edges cut) + `grid_by_blocks`, `fault_ticks`, `spill_point`
+  (binary search on fill level until the crest region touches the edge / NaN; spill node), `WELL_SYMBOLS`,
+  `classify_status`, `symbol_paths`, `nice_scale`, `north_arrow_angle`, `STYLE_PRESETS`, `styled_map` (used by
+  gui/map_view.refresh_map when display["map"]["carto"] is not False). Tests `test_carto.py`.
 
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.

@@ -103,12 +103,18 @@ class Basemap(QtWidgets.QWidget):
                 sz = list(np.asarray(q[5], float)) if np.ndim(q[5]) else q[5]
                 it = pg.ScatterPlotItem(q[2], q[3], symbol=q[6], size=sz, brush=br, pen=pg.mkPen("w"))
             elif kind == "text":
-                it = pg.TextItem(q[4], color=q[5][:3], anchor=(0, 1))
+                if len(q) > 7:  # contour label: centred, rotated with the line, white box as a halo
+                    it = pg.TextItem(q[4], color=q[5][:3], anchor=(0.5, 0.5), angle=float(q[7]), fill=pg.mkBrush(255, 255, 255, 200))
+                else:
+                    it = pg.TextItem(q[4], color=q[5][:3], anchor=(0, 1))
                 it.setPos(q[2], q[3])
             elif kind == "polygon":
                 poly = QtGui.QPolygonF([QtCore.QPointF(float(a), float(b)) for a, b in zip(q[2], q[3])])
                 it = QtWidgets.QGraphicsPolygonItem(poly)
-                it.setBrush(pg.mkBrush(*q[4]))
+                if len(q) > 6 and (q[6] or {}).get("hatch"):
+                    it.setBrush(QtGui.QBrush(QtGui.QColor(*q[4]), QtCore.Qt.BDiagPattern))
+                else:
+                    it.setBrush(pg.mkBrush(*q[4]))
                 it.setPen(pg.mkPen(q[5], width=0) if q[5] else pg.mkPen(None))
             else:
                 continue

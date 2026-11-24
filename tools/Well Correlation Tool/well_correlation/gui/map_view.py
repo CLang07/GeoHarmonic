@@ -176,16 +176,21 @@ class MapView(QtWidgets.QWidget):
         self.grid = g
         self.grid["title"] = (f"Structure: top {top} (TVDSS m)" if kind == "structure"
                               else f"Isopach: {top} to {base} (TVD m)")
-        img = pg.ImageItem(M.colorize(g, reverse=(kind == "isopach")), levels=(0, 255), autoLevels=False)
-        img.setRect(QtCore.QRectF(g["x0"] - g["dx"] / 2, g["y0"] - g["dy"] / 2, g["nx"] * g["dx"], g["ny"] * g["dy"]))
-        img.setZValue(-10)
-        self.plot.addItem(img, ignoreBounds=True)
-        self._map_items.append(img)
         z = g["z"]
         lo, hi = float(np.nanmin(z)), float(np.nanmax(z))
         ci = d.get("ci") or M.nice_interval(lo, hi)
         levels = np.arange(np.ceil(lo / ci) * ci, hi, ci)
-        segs = M.contour_segments(g, levels)
+        styled = None
+        if d.get("carto", True):  # PLAN 21f: hillshaded perceptual fill + labels along the contours
+            from ..carto import styled_map
+            styled = styled_map(g, depth_like=(kind == "structure"), levels=list(levels), alpha=190)
+        img = pg.ImageItem(styled["rgba"] if styled else M.colorize(g, reverse=(kind == "isopach")), levels=(0, 255),
+                           autoLevels=False)
+        img.setRect(QtCore.QRectF(g["x0"] - g["dx"] / 2, g["y0"] - g["dy"] / 2, g["nx"] * g["dx"], g["ny"] * g["dy"]))
+        img.setZValue(-10)
+        self.plot.addItem(img, ignoreBounds=True)
+        self._map_items.append(img)
+        segs = styled["segments"] if styled else M.contour_segments(g, levels)
         xs = np.concatenate([v[0] for v in segs.values()]) if segs else np.array([])
         ys = np.concatenate([v[1] for v in segs.values()]) if segs else np.array([])
         if xs.size:
@@ -193,12 +198,19 @@ class MapView(QtWidgets.QWidget):
             c.setZValue(-5)
             self.plot.addItem(c, ignoreBounds=True)
             self._map_items.append(c)
-        for lev, (lx, ly) in segs.items():
-            k = (len(lx) // 2) & ~1
-            t = pg.TextItem(f"{lev:g}", color=(30, 30, 30), anchor=(0.5, 0.5))
-            t.setPos(lx[k], ly[k])
-            self.plot.addItem(t, ignoreBounds=True)
-            self._map_items.append(t)
+        if styled:
+            for x, y, ang, text in styled["labels"]:
+                t = pg.TextItem(text, color=(30, 30, 30), anchor=(0.5, 0.5), angle=ang, fill=pg.mkBrush(255, 255, 255, 190))
+                t.setPos(x, y)
+                self.plot.addItem(t, ignoreBounds=True)
+                self._map_items.append(t)
+        else:
+            for lev, (lx, ly) in segs.items():
+                k = (len(lx) // 2) & ~1
+                t = pg.TextItem(f"{lev:g}", color=(30, 30, 30), anchor=(0.5, 0.5))
+                t.setPos(lx[k], ly[k])
+                self.plot.addItem(t, ignoreBounds=True)
+                self._map_items.append(t)
         self._post_values({p[0]: p[3] for p in pts})
         self.mapMessage.emit(f"{self.grid['title']}: {len(pts)} wells, contour interval {ci:g} m")
 

@@ -17,6 +17,7 @@ Layer kinds
 Saved in project.display["map_layers"]; grid data in <project>_seismic/maps/<id>.npz (never inside the JSON).
 """
 import copy
+import math
 import os
 
 import numpy as np
@@ -27,12 +28,18 @@ DEFAULT_Z = {"grid": 10, "horizon": 12, "contours": 20, "polygons": 30, "faults"
 DEFAULT_STYLE = {
     "outline3d": {"color": (31, 119, 180), "width": 2.0},
     "lines2d": {"color": (90, 90, 90), "width": 1.5, "labels": True},
-    "wells": {"color": (0, 0, 0), "size": 8, "labels": True},
+    "wells": {"color": (0, 0, 0), "size": 8, "labels": True, "symbols": False},  # symbols: status symbols (21f)
     "faults": {"color": None, "width": 2.0},
     "horizon": {"lut": "Rainbow (attributes)", "reverse": True},
-    "grid": {"lut": "Rainbow (attributes)", "reverse": None, "vmin": None, "vmax": None},
-    "contours": {"interval": None, "index_every": 5, "color": (40, 40, 40), "width": 1.0, "index_width": 2.0},
-    "polygons": {"color": (200, 0, 0), "width": 2.0, "fill": (200, 0, 0, 40), "labels": True},
+    "grid": {"lut": "Rainbow (attributes)", "reverse": None, "vmin": None, "vmax": None,
+             "ramp": None, "hillshade": False, "ve": 1.0, "shade_strength": 0.55, "blank": None},
+    # ramp: carto ramp (depth / thickness / property / diverging / terrain / bathymetry) instead of lut; blank: list of
+    # polygon-layer ids (or True = every polygons layer with style fault) blanked on the grid and its contours
+    "contours": {"interval": None, "index_every": 5, "color": (40, 40, 40), "width": 1.0, "index_width": 2.0,
+                 "labels": False, "label_size": 8},
+    "polygons": {"color": (200, 0, 0), "width": 2.0, "fill": (200, 0, 0, 40), "labels": True, "fault": False,
+                 "down": None},  # fault: heave polygons, hatched; ticks outward on the edges facing 'down' (N, E, SW
+                                 # or an azimuth; per polygon "down" overrides; None = all edges)
     "text": {"color": (0, 0, 0), "size": 10},
     "petro": {"lut": "Rainbow (attributes)", "reverse": False, "size": 14, "labels": True, "mode": "bubbles",
               "pie_radius": None},  # mode bubbles | values | pies (mineral solver volumes, 21b)
@@ -318,6 +325,29 @@ def _rgba_image(z, lut, vmin, vmax, opacity):
     return rgba, lo, hi
 
 
+def _compass(d):
+    """'N', 'NE', 'E' ... or an azimuth in degrees -> unit (east, north) vector; None = no preference."""
+    if d is None or d in ("", "right", "left"):
+        return None
+    az = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}.get(str(d).upper())
+    if az is None:
+        try:
+            az = float(d)
+        except ValueError:
+            return None
+    a = math.radians(az)
+    return (math.sin(a), math.cos(a))
+
+
+def _ramp_or_lut(st, cb):
+    if st.get("ramp"):
+        from .welltie import wc
+        wc()
+        from well_correlation.carto import ramp_lut
+        return ramp_lut(st["ramp"], bool(st.get("ramp_reverse")))
+    return _lut(cb["lut"], cb["reverse"])
+
+
 def nice_interval(z, target=12):
     from .maps import nice_levels
     lv = nice_levels(z, target)
@@ -332,13 +362,90 @@ def contour_levels(z, interval):
     return list(np.arange(np.ceil(lo / interval) * interval, hi + 1e-9, interval))
 
 
+QT_WELL_SYMBOLS = {  # basemap approximations of the industry symbols (exact ones in the matplotlib export)
+    "oil": ("o", (0, 0, 0)), "gas": ("star", (220, 30, 30)), "oil+gas": ("star", (0, 0, 0)), "show": ("o", (150, 150, 150)),
+    "dry": ("x", (0, 0, 0)), "p&a": ("+", (0, 0, 0)), "planned": ("o", (255, 255, 255)), "injector": ("t", (30, 90, 220)),
+    "unknown": ("o", (0, 0, 0)),
+}
+
+
+def _cell_sizes(g):
+    m11, m12, m21, m22, _, _ = g.transform()
+    return math.hypot(m11, m12) or 1.0, math.hypot(m21, m22) or 1.0
+
+
+def blank_polygons_grid(g, polys):
+    """MapGrid copy with NaN inside the polygons and within 0.75 cell of their edges, so that no contour cell can
+    straddle a polygon edge (contours stop at fault polygons)."""
+    from .maps import MapGrid
+    from .maphub import point_in_polygon
+    if not polys:
+        return g
+    X, Y = g.node_xy()
+    x, y = np.ravel(X), np.ravel(Y)
+    cell = max(_cell_sizes(g))
+    m = np.zeros(x.shape, bool)
+    for px, py in polys:
+        px, py = np.asarray(px, float), np.asarray(py, float)
+        m |= point_in_polygon(x, y, px, py)
+        ex, ey = np.append(px, px[0]), np.append(py, py[0])
+        for k in range(len(ex) - 1):
+            ax, ay, bx, by = ex[k], ey[k], ex[k + 1], ey[k + 1]
+            L2 = (bx - ax) ** 2 + (by - ay) ** 2
+            t = np.clip(((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / max(L2, 1e-12), 0, 1)
+            m |= np.hypot(x - (ax + t * (bx - ax)), y - (ay + t * (by - ay))) < 0.75 * cell
+    z = np.where(m.reshape(g.z.shape), np.nan, g.z)
+    return MapGrid(z, g.kind, g.unit, g.label, g.vol, g.x0, g.y0, g.dx, g.dy)
+
+
+def _blank_polys(stack, spec):
+    if not spec:
+        return []
+    ids = [l["id"] for l in stack.layers if l["kind"] == "polygons" and l["style"].get("fault")] if spec is True else list(spec)
+    out = []
+    for lid in ids:
+        try:
+            lay = stack.get(lid)
+        except KeyError:
+            continue
+        out += [(p_["x"], p_["y"]) for p_ in lay["src"].get("polygons", []) if len(p_["x"]) >= 3]
+    return out
+
+
+def display_grid(stack, lid):
+    """The grid of a grid / horizon layer as drawn (blanked by its fault polygons when styled so)."""
+    g = stack.grid(lid)
+    if g is None:
+        return None
+    return blank_polygons_grid(g, _blank_polys(stack, stack.get(lid)["style"].get("blank")))
+
+
+def well_status(project):
+    """{well: symbol kind} from the well project's header info (Status / Purpose / Result columns)."""
+    import json
+    from .welltie import wc
+    if project is None or not project.well_project or not os.path.exists(project.well_project):
+        return {}
+    wc()
+    from well_correlation.carto import classify_status
+    with open(project.well_project) as f:
+        d = json.load(f)
+    out = {}
+    for w in d.get("wells", []):
+        info = w.get("info") or {}
+        text = " ".join(str(info.get(k, "")) for k in ("Status", "Result", "Purpose", "Type", "Well_Status") if info.get(k))
+        out[w["name"]] = classify_status(text)
+    return out
+
+
 def render(stack, wells=None):
     """Drawing primitives for the visible layers, bottom -> top:
        ("image", layer_id, rgba, transform6)
        ("curve", layer_id, xs, ys, rgba, width, connect)       connect 'all' | 'pairs' | 'finite'
        ("points", layer_id, x, y, rgba list/array, size, symbol)
        ("text", layer_id, x, y, text, rgba, size)
-       ("polygon", layer_id, xs, ys, fill rgba, edge rgba | None)   filled (pies, polygon fills)
+       ("polygon", layer_id, xs, ys, fill rgba, edge rgba | None[, {"hatch": True}])   filled (pies, fills, faults)
+       text may carry an 8th element: angle in degrees (contour labels)
     wells: optional [(name, x, y)] (default project.wells())."""
     prim = []
     p = stack.project
@@ -376,7 +483,16 @@ def render(stack, wells=None):
                         prim.append(("text", lid, float(x[0]), float(y[0]), l["name"], col((60, 60, 60)), 8))
             elif kind == "wells":
                 ws = wells if wells is not None else (p.wells() if p is not None else [])
-                if ws:
+                if ws and st.get("symbols"):
+                    kinds = well_status(p)
+                    groups = {}
+                    for w in ws:
+                        groups.setdefault(kinds.get(w[0], "unknown"), []).append(w)
+                    for kd, lst in groups.items():
+                        sym, c = QT_WELL_SYMBOLS.get(kd, QT_WELL_SYMBOLS["unknown"])
+                        prim.append(("points", lid, np.array([w[1] for w in lst], float), np.array([w[2] for w in lst], float),
+                                     col(c), st["size"] * (1.4 if sym == "star" else 1.0), sym))
+                elif ws:
                     x = np.array([w[1] for w in ws], float)
                     y = np.array([w[2] for w in ws], float)
                     prim.append(("points", lid, x, y, col(st["color"]), st["size"], "o"))
@@ -392,23 +508,47 @@ def render(stack, wells=None):
                         prim.append(("curve", lid, np.array([s[0, 0] for s in o]), np.array([s[0, 1] for s in o]),
                                      col(c), st["width"], "all"))
             elif kind in ("grid", "horizon"):
-                g = stack.grid(lid)
+                g = display_grid(stack, lid)
                 cb = stack.colorbar(lid)
                 if g is not None and cb is not None:
-                    rgba, _, _ = _rgba_image(g.z, _lut(cb["lut"], cb["reverse"]), cb["vmin"], cb["vmax"], a)
+                    lut = _ramp_or_lut(st, cb)
+                    if st.get("hillshade"):
+                        from .welltie import wc
+                        wc()
+                        from well_correlation.carto import hillshade, shaded_rgba
+                        cx_, cy_ = _cell_sizes(g)
+                        sh = hillshade(g.z, cx_, cy_, ve=float(st.get("ve") or 1.0))
+                        rgba = shaded_rgba(g.z, lut, cb["vmin"], cb["vmax"], sh, float(st.get("shade_strength", 0.55)), a)
+                    else:
+                        rgba, _, _ = _rgba_image(g.z, lut, cb["vmin"], cb["vmax"], a)
                     prim.append(("image", lid, rgba, tuple(g.transform())))
             elif kind == "contours":
-                g = stack.grid(lay["src"].get("grid")) if lay["src"].get("grid") else None
+                g = display_grid(stack, lay["src"].get("grid")) if lay["src"].get("grid") else None
                 if g is not None:
                     iv = st.get("interval") or nice_interval(g.z)
                     levels = contour_levels(g.z, iv)
                     ie = int(st.get("index_every") or 0)
                     segs = g.contours(levels)
+                    cands = []
                     for lev, (xs, ys) in segs.items():
                         k = int(round(lev / iv)) if iv else 0
                         idx = ie > 0 and k % ie == 0
                         prim.append(("curve", lid, np.asarray(xs, float), np.asarray(ys, float), col(st["color"]),
                                      st["index_width"] if idx else st["width"], "pairs"))
+                        if st.get("labels") and (idx or ie <= 0):
+                            from .welltie import wc
+                            wc()
+                            from well_correlation.carto import chain_segments, label_candidates
+                            X_, Y_ = g.node_xy()
+                            ext = max(np.nanmax(X_) - np.nanmin(X_), np.nanmax(Y_) - np.nanmin(Y_), 1.0)
+                            cands += [c + (1,) for c in label_candidates(chain_segments(xs, ys), f"{lev:g}", ext / 5.0)]
+                    if cands:
+                        from well_correlation.carto import place_labels
+                        X_, Y_ = g.node_xy()
+                        ext = max(np.nanmax(X_) - np.nanmin(X_), np.nanmax(Y_) - np.nanmin(Y_), 1.0)
+                        cw = ext / 140.0 * st.get("label_size", 8) / 8.0
+                        for c in place_labels(cands, cw, 1.4 * cw):
+                            prim.append(("text", lid, c[0], c[1], c[3], col(st["color"]), st.get("label_size", 8), c[2]))
             elif kind == "polygons":
                 for poly in lay["src"].get("polygons", []):
                     x = np.asarray(poly["x"], float)
@@ -416,7 +556,28 @@ def render(stack, wells=None):
                     if len(x) < 2:
                         continue
                     xc, yc = np.append(x, x[0]), np.append(y, y[0])
-                    if st.get("fill") and len(x) >= 3:
+                    if st.get("fault") and len(x) >= 3:  # fault heave polygon: hatched + downthrown ticks
+                        from .welltie import wc
+                        wc()
+                        from well_correlation.carto import fault_ticks
+                        prim.append(("polygon", lid, xc, yc, col(st["color"], 0.6), None, {"hatch": True}))
+                        L = float(np.sum(np.hypot(np.diff(xc), np.diff(yc))))
+                        dv = _compass(poly.get("down", st.get("down")))
+                        ccw = 0.5 * float(np.sum(xc[:-1] * yc[1:] - xc[1:] * yc[:-1])) > 0
+                        txs, tys = [], []
+                        for k in range(len(xc) - 1):  # ticks only on the edges facing the downthrown side
+                            ex, ey = xc[k + 1] - xc[k], yc[k + 1] - yc[k]
+                            el = math.hypot(ex, ey) or 1.0
+                            nx_, ny_ = (ey / el, -ex / el) if ccw else (-ey / el, ex / el)  # outward normal
+                            if dv is not None and nx_ * dv[0] + ny_ * dv[1] < 0.3:
+                                continue
+                            side = "right" if ccw else "left"
+                            tx, ty = fault_ticks([xc[k], xc[k + 1]], [yc[k], yc[k + 1]], side, L / 25.0, L / 60.0)
+                            txs.append(tx)
+                            tys.append(ty)
+                        if txs and sum(len(t) for t in txs):
+                            prim.append(("curve", lid, np.concatenate(txs), np.concatenate(tys), col(st["color"]), 1.5, "pairs"))
+                    elif st.get("fill") and len(x) >= 3:
                         prim.append(("polygon", lid, xc, yc, col(st["fill"]), None))
                     prim.append(("curve", lid, xc, yc, col(st["color"]), st["width"], "all"))
                     if st.get("labels", True):
@@ -509,10 +670,15 @@ def render_png(stack, path, title="", size=(8, 7), dpi=110):
         elif kind == "polygon":
             bx.extend(np.asarray(q[2], float).tolist())
             by.extend(np.asarray(q[3], float).tolist())
-            ax.fill(q[2], q[3], facecolor=np.array(q[4], float) / 255.0,
-                    edgecolor=(np.array(q[5], float) / 255.0) if q[5] else "none", lw=0.5)
+            hatch = len(q) > 6 and (q[6] or {}).get("hatch")
+            fc = np.array(q[4], float) / 255.0
+            ax.fill(q[2], q[3], facecolor="none" if hatch else fc, hatch="////" if hatch else None,
+                    edgecolor=fc if hatch else ((np.array(q[5], float) / 255.0) if q[5] else "none"), lw=0.8)
         elif kind == "text":
-            ax.text(q[2], q[3], q[4], color=np.array(q[5], float) / 255.0, fontsize=q[6] * 0.8, zorder=6)
+            import matplotlib.patheffects as pe
+            ax.text(q[2], q[3], q[4], color=np.array(q[5], float) / 255.0, fontsize=q[6] * 0.8, zorder=6,
+                    rotation=q[7] if len(q) > 7 else 0, ha="center" if len(q) > 7 else "left", va="center" if len(q) > 7
+                    else "bottom", rotation_mode="anchor", path_effects=[pe.withStroke(linewidth=2.5, foreground="white")])
     ax.set_aspect("equal")
     if bx:
         x0, x1, y0, y1 = min(bx), max(bx), min(by), max(by)

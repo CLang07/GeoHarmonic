@@ -170,6 +170,7 @@ def run():
         from . import test_maplayers
         test_maplayers.run(check, tmp)
         test_maplayers.run_hub(check, tmp)
+        test_maplayers.run_carto(check, tmp)
         from . import test_propgrid
         test_propgrid.run(check, tmp)
         from . import test_addwells

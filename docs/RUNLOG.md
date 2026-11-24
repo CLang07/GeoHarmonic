@@ -347,4 +347,10 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - 21e done (Seismic v0.40.0): `crosscheck.py` + CrossCheckDialog - zone value vs grid layers at the wells (multiple
   regression, LOO), predicted P50 / P90 / P10 / residual / corrected maps, Send to Analytics. Synthetic: coefficients
   recovered, the 80 % interval covers 83 % of the wells.
+- 21f done (Seismic v0.41.0, well_correlation v0.11.0): `well_correlation/carto.py` (hillshade, ramps, chained +
+  labelled contours with collision avoidance, fault-polygon blanking, per-fault-block gridding, downthrown ticks, spill
+  point, well status symbols, scale bar, grid convergence, presets) used by the map hub renderer, `mapexport.py`
+  (300 dpi PDF / PNG with title block, legend, scale bar, north arrow) and the Well Correlation map. Checks: hillshade of
+  a plane = analytic, contours never cross a fault polygon, label boxes never overlap, spill depth of a cone with a
+  saddle channel exact, fault-block gridding does not smear across the fault.
 
