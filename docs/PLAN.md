@@ -452,6 +452,25 @@ all consume their per-zone results. Design decisions (Chris can override):
           with simplification under the target time.
         - Tests: shapefile + GeoTIFF round trip (write -> read -> identical), inverse TM against forward TM < 1 mm,
           legend lists exactly the visible layers, layout geometry at each page size (no overlapping panels).
+   21h. Live two-way link with QGIS (Chris 2026-11-24: has QGIS only, no ArcGIS Pro; wants it interactive).
+        - Shared project GeoPackage `<project>_gis.gpkg` (sqlite3, no new deps) written / updated by GeoHarmonic:
+          wells (status, petro summary per zone), tops, laterals + stage attributes, drainage ellipses, faults
+          (sticks -> map polygons), contours, prospects, 2D lines, 3D outline; grids as GeoTIFF with internal
+          overviews (pyramids) next to it. CRS from the project. Read back user-edited layers (prospect polygons,
+          leases, section lines) with change detection. ArcGIS users can open the same GeoPackage.
+        - QGIS plugin "GeoHarmonic Link" (tools/QGIS Plugin/geoharmonic_link, pure Python, `qgis.PyQt` shim so it works
+          on Qt5 and Qt6 builds of QGIS): Open GeoHarmonic project -> adds all layers grouped and styled (QML styles
+          generated from the 21f cartography presets), auto-refresh when the gpkg changes, install via "Install from
+          ZIP" (build a zip in dev/).
+        - Live messages over localhost TCP (127.0.0.1, JSON lines, stdlib socket; off unless both sides enable it;
+          clean failure when the other app is not running): select / zoom wells in either app and the other follows;
+          click a well in QGIS -> open its strip / petro / tie in GeoHarmonic; draw a line in QGIS -> arbitrary seismic
+          section in the Seismic tool; draw / edit a polygon -> prospect created / updated and volumetrics (28)
+          recomputed; the section cursor in GeoHarmonic shown as a moving marker in QGIS; "Send map to QGIS" for any
+          grid, attribute, inversion slice or co-blend image.
+        - Tests here (no QGIS installed): gpkg written and read back with sqlite3 (geometry blobs, srs table, rtree),
+          GeoTIFF overviews readable, message protocol both directions between two Python processes, plugin logic
+          under a fake `qgis` module (like dev/fakeqt). First real test is Chris's QGIS.
    Tests: layer state save/restore, contours never cross a fault polygon, label boxes do not overlap, cokriging against an analytic case (secondary perfectly correlated -> matches
    the secondary trend; uncorrelated -> matches kriging), LOO numbers, add-wells updates only affected grids.
 

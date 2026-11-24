@@ -295,3 +295,8 @@ the 2D lines, Tui-1/Amokura-1 wells).
   Added to PLAN 21g: generic vector layer loader + styling by attribute, labels, attribute table, PLSS legal-
   description search, reprojection (TM / UTM, LCC State Plane, Albers, geographic, NZTM) in numpy, large-layer
   spatial index + simplification. No code changed.
+
+## 2026-11-24 - interactive (Chris): QGIS link
+- Chris has QGIS (no ArcGIS Pro) and wants it interactive. Added PLAN 21h: live shared GeoPackage + GeoTIFF with
+  overviews, a QGIS plugin (layers + styles, auto-refresh), and a localhost two-way message link (selection, click
+  to open, draw line -> seismic section, draw polygon -> prospect, cursor marker). No code changed.
