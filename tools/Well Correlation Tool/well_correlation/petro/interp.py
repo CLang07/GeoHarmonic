@@ -43,7 +43,9 @@ DEFAULTS = {
     "surface_temp": 15.0, "gradient": 30.0,  # degC, degC/km (TVDSS) - or a temperature curve
     "perm_method": "timur", "perm_c": None, "swi_min": 0.05, "fit_m": False,
     "toc": False, "rt_base": None, "dt_base": None, "lom": 10.0,
-    "vsh_cut": 0.4, "phi_cut": 0.08, "sw_cut": 0.6,
+    "vsh_cut": 0.4, "phi_cut": 0.08, "sw_cut": 0.6, "rw_mult": 1.0,
+    # multi-mineral solver (20c): components per zone, fluid, clay-volume cut-off (None = vsh_cut)
+    "mm_minerals": None, "mm_fluid": None, "mm_vclay_cut": None, "mm_logs": None,
 }
 
 METHOD_CHOICES = {
@@ -503,6 +505,9 @@ def interpret_well(project, name, pset=None, save=True, temp_curve=None):
                 rw = 0.05
                 how = "fallback 0.05 (no clean porous rock to estimate it)"
                 res["notes"].append(f"{zone}: Rw could not be estimated - 0.05 ohm.m used, set it in the zone parameters")
+        if P.get("rw_mult", 1.0) != 1.0:
+            rw = rw * P["rw_mult"]
+            how += f" x {P['rw_mult']:.3f}"
         used["rw"] = _summ(rw)
         used["rw_how"] = how
         out["RWA"][idx] = rwa(rtz, phie, P["a"], P["m"])

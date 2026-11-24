@@ -240,6 +240,9 @@ def run_qc(check, tmp):
                   and hl[0]["conveyance"] == "wireline", "Tui-1 DLIS: HLLD -> HALS from the TOOL object, SLB wireline")
             rep = Q.well_qc(pr, "Tui-1")
             check(rep["families"]["RHOB"]["tools"] == ["TLD"], "Tui-1 RHOB from TLD (Platform Express)")
+        if "Rahi-1" in pr.wells:
+            rep = Q.well_qc(pr, "Rahi-1", save=False)
+            check(rep.get("barite_suspected") == "likely", "Rahi-1: barite mud flagged (PE ~6.7 in clean sand)")
         if "Kiwi-1" in pr.wells:
             rep = Q.well_qc(pr, "Kiwi-1")
             check(rep["files"][0]["conveyance"] == "LWD" and "ARC" in rep["families"]["RDEEP"]["tools"], "Kiwi-1 = SLB LWD (ARC)")
@@ -398,3 +401,144 @@ def run_interp(check, tmp):
                                                            f"{q['PHIE_res']} Sw {q['Sw_pay']}" for q in rr["zones"]))
     else:
         print("SKIP real-data petro interpretation (data/nz not found)")
+    return p
+
+
+def run_multimin(check, tmp, fwd_project=None):
+    """20c: constrained solver (analytic, bounds vs brute force), synthetic mineral well, Monte Carlo, real data."""
+    import time
+    from ..project import Project
+    from . import interp as I
+    from . import multimin as M
+    rng = np.random.default_rng(11)
+    comps = ["quartz", "calcite", "water"]
+    E = M.endpoint_matrix(comps)
+    v0 = np.array([0.6, 0.2, 0.2])
+    d = E @ v0
+    V, mis, rec = M.solve_volumes(d[None, :], E, [M.SIGMA[k] for k in M.LOGS])
+    check(np.max(np.abs(V[0] - v0)) < 1e-8 and mis[0] < 1e-12, "multimin: exact 2-mineral + water case recovered")
+    # bound active: data from quartz + water but RHOB / U pulled below quartz -> calcite would go negative
+    d2 = M.endpoint_matrix(["quartz", "water"]) @ np.array([0.8, 0.2])
+    d2 = d2 + np.array([0, -0.06, 0, 0, -0.5, 0])
+    V2, _, _ = M.solve_volumes(d2[None, :], E, [M.SIGMA[k] for k in M.LOGS])
+    w = 1 / np.array([M.SIGMA[k] for k in M.LOGS])
+    g = np.arange(0, 1.0001, 0.002)
+    A, B = np.meshgrid(g, g, indexing="ij")
+    C = 1 - A - B
+    ok = C >= -1e-12
+    X = np.stack([A[ok], B[ok], C[ok]], 1)
+    obj = (((X @ E.T - d2) * w) ** 2).sum(1)
+    xb = X[np.argmin(obj)]
+    check(V2[0, 1] == 0.0 and np.max(np.abs(V2[0] - xb)) < 0.004, f"multimin: non-negativity active (calcite 0), matches brute "
+          f"force {np.round(V2[0], 3)} vs {np.round(xb, 3)}")
+    # missing logs per sample (two availability patterns)
+    D = np.vstack([d, d])
+    D[1, 3] = np.nan
+    V3, _, _ = M.solve_volumes(D, E, [M.SIGMA[k] for k in M.LOGS])
+    check(np.max(np.abs(V3 - v0)) < 1e-8, "multimin: rows with a missing log solved with the remaining logs")
+    # speed: 20,000 samples, 6 unknowns
+    comps6 = ["quartz", "calcite", "dolomite", "illite", "water", "gas"]
+    E6 = M.endpoint_matrix(comps6)
+    Vt = rng.dirichlet(np.ones(6), 20000)
+    Dt = Vt @ E6.T
+    t0 = time.perf_counter()
+    V6, _, _ = M.solve_volumes(Dt, E6, [M.SIGMA[k] for k in M.LOGS])
+    dt_s = time.perf_counter() - t0
+    check(dt_s < 10.0 and np.nanmax(np.abs(V6 - Vt)) < 1e-6, f"multimin: 20,000 samples x 6 components in {dt_s:.2f} s, exact")
+
+    # ---- synthetic well with known mineralogy (quartz + illite + water + gas)
+    root = os.path.join(tmp, "mm_proj")
+    dd = os.path.join(root, "wells", "Min-1", "las")
+    os.makedirs(dd)
+    z = np.arange(1500.0, 1700.0, 0.1524)
+    nn = z.size
+    vill = np.clip(0.15 + 0.1 * np.sin(z / 3.0) + 0.02 * rng.standard_normal(nn), 0.02, 0.5)
+    phi = np.clip(0.2 - 0.25 * (vill - 0.15) + 0.01 * rng.standard_normal(nn), 0.05, 0.3)
+    sw = np.where(z < 1600, 0.35, 1.0)
+    vq = 1 - vill - phi
+    Vtrue = np.column_stack([vq, vill, phi * sw, phi * (1 - sw)])
+    Em = M.endpoint_matrix(["quartz", "illite", "water", "gas"])
+    logs = Vtrue @ Em.T
+    noise = np.array([M.SIGMA[k] for k in M.LOGS]) * 0.3
+    logs = logs + noise * rng.standard_normal(logs.shape)
+    rw = 0.05
+    rt = rw / np.maximum(logs[:, 5], 1e-3) ** 2
+    pef = logs[:, 4] / logs[:, 1]
+    write_las(os.path.join(dd, "min.las"), "Min-1", z, {"GR": logs[:, 0], "RHOB": logs[:, 1], "NPHI": logs[:, 2],
+              "DT": logs[:, 3], "PEF": pef, "LLD": rt}, {"NPHI": "V/V"}, srvc="Schlumberger")
+    with open(os.path.join(root, "wells_header.csv"), "w") as fh:
+        fh.write("Well,UWI,Latitude,Longitude,Elevation_m,Elev_Ref,TD_m\nMin-1,1,-39.6,173.3,0,KB,1700\n")
+    p = Project.from_folder(root)
+    p.formations = [{"name": "R", "color": "#ffff00"}, {"name": "Base", "color": "#000000"}]
+    p.tops = {"Min-1": {"R": 1510.0, "Base": 1690.0}}
+    p.save(os.path.join(root, "mm.wcproj.json"))
+    p = Project.open(os.path.join(root, "mm.wcproj.json"))
+    pset = {"default": {"rw": rw, "mm_minerals": ["quartz", "illite"], "mm_fluid": "gas", "phi_cut": 0.08,
+                        "sw_cut": 0.6, "vsh_cut": 0.4}}
+    r = M.multimin_well(p, "Min-1", pset=pset)
+    zz = r["depth"]
+    sel = (zz > 1512) & (zz < 1688)
+    tv = lambda a: np.interp(zz[sel], z, a)  # noqa: E731
+    e_phi = np.nanmedian(np.abs(r["curves"]["MM_PHIE"][sel] - tv(phi)))
+    e_ill = np.nanmedian(np.abs(r["volumes"]["illite"][sel] - tv(vill)))
+    gsel = sel & (zz < 1595)
+    e_sw = np.nanmedian(np.abs(r["curves"]["MM_SW"][gsel] - 0.35))
+    check(e_phi < 0.02 and e_ill < 0.03 and e_sw < 0.06, f"synthetic mineral well: median errors PHIE {e_phi:.3f}, illite "
+          f"{e_ill:.3f}, gas-leg Sw {e_sw:.3f}")
+    mis = np.nanmedian(r["curves"]["MM_MISFIT"][sel])
+    check(mis < 1.0, f"reconstructed logs fit within the log uncertainties (median chi2/eq {mis:.2f})")
+    check(np.nanmedian(np.abs(r["curves"]["MM_REC_RHOB"][sel] - np.interp(zz[sel], z, logs[:, 1]))) < 0.02,
+          "reconstructed RHOB matches the input")
+    row = r["zones"][0]
+    true_pay = 1600 - 1510
+    check(abs(row["NetPay_TVD"] - true_pay) < 3.0 and row["V_illite"] is not None,
+          f"multimin zone: net pay {row['NetPay_TVD']} m (gas leg {true_pay} m), mean illite {row['V_illite']}")
+    from .store import load_curves
+    _, saved = load_curves(p, "Min-1")
+    check("MM_V_ILLITE" in saved and "MM_PHIE" in saved, "multimin volumes saved (MM_ curves)")
+
+    # ---- Monte Carlo on the deterministic chain (forward well from run_interp)
+    if fwd_project is not None:
+        ps = I.load_params(fwd_project)
+        mc0 = M.monte_carlo(fwd_project, "Fwd-1", dists={"m": ("normal", 0.0)}, n=5, pset=ps)
+        a0 = mc0["zones"]["A"]["SoPhiH"]
+        check(abs(a0["P90"] - a0["P10"]) < 1e-9, "Monte Carlo with zero spread = deterministic answer")
+        t0 = time.perf_counter()
+        mc = M.monte_carlo(fwd_project, "Fwd-1", n=100, pset=ps, seed=4)
+        t_mc = time.perf_counter() - t0
+        a = mc["zones"]["A"]["SoPhiH"]
+        true = 40 * 0.22 * 0.7
+        check(a["P90"] < a["P50"] < a["P10"] and a["P90"] <= true <= a["P10"],
+              f"Monte Carlo SoPhiH P90 {a['P90']:.2f} < P50 {a['P50']:.2f} < P10 {a['P10']:.2f} brackets the truth "
+              f"{true:.2f} ({t_mc:.1f} s for 100)")
+        mcw = M.monte_carlo(fwd_project, "Fwd-1", dists={"rw_mult": ("lognormal", 0.2)}, n=100, pset=ps, seed=4)
+        mcn = M.monte_carlo(fwd_project, "Fwd-1", dists={"rw_mult": ("lognormal", 0.05)}, n=100, pset=ps, seed=4)
+        sw_ = mcw["zones"]["A"]["SoPhiH"]
+        sn_ = mcn["zones"]["A"]["SoPhiH"]
+        check(sw_["P10"] - sw_["P90"] > sn_["P10"] - sn_["P90"], "wider Rw uncertainty -> wider SoPhiH range")
+        rows = M.mc_table(mc)
+        check(any(rr["Zone"] == "A" and rr["SoPhiH_P50"] is not None for rr in rows), "Monte-Carlo table rows")
+        mcm = M.monte_carlo(p, "Min-1", n=20, pset=pset, method="multimin", seed=2)
+        s = mcm["zones"]["R"]["PHIH_pay"]
+        check(s["P90"] <= s["P50"] <= s["P10"] and s["P10"] > s["P90"], f"Monte Carlo on the mineral solver (end-points "
+              f"perturbed): PHIH P90 {s['P90']:.2f} / P50 {s['P50']:.2f} / P10 {s['P10']:.2f}")
+
+    # ---- real data
+    here = os.path.dirname(os.path.abspath(__file__))
+    nz = os.path.normpath(os.path.join(here, "..", "..", "..", "..", "data", "nz", "NZ Well Correlation.wcproj.json"))
+    if os.path.exists(nz):
+        pr = Project.open(nz)
+        pr.petro_out = os.path.join(tmp, "nz_petro")
+        if "Maui-7" in pr.wells and pr.tops.get("Maui-7"):
+            ps = {"default": {"mm_minerals": ["quartz", "illite", "calcite"], "mm_fluid": "gas"}}
+            det = I.interpret_well(pr, "Maui-7", ps, save=False)
+            rr = M.multimin_well(pr, "Maui-7", pset=ps, det=det, save=False)
+            zc = [q for q in rr["zones"] if q["Zone"].startswith("C-sands")]
+            dc = [q for q in det["zones"] if q["Zone"].startswith("C-sands")]
+            if zc and dc:
+                check(zc[0]["PHIE_res"] is not None and 0.05 < zc[0]["PHIE_res"] < 0.3 and zc[0]["Misfit_med"] is not None,
+                      f"Maui-7 C-sands multimin (qtz+illite+calcite+gas): PHIE {zc[0]['PHIE_res']} vs deterministic "
+                      f"{dc[0]['PHIE_res']}, net pay {zc[0]['NetPay_TVD']} vs {dc[0]['NetPay_TVD']} m, misfit "
+                      f"{zc[0]['Misfit_med']}, mean V quartz {zc[0].get('V_quartz')} illite {zc[0].get('V_illite')}")
+    else:
+        print("SKIP real-data multimin (data/nz not found)")

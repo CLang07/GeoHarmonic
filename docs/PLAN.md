@@ -360,7 +360,7 @@ all consume their per-zone results. Design decisions (Chris can override):
 - Animations are written as GIF (PIL) and an MP4 only if ffmpeg exists on the PC (optional, try/except).
 - All numpy. Optional ML backends only behind try/except (CLAUDE.md rule 4).
 
-20. **Petrophysics core (Geolog / Interactive Petrophysics style)** - status: partial (run 5, 2026-11-24: 20a done (v0.6.0 `petro/tools.py`, `qc.py`, `store.py`), 20b done (v0.7.0 `petro/interp.py`); next 20c)
+20. **Petrophysics core (Geolog / Interactive Petrophysics style)** - status: partial (run 5, 2026-11-24: 20a done (v0.6.0 `petro/tools.py`, `qc.py`, `store.py`), 20b done (v0.7.0 `petro/interp.py`), 20c done (v0.8.0 `petro/multimin.py`); next 20d)
    Reference workflows: IP (Interpretation wizard, Mineral Solver, Monte-Carlo, cutoff sensitivity, Pickett /
    Buckles plots, parameter zones, batch), Geolog (Determin / Multimin, project-wide sets, tool-aware logic).
    20a. Data QC + tool type + resolution: identify the logging tool / vendor / service from DLIS frame + tool objects

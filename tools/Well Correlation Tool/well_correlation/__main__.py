@@ -12,6 +12,10 @@
     python -m well_correlation --tooltable OUT.json                     write the editable logging-tool table
     python -m well_correlation --petro PROJECT [WELL ...] [--out DIR]    deterministic interpretation per zone
                                (parameters: <project>_petro/params.json, written with defaults on the first run)
+    python -m well_correlation --multimin PROJECT WELL [--out DIR]        mineral solver (mm_minerals / mm_fluid / mm_logs
+                               in params.json; default quartz + illite + oil)
+    python -m well_correlation --petromc PROJECT WELL [--n 200] [--method deterministic|multimin] [--out DIR]
+                               Monte-Carlo P90 / P50 / P10 of net pay, PHIH, SoPhiH per zone
 """
 import argparse
 import os
@@ -34,6 +38,10 @@ def main(argv=None):
     ap.add_argument("--out", metavar="DIR", help="--petroqc: output folder (default <project>_petro)")
     ap.add_argument("--tooltable", metavar="OUT_JSON")
     ap.add_argument("--petro", nargs="+", metavar=("PROJECT", "WELL"))
+    ap.add_argument("--multimin", nargs=2, metavar=("PROJECT", "WELL"))
+    ap.add_argument("--petromc", nargs=2, metavar=("PROJECT", "WELL"))
+    ap.add_argument("--n", type=int, default=200)
+    ap.add_argument("--method", default="deterministic")
     a = ap.parse_args(argv)
 
     if a.tooltable:
@@ -59,6 +67,28 @@ def main(argv=None):
             for note in r.get("notes", []):
                 print(f"{n:12s} ! {note}")
         print("\nsummary.csv, params.json and curves in", petro_dir(p))
+        return
+    if a.multimin or a.petromc:
+        from .project import Project
+        from .petro import multimin as MM
+        from .petro.store import petro_dir
+        pp, wn = a.multimin or a.petromc
+        p = Project.open(pp)
+        if a.out:
+            p.petro_out = a.out
+        if a.multimin:
+            r = MM.multimin_well(p, wn)
+            for q in r["zones"]:
+                vols = ", ".join(f"{k[2:]} {v}" for k, v in q.items() if k.startswith("V_"))
+                print(f"{wn:12s} {q['Zone'][:24]:24s} PHIE {q['PHIE_res']}  Sw(pay) {q['Sw_pay']}  net pay {q['NetPay_TVD']} m"
+                      f"  misfit {q['Misfit_med']}  [{vols}]")
+            print("\nMM_ curves saved in", petro_dir(p))
+        else:
+            mc = MM.monte_carlo(p, wn, n=a.n, method=a.method)
+            for r in MM.mc_table(mc):
+                print(f"{wn:12s} {r['Zone'][:24]:24s} net pay {r['NetPay_TVD_P90']} / {r['NetPay_TVD_P50']} / "
+                      f"{r['NetPay_TVD_P10']} m   PHIH {r['PHIH_pay_P90']} / {r['PHIH_pay_P50']} / {r['PHIH_pay_P10']}   "
+                      f"SoPhiH {r['SoPhiH_P90']} / {r['SoPhiH_P50']} / {r['SoPhiH_P10']}   (P90 / P50 / P10)")
         return
     if a.petroqc:
         from .project import Project

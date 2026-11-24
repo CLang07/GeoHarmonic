@@ -487,6 +487,21 @@ def well_qc(project, name, ref_family="GR", min_gap_m=0.5, washout_in=1.0, drho_
                                        "(the composite switches between them)")
             if in_comp and s["corr"] is not None and s["corr"] >= 0.5 and abs(s["shift_m"]) >= 0.3:
                 rep["warnings"].append(f"splice {fam}: {s['b']} is {s['shift_m']:+.2f} m off {s['a']} (corr {s['corr']})")
+    # ---- barite mud: PEF of clean low-density rock far above quartz (1.8) / even calcite-free sand
+    pe, rho = w.logs.get("PE"), w.logs.get("RHOB")
+    if pe is not None and rho is not None:
+        from ..lithology import well_lithology
+        vsh, _ = well_lithology(w)
+        cs = np.isfinite(pe) & np.isfinite(rho) & (np.nan_to_num(vsh, nan=1) < 0.25) & (rho < 2.45)
+        med = float(np.median(pe[cs])) if cs.sum() > 100 else 0.0
+        if med > 4.0:
+            rep["warnings"].append(f"PE: median {med:.1f} b/e in clean low-density rock - barite in the mud likely. "
+                                   "Do not use PE / U in lithology or the mineral solver (mm_logs without 'U')")
+            rep["barite_suspected"] = "likely"
+        elif med > 2.9:
+            rep["warnings"].append(f"PE: median {med:.1f} b/e in clean low-density rock (quartz sand ~1.8-2.7) - barite "
+                                   "or heavy minerals? Check before using PE / U in the mineral solver")
+            rep["barite_suspected"] = "possible"
     # ---- beds + thin beds
     ff = finest_family(info_by_family, w.logs)
     if ff:

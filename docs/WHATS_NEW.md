@@ -545,3 +545,13 @@ Interpret > Well tie has a second button row:
   are reported.
 - Defaults are a sandstone model (rho_ma 2.65, Rw from the Rwa minimum, 15 degC + 30 degC/km): set Rw and the matrix
   for the Tikorangi Limestone before trusting it there.
+20c Multi-mineral solver + Monte Carlo (v0.8.0):
+- `python -m well_correlation --multimin "NZ Well Correlation.wcproj.json" Maui-7` with params.json e.g.
+  "default": {"mm_minerals": ["quartz", "illite", "calcite"], "mm_fluid": "gas", "mm_logs": ["GR", "RHOB", "NPHI", "DT",
+  "BVWR"]} -> volumes per sample (MM_V_QUARTZ ...), PHIE, Sw, reconstructed logs and misfit. Minerals available: quartz,
+  calcite, dolomite, k-feldspar, illite, kaolinite, smectite, chlorite, anhydrite, halite, coal, pyrite.
+- PE warning: Rahi-1 PE reads ~6.7 b/e in clean sand (barite mud) and Maui-7 ~3.0 - leave "U" out of mm_logs there.
+- `python -m well_correlation --petromc "NZ Well Correlation.wcproj.json" Maui-7 --n 200` -> P90 / P50 / P10 of net pay,
+  PHIH and SoPhiH per zone (Rw x lognormal 0.08 decades, m +/- 0.1, n +/- 0.15, rho_ma +/- 0.01, cut-offs); add
+  `--method multimin` to perturb the mineral end-points too.
+

@@ -339,6 +339,16 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   `pickett_data`, `interpret_project`. CLI `--petro PROJECT [WELL..] [--out DIR]` (writes a params.json template on the
   first run). Tests `run_interp` (hand values, round trips, forward-modelled shaly-sand well, precedence, real Maui-5 /
   Tui-1).
+  `multimin.py` (20c, v0.8): `MINERALS` / `FLUIDS` end-points (GR, RHOB, NPHI limestone units, DT, PEF; clay flag),
+  logs GR RHOB NPHI DT U (= PEF x RHOB) BVWR (= (a Rw / Rt)^(1/n) = water volume for m = n), `endpoint_matrix`,
+  `solve_volumes(D, E, sigma)` = exact constrained WLS (sum 1, >= 0) by trying every support set with a KKT inverse per
+  set and log-availability pattern (batched over samples; 20k x 6 components ~0.1 s), `log_matrix`, `multimin_well`
+  (per zone mm_minerals / mm_fluid / mm_logs / mm_vclay_cut from the parameter set, Rw from the 20b run; MM_* curves,
+  zone rows with V_<component>, Misfit_med), `monte_carlo(project, well, dists, n, method deterministic|multimin)`
+  (draw specs normal / rel_normal / uniform / triangular / lognormal; `rw_mult` multiplies whatever Rw a zone uses; draws
+  written into every zone of a copied parameter set; P90 = 10th percentile), `mc_table`. qc.py also flags barite mud
+  (median PE > 4 / > 2.9 b/e in clean low-density rock -> barite_suspected likely / possible). CLI `--multimin`,
+  `--petromc`. Tests `run_multimin`.
 
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.
