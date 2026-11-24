@@ -409,7 +409,16 @@ all consume their per-zone results. Design decisions (Chris can override):
         maps and a residual-at-new-wells table (the honest test of the old maps).
    21e. Cross-check view: petro values vs seismic attribute / inversion at the wells (cross-plot + map of residuals),
         hook for analytics (item 13) to predict a property map with uncertainty.
-   Tests: layer state save/restore, cokriging against an analytic case (secondary perfectly correlated -> matches
+   21f. Cartography (Chris 2026-11-24: "can the mapping look better?"; mock-up in RUNLOG): shared map-style module used by
+        the map hub, the Well Correlation Tool map and PNG/PDF export. Hillshaded colour fill (multi-directional
+        light, vertical exaggeration slider) under smooth perceptual colour ramps (depth, thickness, property,
+        diverging residual; reversed for depth), minor + bold index contours with labels along the line (white halo,
+        no overlaps), grids blanked inside fault polygons and gridded per fault block so contours stop at faults,
+        fault heave polygons (hatched, downthrown ticks), closure / spill and contact contours, industry well symbols
+        (oil, gas, oil+gas, show, dry, P&A, planned; deviated with BH symbol and trajectory), haloed labels with
+        collision avoidance, posted values, scale bar, north arrow, graticule / coordinate ticks with the CRS, legend
+        and a title block (project, horizon, CI, date, author) for export at 300 dpi; style presets saved per project.
+   Tests: layer state save/restore, contours never cross a fault polygon, label boxes do not overlap, cokriging against an analytic case (secondary perfectly correlated -> matches
    the secondary trend; uncorrelated -> matches kriging), LOO numbers, add-wells updates only affected grids.
 
 22. **Petrophysics analytics + field reports** - status: todo

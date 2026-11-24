@@ -278,3 +278,8 @@ the 2D lines, Tui-1/Amokura-1 wells).
   -> 29 spacing, stress, drainage ellipses, gun barrel -> 30 depletion factor, resource left, RF, RTA, frac
   complexity, M&A screen. Design decisions are listed at the top of the Phase 2 section in PLAN.md.
 - No code changed. Next: item 20a.
+
+## 2026-11-24 - interactive (Chris): map cartography
+- Chris asked whether the mapping could look better. Made a before/after mock-up (synthetic dome + fault; matplotlib
+  hillshade, index contours, fault heave, well symbols, spill contour, scale bar, north arrow) and added PLAN 21f
+  (shared cartography / map-style module). No code changed.
