@@ -46,6 +46,7 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Text...", lambda *_: self._add_text_dialog()),
                          ("Co-blend 2-3 grids (RGB / CMY / HSV)...", lambda *_: self._add_blend_dialog()),
                          ("DHI checklist (amplitude grid vs structure grid)...", lambda *_: self._dhi_dialog()),
+                         ("Migration: flow paths, traps, fill-spill on the selected depth grid", lambda *_: self.migration()),
                          ("Shade selected grid by structure (amplitude on structure / bump map)...",
                           lambda *_: self._shade_dialog()),
                          ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
@@ -319,6 +320,43 @@ class LayersPanel(QtWidgets.QWidget):
                 manual[k] = v
         name, _ = QtWidgets.QInputDialog.getText(self, "DHI checklist", "Prospect name", text="Prospect")
         return self.dhi(a.split(":")[0], d.split(":")[0], manual, name or "Prospect")
+
+    def migration(self, depth_lid=None, charge_per_node=None):
+        """PLAN 27a on a depth (or time) structure grid layer: drainage areas (grid layer, value = trap number), trap
+        labels with closure / capacity / fill (text layer); charge_per_node default = enough to fill the largest trap
+        twice over its drainage area.  Returns (analysis, fill result)."""
+        from .. import migration as M
+        from ..maps import MapGrid
+        lid = depth_lid or self.selected_id()
+        g = ML.display_grid(self.stack, lid) if lid else None
+        if g is None:
+            self.status.setText("select a structure grid first")
+            return None
+        cx, cy = ML._cell_sizes(g)
+        an = M.spill_analysis(g.z, abs(cx * cy))
+        traps = an["traps"]
+        if charge_per_node is None:
+            biggest = max([t["capacity"] for t in traps.values()] + [1.0])
+            charge_per_node = 2 * biggest / max(1, max([int((an["drain"] == c).sum()) for c in traps] + [1]))
+        fill, lost = M.fill_spill(an, M.drainage_charge(an, charge_per_node))
+        num = {c: k + 1 for k, c in enumerate(sorted(traps, key=lambda c: traps[c]["depth"]))}
+        dz = np.full(g.z.shape, np.nan)
+        for c, k in num.items():
+            dz[an["drain"] == c] = k
+        dg = MapGrid(dz, g.kind, "", "drainage", g.vol, g.x0, g.y0, g.dx, g.dy)
+        gid, _ = self.stack.add_grid(dg, f"Drainage areas ({self.stack.get(lid)['name']})", contours=False)
+        self.stack.set_opacity(gid, 0.5)
+        X, Y = g.node_xy()
+        X, Y = np.asarray(X, float).ravel(), np.asarray(Y, float).ravel()
+        items = []
+        for c, k in num.items():
+            t, f = traps[c], fill[c]
+            items.append({"x": float(X[c]), "y": float(Y[c]), "text": f"T{k}: closure {t['closure']:.0f}, fill "
+                          f"{100 * f['fill_frac']:.0f} %" + (f" -> T{num[t['to']]}" if t["to"] in num else " -> leak")})
+        self.stack.add("text", "Traps (fill-spill)", src={"items": items})
+        self._apply(f"{len(traps)} traps; {lost:.3g} lost off the map")
+        self.migration_result = (an, fill, num)
+        return an, fill
 
     def _grid_choices(self):
         return [(l["id"], l["name"]) for l in self.stack.ordered() if l["kind"] in ("grid", "horizon")]

@@ -408,6 +408,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `cutoff_throw` (HW / FW cut-offs extrapolated linearly to the fault), `restore_fault` (vertical fault at trace j,
   one step per horizon), `unfold_vertical_shear`, `line_length`, `area_between`. SectionPanel.section_horizons;
   MainWindow.paleo_animation (Interpret menu). Tests `test_structure.py` (run, run_gui).
+- `migration.py` (27, v0.50): `receivers` (D8 steepest up-dip, -1 crest, -2 NaN), `crest_of`, `flow_path`,
+  `spill_analysis(depth, cell_area)` (priority flood: nodes by depth, union-find basins keyed by their crest; a closed
+  basin spills at the first saddle into the other basin's crest or leaks at the edge; closure mask flood fill,
+  capacity = sum(spill - z) x cell area), `fill_spill` (deepest crest first, excess to 'to'), `drainage_charge`,
+  `critical_moment` (share of TR after trap age), `juxtaposition`, `sgr` (mean Vsh over [z, z + throw]),
+  `sgr_column` (AFPD = 10^(SGR%/27 - C), C 0.5 / 0.25 / 0 by depth), `stress_tendency` (slip, dilation; ENU,
+  strike right-hand), `micp_to_reservoir`, `column_height`, `VSH_PCE` + `top_seal_column`, `limiting_column`.
+  LayersPanel.migration (drainage-area grid layer + trap text labels). Tests `test_migration.py` (run, run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

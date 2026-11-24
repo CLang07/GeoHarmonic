@@ -709,3 +709,12 @@ known gas sand.
   decompacted paleo-depths of every horizon at the time of a younger one; block restoration of a fault on a section
   (cut-offs extrapolated to the fault, one step per horizon) with line-length / area checks.
 Test first: show an inline with 3+ interpreted horizons, Interpret > Paleo-structure animation, open the GIF.
+
+## Migration and seal (PLAN item 27, Seismic v0.50.0)
+- Map layers > Add > Migration (select a depth / time structure grid first): drainage areas per trap (grid layer) and a
+  label per trap with its closure, fill % and where it spills (T2 -> T1, or "leak" off the map), from buoyant flow
+  paths, spill-point analysis and fill-spill of a uniform charge over each drainage area.
+- In code for now (UI next): critical moment (share of the source-rock transformation after the trap formed), fault
+  juxtaposition (sand-on-sand windows), shale gouge ratio + supported column (editable calibration), slip / dilation
+  tendency from a stress tensor, top-seal column from Vsh or MICP, and the limiting column (spill vs fault vs top seal).
+Test first: a depth map with 2-3 closures, Add > Migration, check that the spill directions make geological sense.

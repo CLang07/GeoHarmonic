@@ -391,3 +391,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
   (horizon on the datum to 1 sample), decompacted paleo-depths (grains conserved to 1e-6), paleo animation GIF, block
   restoration (30 ms throw recovered, restored section matches the unfaulted one to 5 % RMS, line length / area
   unchanged); GUI: paleo animation of the current section.
+- Item 27 done (Seismic v0.50.0): `migration.py` - flow paths / traps / spill analysis (cone: spill exactly at the
+  nearest edge; two domes on a regional dip: deep trap spills at the saddle into the up-dip trap, which leaks off the
+  map), fill-spill order, critical moment, juxtaposition, SGR (hand case 0.5), SGR column (22.5 bar -> 294 m gas), slip
+  tendency peaking on ~60 deg normal faults, MICP conversion, top-seal and limiting column; map-hub migration action.

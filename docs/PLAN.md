@@ -544,7 +544,7 @@ all consume their per-zone results. Design decisions (Chris can override):
    Tests: flattening honours the datum, decompaction conserves grain thickness (exists), restoration of a synthetic
    faulted section returns the unfaulted layers, growth index on a synthetic growth fault.
 
-27. **Migration and seal (charge, fault seal, top seal)** - status: todo
+27. **Migration and seal (charge, fault seal, top seal)** - status: done (run 5, Seismic v0.50.0; follow-ups: per-time-step migration on 26b paleo-depth grids in the UI, Allan diagram plot along a fault plane from sticks, fault-as-conduit in the flow model, seal risk map layers from petro grids, critical-moment chart window)
    27a. Migration prediction: map-based flow-path ray tracing on paleo-structure surfaces (26b) per time step,
         drainage areas, fill-spill chains, accumulations; charge timing from basin-model expulsion (18c TR) vs trap
         timing (age of paleo-closure from 26b) -> critical-moment chart per prospect.
