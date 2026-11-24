@@ -301,7 +301,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
   overviews, a QGIS plugin (layers + styles, auto-refresh), and a localhost two-way message link (selection, click
   to open, draw line -> seismic section, draw polygon -> prospect, cursor marker). No code changed.
 
-## 2026-11-24 - run 5 (scheduled, started 07:18 UTC) - PLAN item 20 (in progress)
+## 2026-11-24 - run 5 (scheduled, 07:18-10:10 UTC) - PLAN items 20-30 (all PLAN items now done)
 - 20a done (well_correlation v0.6.0): new package `well_correlation/petro/` - tool / vendor / service identification
   (DLIS TOOL objects, mnemonics, file-name services, descriptions; editable tool table), wireline vs LWD, effective
   vertical resolution, curve QC (gaps, flat lines, spikes, bad hole, GR depth shift between runs, splices), bed
@@ -408,3 +408,28 @@ the 2D lines, Tui-1/Amokura-1 wells).
   7 undrilled 200 m slots beside existing drainage, RTA on an analytic linear-flow well (slope 1/C within 2 %, end of
   linear flow 300-450 d for true 300 d), frac complexity index, NPV10 equal to a hand cash flow, type curves, inventory,
   HTML summary; dashboard recovery / depletion.
+- Tests (end of run, all passing): `python -m seismic_tool --selftest` and `--guitest` (fakeqt), `python -m
+  well_correlation --selftest` (+ `--guitest` earlier in the run), `python -m mistie_tool --selftest`. New test files:
+  well_correlation petro/test_petro.py, test_carto.py; seismic_tool test_maplayers, test_propgrid, test_addwells,
+  test_crosscheck, test_gis, test_qgislink, test_blend, test_resolution, test_avo, test_structure, test_migration,
+  test_prospect, test_spacing, test_depletion (+ additions to test_inversion GUI).
+- Versions: Well Correlation Tool v0.12.0, Seismic Interpretation Tool v0.53.0, QGIS plugin geoharmonic_link 0.1.
+- Known limitations: everything is tested on synthetic data under the Qt mock - the new windows / buttons have not
+  been seen in real Qt yet. Items 26-30 are mostly API + one action each (paleo GIF, migration + prospect on the map hub,
+  spacing / gun barrel / recovery on the dashboard); their full windows are listed as follow-ups in PLAN. Petro on real
+  wells used default parameters. The AVO / predictive rock physics uses a generic soft-sand frame (frame_exp 2) - set
+  Scenario values for your basin. RRC / NDIC column names are mapped from common export headers, not yet checked on
+  your files. Large grids: migration spill analysis is pure Python in the union loop (fine to ~500k nodes).
+- What Chris should test first:
+  1. Pull `dev`, run both tools' self-tests and `--guitest` with real PySide6 (first real-Qt run of items 20-30).
+  2. Well Correlation > Petrophysics on Maui-7: QC, interpret, mineral solver, Show on map hub; check the C-sands numbers
+     (net pay ~35 m, PHIE ~0.18, Sw ~0.14).
+  3. Seismic map hub: Map layers dock - add a horizon map, contours, petro bubbles, Apply style "Presentation", Export
+     map PDF; then Send map to QGIS and open it with the plugin (dev/build_qgis_plugin.py builds the zip).
+  4. On a 3D inline: View > Co-blend (10/20/40 Hz), move the mouse and watch the basemap cross (linked cursor).
+  5. Seismic inversion window: set wavelet, Resolution..., Single-well inversion at a tied well; Pre-stack tab:
+     AVO volumes and Angle-stack risk with your near / far stacks.
+  6. Interpret > Paleo-structure animation on an inline with 3+ horizons; Map layers > Add > Migration on a depth map.
+- Next: no PLAN items left - add new ones (the follow-ups noted on items 20-30 in PLAN.md are good candidates), plus the
+  "Later (Chris back)" list (bench on the PC, Maui 3D subset, mistie integration).
+
