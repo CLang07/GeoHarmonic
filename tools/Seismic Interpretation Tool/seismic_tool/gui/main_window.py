@@ -199,6 +199,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.section.positionChanged.connect(lambda: self.basemap.show_current(self.section.current_trace_line()))
         self.basemap.openLine.connect(lambda n: self.section.show("2D", n))
         self.basemap.openInline.connect(lambda v, il, xl: self.section.show("3D", v, "Inline", il))
+        self.basemap.wellClicked.connect(lambda n: self.well_clicked(n))
+        self._petro_strip = None
+        self._hub_mtime = None
+        self._hub_poll = QtCore.QTimer(self)  # the Well Correlation Tool's "Show on map hub" (PLAN 21b)
+        self._hub_poll.setInterval(3000)
+        self._hub_poll.timeout.connect(lambda *_: self.hub_tick())
+        self._hub_poll.start()
         self.tree.itemDoubleClicked.connect(self._tree_open)
         self.horizon_dock.changed.connect(self._horizons_changed)
         self.fault_dock.changed.connect(self._faults_changed)
@@ -361,6 +368,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tree.expandAll()
         from ..maplayers import LayerStack
         self.basemap.stack = LayerStack.load(p)  # map hub layers (PLAN 21a), saved in display["map_layers"]
+        self._hub_mtime = None
         self.layers_panel.set_stack(self.basemap.stack)
         self.basemap.set_project(p)
         self.section.set_project(p)
@@ -368,6 +376,47 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fault_dock.set_project(p)
         self._horizons_changed()
         self._faults_changed()
+
+    # ---------------------------------------------------------------- map hub (PLAN 21b)
+    def well_clicked(self, name):
+        """A well clicked on the map: show its petro strip when petrophysics results exist (or the strip is open)."""
+        from .. import maphub as MH
+        has = any(r.get("Well") == name for r in MH._read_csv(os.path.join(MH.petro_folder(self.project) or "",
+                                                                             "summary.csv")))
+        if not has and self._petro_strip is None:
+            return None
+        from .petro_strip import PetroStripDialog
+        if self._petro_strip is None:
+            self._petro_strip = PetroStripDialog(self.project, self)
+        self._petro_strip.project = self.project
+        d = self._petro_strip.show_well(name)
+        self._petro_strip.show()
+        self._petro_strip.raise_()
+        return d
+
+    def hub_tick(self, force=False):
+        """Apply a new hub_request.json from the Well Correlation Tool (polled every 3 s)."""
+        from .. import maphub as MH
+        if not self.project or self.basemap.stack is None:
+            return None
+        p = os.path.join(MH.petro_folder(self.project) or "", "hub_request.json")
+        if not os.path.exists(p):
+            return None
+        mt = os.path.getmtime(p)
+        if not force and mt == self._hub_mtime:
+            return None
+        first = self._hub_mtime is None and not force
+        self._hub_mtime = mt
+        if first:  # an old request from before this session: remember it, do not re-apply
+            return None
+        req = MH.read_hub_request(self.project)
+        lid = MH.apply_hub_request(self.basemap.stack, req)
+        self.basemap.draw_layers()
+        self.layers_panel.refresh()
+        self.basemap.set_selected_wells(req.get("wells") or [])
+        self.statusBar().showMessage(f"Map hub: {req.get('property')} {req.get('zone') or '(all zones)'} for "
+                                     f"{len(req.get('wells') or [])} wells from the Well Correlation Tool", 10000)
+        return lid
 
     def _faults_changed(self):
         self.section.draw_faults()

@@ -169,6 +169,7 @@ def run():
         test_inversion.run(check, os.path.join(tmp, "inversion"))
         from . import test_maplayers
         test_maplayers.run(check, tmp)
+        test_maplayers.run_hub(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -241,6 +242,7 @@ def run_gui():
         test_inversion.run_gui(check, os.path.join(tmp, "invgui"))
         from . import test_maplayers
         test_maplayers.run_gui(check, tmp)
+        test_maplayers.run_gui_hub(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

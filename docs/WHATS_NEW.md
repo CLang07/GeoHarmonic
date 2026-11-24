@@ -580,4 +580,13 @@ Add...: current basemap grid (from Interpret > Horizon maps), CPS-3 file, horizo
 saved with the project (grids in `<project>_seismic/maps/`).
 Test first: open the Maui / NPRA project - the basemap should look as before; Horizon maps > compute a structure map
 > Map layers > Add... > Current basemap grid; change opacity, interval, order; save, reopen.
+21b Petrophysics on the map (v0.37.0):
+- Map layers > Add... > Petrophysics value per well (bubbles sized + coloured by the value, labelled) or Mineral pies per
+  well (from the Well Correlation Tool's Mineral solver); both per zone or all zones.
+- Well Correlation Tool > Petrophysics window > Show on map hub: the Seismic tool picks it up within ~3 s (petro layer +
+  the wells ringed in magenta).
+- Click a well with petrophysics results on the basemap: Petro strip (GR, resistivity, density-neutron, Vsh, PHIE /
+  BVW, Sw with tops) and its zone table.
+- Map layers > Draw polygon: click vertices, double-click to close; the wells inside are selected; Petro cross-plot...
+  shows zone values per well (or the basemap grid at the wells vs a zone value) with the selection highlighted.
 

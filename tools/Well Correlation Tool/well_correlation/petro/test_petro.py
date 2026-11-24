@@ -408,6 +408,7 @@ def run_multimin(check, tmp, fwd_project=None):
     """20c: constrained solver (analytic, bounds vs brute force), synthetic mineral well, Monte Carlo, real data."""
     import time
     from ..project import Project
+    from .store import petro_dir
     from . import interp as I
     from . import multimin as M
     rng = np.random.default_rng(11)
@@ -496,6 +497,10 @@ def run_multimin(check, tmp, fwd_project=None):
     from .store import load_curves
     _, saved = load_curves(p, "Min-1")
     check("MM_V_ILLITE" in saved and "MM_PHIE" in saved, "multimin volumes saved (MM_ curves)")
+    import csv as _csv
+    with open(os.path.join(petro_dir(p), "mm_summary.csv"), newline="") as fh:
+        mrows = list(_csv.DictReader(fh))
+    check(mrows and mrows[0]["Well"] == "Min-1" and float(mrows[0]["V_illite"]) > 0.1, "mm_summary.csv written (map pies)")
 
     # ---- Monte Carlo on the deterministic chain (forward well from run_interp)
     if fwd_project is not None:

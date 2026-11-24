@@ -279,7 +279,18 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   map, show_grid, ties, current line), `_lines_for_clicks`; MainWindow sets `basemap.stack = LayerStack.load(p)` on
   open; dock "Map layers" = `gui/layers_dock.LayersPanel` (set_visible, move, remove, set_opacity, set_style (contour
   interval goes to the grid's contour layer), add_current_grid, add_cps3, add_horizon, add_petro, add_polygon,
-  add_text; `select(lid)` + `_sel` because the Qt mock has no current row). Tests `test_maplayers.py` (run, run_gui).
+  add_text, add_pies, start_polygon / polygon_drawn (polygon layer + wells inside selected), crossplot; `select(lid)` +
+  `_sel` because the Qt mock has no current row). Tests `test_maplayers.py` (run, run_hub, run_gui, run_gui_hub).
+  `maphub.py` (21b, v0.37): `petro_folder(project)` (= <wcproj>_petro), `petro_pies` (mm_summary.csv written by
+  well_correlation multimin; all zones weighted by Gross_TVD), `pie_polygons`, `COMPONENT_COLORS`, `read_hub_request` /
+  `apply_hub_request` (one petro layer with src.from_request, updated in place), `point_in_polygon`,
+  `wells_in_polygon`, `zone_values`, `petro_crossplot_data` (prop_x may be "grid" = basemap grid at the wells),
+  `petro_strip_data` (opens the wcproj once, cached as project._hub_wcp). Render primitive ("polygon", lid, xs, ys,
+  fill, edge) for pies and polygon fills (QGraphicsPolygonItem on the basemap). Basemap: signals wellClicked /
+  polygonDrawn, start_polygon / add_polygon_point / finish_polygon (double-click), set_selected_wells (magenta rings),
+  well_at. MainWindow: well_clicked -> `gui/petro_strip.PetroStripDialog` (when the well has summary rows or the strip
+  is open; the click still opens the inline too), hub_tick (3 s QTimer poll of hub_request.json mtime; the first tick
+  after opening only records the mtime). `gui/petro_strip.PetroCrossplotDialog` (compute / redraw).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

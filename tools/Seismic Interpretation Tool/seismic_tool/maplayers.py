@@ -34,7 +34,8 @@ DEFAULT_STYLE = {
     "contours": {"interval": None, "index_every": 5, "color": (40, 40, 40), "width": 1.0, "index_width": 2.0},
     "polygons": {"color": (200, 0, 0), "width": 2.0, "fill": (200, 0, 0, 40), "labels": True},
     "text": {"color": (0, 0, 0), "size": 10},
-    "petro": {"lut": "Rainbow (attributes)", "reverse": False, "size": 14, "labels": True, "mode": "bubbles"},
+    "petro": {"lut": "Rainbow (attributes)", "reverse": False, "size": 14, "labels": True, "mode": "bubbles",
+              "pie_radius": None},  # mode bubbles | values | pies (mineral solver volumes, 21b)
 }
 LUT_NAMES = None  # filled lazily from gui.colormaps (pure numpy module)
 
@@ -203,6 +204,8 @@ class LayerStack:
         if lay["kind"] not in ("grid", "horizon", "petro"):
             return None
         if lay["kind"] == "petro":
+            if lay["style"].get("mode") == "pies":
+                return None
             vals = petro_values(self.project, lay["src"].get("property"), lay["src"].get("zone"))
             v = np.array([q[3] for q in vals], float)
             unit = ""
@@ -232,6 +235,12 @@ class LayerStack:
             st = lay["style"]
             sym = {"outline3d": "line", "lines2d": "line", "faults": "line", "contours": "line", "polygons": "polygon",
                    "wells": "point", "petro": "point", "text": "text", "grid": "ramp", "horizon": "ramp"}[lay["kind"]]
+            if lay["kind"] == "petro" and st.get("mode") == "pies":
+                from .maphub import petro_pies, COMPONENT_COLORS
+                comps = sorted({c for q in petro_pies(self.project, lay["src"].get("zone")) for c in q[3]})
+                out.append({"id": lay["id"], "name": lay["name"], "kind": "petro", "symbol": "pie", "color": None,
+                            "colorbar": None, "components": [(c, COMPONENT_COLORS.get(c, (128, 128, 128))) for c in comps]})
+                continue
             out.append({"id": lay["id"], "name": lay["name"], "kind": lay["kind"], "symbol": sym,
                         "color": st.get("color"), "colorbar": self.colorbar(lay["id"]) if sym == "ramp" or lay["kind"] == "petro"
                         else None})
@@ -329,6 +338,7 @@ def render(stack, wells=None):
        ("curve", layer_id, xs, ys, rgba, width, connect)       connect 'all' | 'pairs' | 'finite'
        ("points", layer_id, x, y, rgba list/array, size, symbol)
        ("text", layer_id, x, y, text, rgba, size)
+       ("polygon", layer_id, xs, ys, fill rgba, edge rgba | None)   filled (pies, polygon fills)
     wells: optional [(name, x, y)] (default project.wells())."""
     prim = []
     p = stack.project
@@ -406,12 +416,28 @@ def render(stack, wells=None):
                     if len(x) < 2:
                         continue
                     xc, yc = np.append(x, x[0]), np.append(y, y[0])
+                    if st.get("fill") and len(x) >= 3:
+                        prim.append(("polygon", lid, xc, yc, col(st["fill"]), None))
                     prim.append(("curve", lid, xc, yc, col(st["color"]), st["width"], "all"))
                     if st.get("labels", True):
                         prim.append(("text", lid, float(np.mean(x)), float(np.mean(y)), poly.get("name", ""), col(st["color"]), 9))
             elif kind == "text":
                 for t in lay["src"].get("items", []):
                     prim.append(("text", lid, float(t["x"]), float(t["y"]), str(t["text"]), col(st["color"]), st["size"]))
+            elif kind == "petro" and st.get("mode") == "pies":
+                from .maphub import petro_pies, pie_polygons, COMPONENT_COLORS
+                pies = petro_pies(p, lay["src"].get("zone"))
+                if pies:
+                    xs_ = [q[1] for q in pies]
+                    ys_ = [q[2] for q in pies]
+                    ext = max(np.ptp(xs_) if len(xs_) > 1 else 0, np.ptp(ys_) if len(ys_) > 1 else 0)
+                    rad = st.get("pie_radius") or (0.03 * ext if ext > 0 else 200.0)
+                    for (w, x, y, fr) in pies:
+                        for comp, px, py in pie_polygons(x, y, fr, rad):
+                            prim.append(("polygon", lid, px, py, col(COMPONENT_COLORS.get(comp, (128, 128, 128))),
+                                         col((255, 255, 255))))
+                        if st.get("labels", True):
+                            prim.append(("text", lid, x + rad, y + rad, w, col((0, 0, 0)), 8))
             elif kind == "petro":
                 vals = petro_values(p, lay["src"].get("property"), lay["src"].get("zone"))
                 cb = stack.colorbar(lid)
@@ -480,6 +506,11 @@ def render_png(stack, path, title="", size=(8, 7), dpi=110):
             cols = np.array(q[4], float) / 255.0
             ax.scatter(q[2], q[3], s=np.asarray(q[5], float) ** 2 * 0.6, c=cols if cols.ndim == 2 else [cols],
                        edgecolors="w", linewidths=0.5, zorder=5)
+        elif kind == "polygon":
+            bx.extend(np.asarray(q[2], float).tolist())
+            by.extend(np.asarray(q[3], float).tolist())
+            ax.fill(q[2], q[3], facecolor=np.array(q[4], float) / 255.0,
+                    edgecolor=(np.array(q[5], float) / 255.0) if q[5] else "none", lw=0.5)
         elif kind == "text":
             ax.text(q[2], q[3], q[4], color=np.array(q[5], float) / 255.0, fontsize=q[6] * 0.8, zorder=6)
     ax.set_aspect("equal")

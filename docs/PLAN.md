@@ -392,7 +392,7 @@ all consume their per-zone results. Design decisions (Chris can override):
         2-mineral case, Gassmann round trip, real-data run on Maui-5/6/7 + Tui-1 (DLIS) recorded in the RUNLOG.
    Run order: 20a -> 20b -> 20c -> 20d -> 20e.
 
-21. **Integrated Map hub (petrophysics + seismic + wells on one map)** - status: partial (run 5, 2026-11-24: 21a done v0.36.0 `maplayers.py`, `gui/layers_dock.py`, basemap layer mode; 21b started: zone value per well posted as labelled bubbles from the petro summary.csv - pies, click -> petro strip, lasso -> cross-plot, hub_request.json watcher still to do; next 21b rest)
+21. **Integrated Map hub (petrophysics + seismic + wells on one map)** - status: partial (run 5, 2026-11-24: 21a done v0.36.0 `maplayers.py`, `gui/layers_dock.py`; 21b done v0.37.0 `maphub.py`, `gui/petro_strip.py` - petro bubbles / mineral pies, zone filter, click -> petro strip, drawn polygon (lasso) -> selected wells -> linked cross-plot, hub_request watcher; next 21c)
    Chris: "having an integrated map is very important". Extends gui/basemap.py + dashboard_window.py.
    21a. Layers manager: background grid (structure, isochron, attribute, inversion slice / horizon extraction,
         predicted property, basin %Ro), contours, fault polygons, 2D lines, 3D outline, wells (surface + BH,

@@ -16,6 +16,8 @@ COLORS = [(31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40), (148, 10
 class Basemap(QtWidgets.QWidget):
     openLine = QtCore.Signal(str)  # 2D line name
     openInline = QtCore.Signal(str, int, int)  # volume, inline, crossline (map click inside a survey)
+    wellClicked = QtCore.Signal(str)  # well name (map hub: petro strip)
+    polygonDrawn = QtCore.Signal(object)  # (xs, ys) when a drawn polygon is finished
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,6 +47,10 @@ class Basemap(QtWidgets.QWidget):
         self.hz_range = None  # (vmin, vmax) of the last map, for the legend text
         self.wells = None  # wellindex.WellLayer
         self._label_items = []
+        self._poly = None  # [(x, y)] while drawing a polygon (None = not drawing)
+        self._poly_item = None
+        self.selected_wells = []
+        self._sel_items = []
         self.stack = None  # maplayers.LayerStack: when set, the map is drawn from the layer stack (PLAN 21a)
         self._layer_items = []
         self.layer_errors = []
@@ -99,6 +105,11 @@ class Basemap(QtWidgets.QWidget):
             elif kind == "text":
                 it = pg.TextItem(q[4], color=q[5][:3], anchor=(0, 1))
                 it.setPos(q[2], q[3])
+            elif kind == "polygon":
+                poly = QtGui.QPolygonF([QtCore.QPointF(float(a), float(b)) for a, b in zip(q[2], q[3])])
+                it = QtWidgets.QGraphicsPolygonItem(poly)
+                it.setBrush(pg.mkBrush(*q[4]))
+                it.setPen(pg.mkPen(q[5], width=0) if q[5] else pg.mkPen(None))
             else:
                 continue
             it.setZValue(zval)
@@ -371,6 +382,69 @@ class Basemap(QtWidgets.QWidget):
         else:
             self._current.setData(np.asarray(xy[0], float), np.asarray(xy[1], float))
 
+    # ------------------------------------------------------------------ polygon drawing + well selection (21b)
+    def start_polygon(self):
+        """Click vertices on the map; double-click (or finish_polygon()) closes it and emits polygonDrawn."""
+        self._poly = []
+        self._draw_poly()
+
+    def add_polygon_point(self, x, y):
+        if self._poly is not None:
+            self._poly.append((float(x), float(y)))
+            self._draw_poly()
+
+    def finish_polygon(self):
+        pts, self._poly = self._poly, None
+        self._draw_poly()
+        if pts and len(pts) >= 3:
+            xs, ys = [p_[0] for p_ in pts], [p_[1] for p_ in pts]
+            self.polygonDrawn.emit((xs, ys))
+            return xs, ys
+        return None
+
+    def _draw_poly(self):
+        if self._poly_item is not None:
+            try:
+                self.plot.removeItem(self._poly_item)
+            except Exception:
+                pass
+            self._poly_item = None
+        if self._poly:
+            xs = [p_[0] for p_ in self._poly] + [self._poly[0][0]]
+            ys = [p_[1] for p_ in self._poly] + [self._poly[0][1]]
+            self._poly_item = pg.PlotCurveItem(np.array(xs), np.array(ys), pen=pg.mkPen((200, 0, 200), width=2,
+                                                                                         style=QtCore.Qt.DashLine))
+            self.plot.addItem(self._poly_item)
+
+    def set_selected_wells(self, names):
+        """Highlight wells (rings) - e.g. the wells inside a lasso polygon."""
+        for it in self._sel_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._sel_items = []
+        self.selected_wells = list(names or [])
+        xy = {n: (x, y) for n, x, y in (self.project.wells() if self.project else [])}
+        pts = [xy[n] for n in self.selected_wells if n in xy]
+        if pts:
+            it = pg.ScatterPlotItem([q[0] for q in pts], [q[1] for q in pts], size=18, symbol="o", brush=None,
+                                    pen=pg.mkPen((255, 0, 255), width=2))
+            it.setZValue(50)
+            self.plot.addItem(it)
+            self._sel_items.append(it)
+        return self.selected_wells
+
+    def well_at(self, x, y, tol):
+        """Nearest well within tol map units, or None."""
+        if not self.wells or not len(self.wells):
+            return None
+        k = self.wells.nearest(x, y)
+        if k is None:
+            return None
+        wx, wy = self.wells.xy[k]
+        return self.wells.names[k] if math.hypot(wx - x, wy - y) <= tol else None
+
     def _clicked(self, ev):
         if not self.project or ev.button() != QtCore.Qt.LeftButton:
             return
@@ -378,7 +452,15 @@ class Basemap(QtWidgets.QWidget):
         if not vb.sceneBoundingRect().contains(ev.scenePos()):
             return
         pt = vb.mapSceneToView(ev.scenePos())
+        if self._poly is not None:  # drawing a polygon: clicks add vertices, double-click closes
+            self.add_polygon_point(pt.x(), pt.y())
+            if ev.double():
+                self.finish_polygon()
+            return
         px = abs(vb.viewPixelSize()[0]) * 8  # click tolerance
+        wname = self.well_at(pt.x(), pt.y(), px)
+        if wname:
+            self.wellClicked.emit(wname)
         best = None
         for name, (x, y) in self._lines.items():
             d = np.min(np.hypot(x - pt.x(), y - pt.y()))

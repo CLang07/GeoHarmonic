@@ -144,3 +144,103 @@ def run_gui(check, tmp):
     mw = MainWindow(proj.path)
     check(mw.basemap.stack is not None and mw.layers_panel.stack is mw.basemap.stack and len(mw.layers_panel._ids) >= 3,
           "21a GUI: main window opens the project with the saved map layers")
+
+
+def _mm_summary(folder):
+    d = os.path.join(folder, "wells_petro")
+    with open(os.path.join(d, "mm_summary.csv"), "w") as f:
+        f.write("Well,Zone,Gross_TVD,V_quartz,V_illite,V_water,V_gas\n")
+        f.write("W-1,A,10,0.6,0.2,0.1,0.1\nW-1,B,30,0.4,0.4,0.2,0.0\nW-2,A,20,0.7,0.1,0.05,0.15\n")
+
+
+def run_hub(check, tmp):
+    """21b: mineral pies, hub request, lasso selection, cross-plot of zone values, petro strip data."""
+    from . import maphub as MH
+    from . import maplayers as ML
+    proj, truth, d = _setup(tmp, "hub")
+    _mm_summary(d)
+    pies = {w: fr for w, _, _, fr in MH.petro_pies(proj, "A")}
+    check(abs(sum(pies["W-1"].values()) - 1) < 1e-12 and abs(pies["W-1"]["quartz"] - 0.6) < 1e-12, "21b: mineral pie "
+          "fractions from mm_summary.csv")
+    allz = {w: fr for w, _, _, fr in MH.petro_pies(proj)}
+    check(abs(allz["W-1"]["quartz"] - (10 * 0.6 + 30 * 0.4) / 40) < 1e-12, "21b: all-zones pie weighted by gross thickness")
+    wedges = MH.pie_polygons(0.0, 0.0, {"a": 0.25, "b": 0.75}, 10.0, n=400)
+
+    def area(x, y):
+        return 0.5 * abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+
+    a = area(*wedges[0][1:])
+    check(abs(a - 0.25 * np.pi * 100) < 0.5, f"21b: pie wedge area proportional to the fraction ({a:.1f} vs {25 * np.pi:.1f})")
+    st = ML.LayerStack.load(proj)
+    lid = st.add("petro", "pies", src={"zone": "A"}, style={"mode": "pies"})
+    polys = [q for q in ML.render(st) if q[0] == "polygon" and q[1] == lid]
+    check(len(polys) == 8 and st.legend()[0]["symbol"] == "pie" and len(st.legend()[0]["components"]) == 4,
+          "21b: pies rendered (4 components x 2 wells) with a component legend")
+    req = {"property": "PHIE_res", "zone": "A", "wells": ["W-1", "W-2"]}
+    l1 = MH.apply_hub_request(st, req)
+    l2 = MH.apply_hub_request(st, dict(req, property="SoPhiH"))
+    check(l1 == l2 and st.get(l1)["src"]["property"] == "SoPhiH" and proj.display["map_layers"], "21b: map-hub request "
+          "adds one petro layer and updates it")
+    sq = ([0, 10, 10, 0], [0, 0, 10, 10])
+    inside = MH.point_in_polygon([5, 15, 5, 10.0001], [5, 5, -1, 5], *sq)
+    check(list(inside) == [True, False, False, False], "21b: point in polygon")
+    vol = proj.volume("Synth")
+    xs, ys = vol.outline()
+    cx, cy = float(np.mean(xs)), float(np.mean(ys))
+    sel = MH.wells_in_polygon(proj, [cx - 50, cx + 300, cx + 300, cx - 50], [cy - 50, cy - 50, cy + 50, cy + 50])
+    check(sorted(sel) == ["W-1", "W-2"], f"21b: wells inside a lasso polygon {sel}")
+    xp = MH.petro_crossplot_data(proj, "SoPhiH", "PHIE_res", "A", selected=sel)
+    check(xp["n"] == 3 and abs(xp["r"] - 1) < 1e-9 and xp["selected"].sum() == 2, "21b: linked cross-plot (zone values, "
+          "selection carried over)")
+    from .maps import horizon_grid
+    g = horizon_grid(proj, proj.horizons.get("Top"), "3D:Synth")
+    xg = MH.petro_crossplot_data(proj, "grid", "SoPhiH", "A", grid=g)
+    check(xg["n"] == 3 and np.all(np.isfinite(xg["x"])), "21b: map grid sampled at the wells vs a zone value")
+    here = os.path.dirname(os.path.abspath(__file__))
+    nz = os.path.normpath(os.path.join(here, "..", "..", "..", "data", "nz", "NZ Well Correlation.wcproj.json"))
+    if os.path.exists(nz):
+        proj.well_project = nz
+        sd = MH.petro_strip_data(proj, "Maui-7")
+        check(sd is not None and np.isfinite(sd["tracks"]["GR"][0][1]).sum() > 1000 and sd["tops"], "21b: petro strip data "
+              "for a real well (logs + tops)")
+
+
+def run_gui_hub(check, tmp):
+    from .gui.basemap import Basemap
+    from .gui.layers_dock import LayersPanel
+    from .gui.main_window import MainWindow
+    from . import maplayers as ML
+    proj, truth, d = _setup(tmp, "hub_gui")
+    _mm_summary(d)
+    bm = Basemap()
+    bm.project = proj
+    st = ML.LayerStack.load(proj)
+    bm.set_stack(st)
+    panel = LayersPanel(bm)
+    panel.set_stack(st)
+    pl = panel.add_pies("A")
+    check(st.get(pl)["style"]["mode"] == "pies" and not bm.layer_errors, "21b GUI: mineral pies layer drawn")
+    vol = proj.volume("Synth")
+    xs, ys = vol.outline()
+    cx, cy = float(np.mean(xs)), float(np.mean(ys))
+    bm.start_polygon()
+    for x, y in ((cx - 50, cy - 50), (cx + 300, cy - 50), (cx + 300, cy + 50), (cx - 50, cy + 50)):
+        bm.add_polygon_point(x, y)
+    xy = bm.finish_polygon()
+    lid, inside = panel.polygon_drawn(*xy)
+    check(sorted(inside) == ["W-1", "W-2"] and sorted(bm.selected_wells) == ["W-1", "W-2"] and st.get(lid)["kind"] == "polygons",
+          "21b GUI: drawn polygon kept as a layer, wells inside selected on the map")
+    dlg = panel.crossplot()
+    dd = dlg.compute("SoPhiH", "PHIE_res", "A")
+    check(dd["n"] == 3 and dd["selected"].sum() == 2, "21b GUI: petro cross-plot highlights the lasso selection")
+    check(bm.well_at(cx, cy, 5.0) == "W-1" and bm.well_at(cx + 1000, cy, 5.0) is None, "21b GUI: well under the cursor")
+    mw = MainWindow(proj.path)
+    mw.hub_tick()  # no request yet
+    import json as _json
+    with open(os.path.join(d, "wells_petro", "hub_request.json"), "w") as fh:
+        _json.dump({"property": "NetPay_TVD", "zone": "A", "wells": ["W-1"]}, fh)
+    lid = mw.hub_tick(force=True)
+    check(lid is not None and mw.basemap.stack.get(lid)["src"]["property"] == "NetPay_TVD" and mw.basemap.selected_wells == ["W-1"],
+          "21b GUI: Show on map hub request applied by the Seismic tool (layer + selection)")
+    sd = mw.well_clicked("W-1")
+    check(sd is not None and mw._petro_strip is not None, "21b GUI: clicking a well with petro results opens its petro strip")

@@ -39,12 +39,27 @@ class LayersPanel(QtWidgets.QWidget):
                          ("CPS-3 grid file...", lambda *_: self._add_cps3_dialog()),
                          ("Horizon time map...", lambda *_: self._add_horizon_dialog()),
                          ("Petrophysics value per well...", lambda *_: self._add_petro_dialog()),
+                         ("Mineral pies per well (mineral solver)...", lambda *_: self._add_pies_dialog()),
                          ("Text...", lambda *_: self._add_text_dialog())):
             a = m.addAction(text)
             a.triggered.connect(fn)
         self.add_menu.setMenu(m)
         row.addWidget(self.add_menu)
         lay.addLayout(row)
+        row2 = QtWidgets.QHBoxLayout()
+        for text, fn, tip in (("Draw polygon", lambda *_: self.start_polygon(),
+                               "Click vertices on the basemap, double-click to close: the polygon is kept as a layer and "
+                               "the wells inside it are selected"),
+                              ("Petro cross-plot...", lambda *_: self.crossplot(),
+                               "Zone values per well (or a map grid at the wells) - selected wells highlighted")):
+            b = QtWidgets.QPushButton(text)
+            b.setToolTip(tip)
+            b.clicked.connect(fn)
+            row2.addWidget(b)
+        lay.addLayout(row2)
+        self._xplot = None
+        if basemap is not None:
+            basemap.polygonDrawn.connect(lambda xy: self.polygon_drawn(*xy))
         form = QtWidgets.QFormLayout()
         self.opacity = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.opacity.setRange(0, 100)
@@ -217,7 +232,47 @@ class LayersPanel(QtWidgets.QWidget):
         self._apply()
         return lid
 
+    def add_pies(self, zone=None):
+        lid = self.stack.add("petro", "Mineral pies" + (f" {zone}" if zone else " (all zones)"),
+                             src={"property": "minerals", "zone": zone}, style={"mode": "pies"})
+        from ..maphub import petro_pies
+        n = len(petro_pies(self.stack.project, zone))
+        self._apply(f"{n} wells with mineral volumes" if n else
+                    "no mineral-solver results yet - run Mineral solver in the Petrophysics window")
+        return lid
+
+    def start_polygon(self):
+        if self.basemap is not None:
+            self.basemap.start_polygon()
+            self.status.setText("Click vertices on the basemap; double-click to close the polygon")
+
+    def polygon_drawn(self, xs, ys, name=None):
+        """A finished polygon: keep it as a layer, select the wells inside (map rings + cross-plot highlight)."""
+        from ..maphub import wells_in_polygon
+        n = sum(len(l["src"].get("polygons", [])) for l in self.stack.layers if l["kind"] == "polygons")
+        lid = self.add_polygon(name or f"Polygon {n + 1}", xs, ys)
+        inside = wells_in_polygon(self.stack.project, xs, ys)
+        if self.basemap is not None:
+            self.basemap.set_selected_wells(inside)
+        if self._xplot is not None:
+            self._xplot.redraw()
+        self.status.setText(f"{len(inside)} wells inside: {', '.join(inside[:12])}{' ...' if len(inside) > 12 else ''}")
+        return lid, inside
+
+    def crossplot(self):
+        from .petro_strip import PetroCrossplotDialog
+        if self._xplot is None:
+            self._xplot = PetroCrossplotDialog(self.stack.project, self.basemap, self)
+        self._xplot.redraw()
+        self._xplot.show()
+        return self._xplot
+
     # ------------------------------------------------------------------ dialogs
+    def _add_pies_dialog(self):
+        zone, ok = QtWidgets.QInputDialog.getText(self, "Mineral pies", "Zone (empty = all zones)")
+        if ok:
+            self.add_pies(zone.strip() or None)
+
     def _add_cps3_dialog(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "CPS-3 grid", "", "CPS-3 (*.cps *.dat *.txt *.grd);;All (*)")
         if path:

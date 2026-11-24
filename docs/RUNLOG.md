@@ -334,4 +334,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
   polygons, text, petro + the legacy outlines / 2D lines / wells / faults) with order / visibility / opacity / style,
   saved in the project (grids as npz), Qt-free renderer + matplotlib PNG; basemap draws from the stack; Map layers dock.
   21b part: petro zone values per well as labelled bubbles from `<wcproj>_petro/summary.csv`.
+- 21b done (Seismic v0.37.0): `maphub.py` + `gui/petro_strip.py` - mineral pies (well_correlation multimin now writes
+  mm_summary.csv), petro bubbles per zone, "Show on map hub" watcher, click a well -> petro strip, draw a polygon ->
+  wells inside selected -> linked cross-plot of zone values (or a grid at the wells).
 

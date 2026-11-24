@@ -222,10 +222,33 @@ def multimin_well(project, name, minerals=("quartz", "illite"), fluid="oil", pse
     res = {"well": name, "depth": z, "tvdss": det["tvdss"], "components": comps_seen, "volumes": out_vol,
            "curves": dict(curves, **recon_all), "zones": rows, "rw": rw_curve}
     if save and petro_dir(project):
+        write_mm_summary(project, name, rows)
         allc = {f"MM_V_{c.upper().replace('-', '_')}": v.astype(np.float32) for c, v in out_vol.items()}
         allc.update({k: v.astype(np.float32) for k, v in res["curves"].items()})
         save_curves(project, name, z, allc, replace_prefix="MM_")
     return res
+
+
+def write_mm_summary(project, well, rows):
+    """Zone rows of the mineral solver (with V_<component> means) in <project>_petro/mm_summary.csv, other wells kept
+    (read by the Seismic tool's map hub for mineral pies)."""
+    import csv
+    import os
+    d = petro_dir(project, create=True)
+    path = os.path.join(d, "mm_summary.csv")
+    old = []
+    if os.path.exists(path):
+        with open(path, newline="") as f:
+            old = [r for r in csv.DictReader(f) if r.get("Well") != well]
+    allrows = old + [{k: ("" if v is None else v) for k, v in r.items()} for r in rows]
+    cols = list(dict.fromkeys(k for r in allrows for k in r))
+    with open(path + ".tmp", "w", newline="") as f:
+        wr = csv.DictWriter(f, fieldnames=cols)
+        wr.writeheader()
+        for r in allrows:
+            wr.writerow({k: r.get(k, "") for k in cols})
+    os.replace(path + ".tmp", path)
+    return path
 
 
 # ------------------------------------------------------------------------------------------------- Monte Carlo
