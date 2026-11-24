@@ -358,6 +358,41 @@ class LayersPanel(QtWidgets.QWidget):
         self.migration_result = (an, fill, num)
         return an, fill
 
+    def prospect(self, name, depth_lid=None, trap=1, thickness=50.0, ntg=("uniform", 0.5, 0.9), phi=("uniform", 0.15, 0.25),
+                 sw=("uniform", 0.2, 0.4), fvf=1.2, rf=("uniform", 0.2, 0.4), fluid="oil", factors=None, fault_column=None,
+                 top_column=None, dhi_name=None):
+        """PLAN 28 on the map hub: trap `trap` (number as labelled by migration(), shallowest crest = 1) of a structure
+        grid -> contact (spill / fault / top seal limited), GRV with a constant gross thickness, Monte-Carlo
+        volumetrics, Pg from `factors` (+ DHI revision from display['dhi'][dhi_name]); stored in
+        display['prospects'][name].  Returns the Rose-style row."""
+        from .. import migration as M
+        from .. import prospect as PR
+        lid = depth_lid or self.selected_id()
+        g = ML.display_grid(self.stack, lid)
+        if g is None:
+            raise ValueError("select a structure grid")
+        cx, cy = ML._cell_sizes(g)
+        area = abs(cx * cy)
+        an = M.spill_analysis(g.z, area)
+        crests = sorted(an["traps"], key=lambda c: an["traps"][c]["depth"])
+        if not 1 <= trap <= len(crests):
+            raise ValueError(f"trap {trap}: the grid has {len(crests)} traps")
+        c = crests[trap - 1]
+        t = an["traps"][c]
+        contact, why = PR.contact_depth(t["depth"], t["spill"], fault_column, top_column)
+        mask = M._closure_mask(np.asarray(g.z, float), c, t["spill"] + 1e-9)
+        grv = PR.grv(g.z, contact, area, thickness=thickness, mask=mask)
+        vol = PR.volumetrics(20000, ("lognormal", 0.8 * grv, 1.2 * grv) if grv > 0 else 0.0, ntg, phi, sw, fvf, rf, fluid)
+        dhi = ((self.stack.project.display.get("dhi") or {}).get(dhi_name) or {}).get("index") \
+            if (dhi_name and self.stack.project is not None) else None
+        row = PR.prospect_row(name, vol, factors or {k: 0.6 for k in PR.FACTORS}, fluid, dhi)
+        row.update(Contact=contact, Limited_by=why, GRV_m3=grv, Crest=t["depth"])
+        if self.stack.project is not None:
+            self.stack.project.display.setdefault("prospects", {})[name] = row
+        self.status.setText(f"{name}: contact {contact:.0f} ({why}), GRV {grv:.3g} m3, recoverable P50 "
+                            f"{row['P50']:.3g} {row['Unit']}, Pg {row['Pg']:.2f}")
+        return row
+
     def _grid_choices(self):
         return [(l["id"], l["name"]) for l in self.stack.ordered() if l["kind"] in ("grid", "horizon")]
 

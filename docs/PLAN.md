@@ -556,7 +556,7 @@ all consume their per-zone results. Design decisions (Chris can override):
         editable defaults -> column height supported vs spill / fault-seal limited columns; seal risk maps.
    Tests: flow paths on an analytic dome / saddle, fill-spill order, SGR on a hand case, column height maths.
 
-28. **Prospect risking + volumetrics (Rose & Associates style)** - status: todo
+28. **Prospect risking + volumetrics (Rose & Associates style)** - status: done (run 5, Seismic v0.51.0; follow-ups: prospect window (polygon pick, distributions editor, factor table with evidence, portfolio view), base-grid GRV in the UI, Rose file import)
    28a. Prospect object: polygon + reservoir zone; GRV from depth maps (17) with contacts at spill, fault-seal or
         top-seal limited depth (27), area-depth / area-thickness curves; Monte-Carlo volumetrics (lognormal / user
         distributions for area, net pay, phi, Sw, FVF, RF) -> P90/P50/P10, Swanson's mean.

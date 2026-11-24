@@ -195,6 +195,8 @@ def run():
         test_structure.run(check, tmp)
         from . import test_migration
         test_migration.run(check, tmp)
+        from . import test_prospect
+        test_prospect.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")

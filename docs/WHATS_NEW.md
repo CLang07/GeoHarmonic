@@ -718,3 +718,11 @@ Test first: show an inline with 3+ interpreted horizons, Interpret > Paleo-struc
   juxtaposition (sand-on-sand windows), shale gouge ratio + supported column (editable calibration), slip / dilation
   tendency from a stress tensor, top-seal column from Vsh or MICP, and the limiting column (spill vs fault vs top seal).
 Test first: a depth map with 2-3 closures, Add > Migration, check that the spill directions make geological sense.
+
+## Prospect volumetrics + risking (PLAN item 28, Seismic v0.51.0)
+- Map hub (code + LayersPanel.prospect; a prospect window is the next UI step): pick a trap of a structure grid, the
+  contact comes from the spill point (or a fault-seal / top-seal column if given), GRV with a gross thickness inside the
+  closure, Monte-Carlo volumetrics (NTG, porosity, Sw, FVF, RF as distributions) -> P90 / P50 / P10, mean, Swanson's
+  mean; Pg = source x reservoir x trap x seal x timing (prefilled from the critical moment, seal and DHI evidence),
+  DHI revision of Pg, dependent-prospect portfolio (shared source), CSV with Rose-style columns.
+Test first: nothing to click yet beyond the API - check the numbers on a known prospect with python -c (see HANDOFF).

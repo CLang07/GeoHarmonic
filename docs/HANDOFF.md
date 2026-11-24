@@ -416,6 +416,13 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `sgr_column` (AFPD = 10^(SGR%/27 - C), C 0.5 / 0.25 / 0 by depth), `stress_tendency` (slip, dilation; ENU,
   strike right-hand), `micp_to_reservoir`, `column_height`, `VSH_PCE` + `top_seal_column`, `limiting_column`.
   LayersPanel.migration (drainage-area grid layer + trap text labels). Tests `test_migration.py` (run, run_gui).
+- `prospect.py` (28, v0.51): `lognormal_from_p90_p10` / `lognormal_stats`, `sample` (constant, lognormal (P90,
+  P10), normal (clipped), uniform, triangular, sample arrays), `pvalues` (P90 = 10th percentile, Swanson), `grv` (top
+  to contact, constant thickness or base grid, mask), `area_depth`, `grv_from_area_depth`, `volumetrics` (sm3 + bbl /
+  scf), `contact_depth` (migration.limiting_column), FACTORS, `chance_of_success`, `prefill_factors`, `dhi_revision`
+  (Bayes, LR = exp(4 q (index - 0.3))), `portfolio` (shared factors), ROSE_COLUMNS + `export_csv`, `prospect_row`.
+  LayersPanel.prospect (trap number from the spill analysis -> closure mask, contact, GRV, MC, display["prospects"]).
+  Tests `test_prospect.py` + test_migration GUI.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

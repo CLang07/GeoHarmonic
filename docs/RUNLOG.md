@@ -395,3 +395,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
   nearest edge; two domes on a regional dip: deep trap spills at the saddle into the up-dip trap, which leaks off the
   map), fill-spill order, critical moment, juxtaposition, SGR (hand case 0.5), SGR column (22.5 bar -> 294 m gas), slip
   tendency peaking on ~60 deg normal faults, MICP conversion, top-seal and limiting column; map-hub migration action.
+- Item 28 done (Seismic v0.51.0): `prospect.py` - lognormal P90 / P10 maths (sampled within 2 %), GRV of a cone within
+  1 % of pi R^2 H / 3, area-depth integration check, deterministic + Monte-Carlo volumetrics, contact from the limiting
+  column, Pg product, DHI revision (bounded, monotonic, neutral at 0.3), portfolio with shared source (P(any) 0.75 ->
+  0.50, same risked volume), Rose-style CSV; LayersPanel.prospect on a trap of the map hub.

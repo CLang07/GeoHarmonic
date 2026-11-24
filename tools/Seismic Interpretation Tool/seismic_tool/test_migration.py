@@ -102,3 +102,7 @@ def run_gui(check, tmp):
     check(len(an["traps"]) == 2 and "Drainage areas (Depth)" in names and len(txt["src"]["items"]) == 2 and
           any("-> T1" in it["text"] for it in txt["src"]["items"]) and not bm.layer_errors,
           "27a GUI: migration on the map hub - drainage areas + trap labels (T2 spills into T1)")
+    row = panel.prospect("T1 prospect", lid, trap=1, thickness=30.0, fluid="gas", fvf=0.005)
+    check(row["Limited_by"] == "spill" and row["GRV_m3"] > 0 and row["P90"] < row["P50"] < row["P10"] and
+          proj.display["prospects"]["T1 prospect"]["Pg"] == row["Pg"],
+          f"28 GUI: prospect on trap T1 - contact {row['Contact']:.0f} m, GRV {row['GRV_m3']:.3g} m3, P50 {row['P50']:.3g} scf")
