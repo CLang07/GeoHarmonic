@@ -283,3 +283,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - Chris asked whether the mapping could look better. Made a before/after mock-up (synthetic dome + fault; matplotlib
   hillshade, index contours, fault heave, well symbols, spill contour, scale bar, north arrow) and added PLAN 21f
   (shared cartography / map-style module). No code changed.
+
+## 2026-11-24 - interactive (Chris): ArcGIS-style maps
+- Chris asked for "pretty maps like ArcGIS". Made an A3 layout mock-up (shaded relief land + bathymetry, coastline,
+  permit, 2D lines, 3D outline, hillshaded structure inset, title block, locator inset, legend, scale bar, north
+  arrow, lat/long graticule) and added PLAN 21g (layout composer, offline cartographic context, GIS export to
+  ArcGIS Pro / QGIS). No code changed.

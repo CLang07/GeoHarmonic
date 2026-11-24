@@ -418,6 +418,21 @@ all consume their per-zone results. Design decisions (Chris can override):
         (oil, gas, oil+gas, show, dry, P&A, planned; deviated with BH symbol and trajectory), haloed labels with
         collision avoidance, posted values, scale bar, north arrow, graticule / coordinate ticks with the CRS, legend
         and a title block (project, horizon, CI, date, author) for export at 300 dpi; style presets saved per project.
+   21g. ArcGIS-style page layouts + GIS exchange (Chris 2026-11-24: "pretty maps like ArcGIS"; mock-up in RUNLOG):
+        - Layout composer: A4 / A3 / A1 portrait or landscape, main map frame + side panel with title block,
+          locator inset (red extent box), legend built from the visible layers, colour bar, scale bar, north arrow,
+          lat/long graticule (inverse transverse Mercator in numpy next to geo.tm_forward) plus projected ticks,
+          projection / data source / author / date text, neatline; templates saved per project; export PDF + PNG
+          (300 dpi) via matplotlib.
+        - Cartographic context offline: coastline + bathymetry / topography as shaded relief (land and sea ramps),
+          named seas / land labels, licence / permit polygons, fields, infrastructure from user shapefiles / CSV.
+          Source data Chris downloads once (Natural Earth coastlines, GEBCO bathymetry GeoTIFF, LINZ / NZP&M permit
+          shapefiles) read by numpy readers (shapefile .shp/.dbf, GeoTIFF uncompressed / deflate via zlib, GeoPackage
+          via sqlite3). Optional web tiles (satellite / topo) cached to disk with urllib, off by default.
+        - GIS export so final layouts can also be made in ArcGIS Pro / QGIS: grids as GeoTIFF with CRS, contours / fault
+          polygons / wells / laterals / prospects as shapefile + GeoPackage + KML, .prj from the project CRS.
+        - Tests: shapefile + GeoTIFF round trip (write -> read -> identical), inverse TM against forward TM < 1 mm,
+          legend lists exactly the visible layers, layout geometry at each page size (no overlapping panels).
    Tests: layer state save/restore, contours never cross a fault polygon, label boxes do not overlap, cokriging against an analytic case (secondary perfectly correlated -> matches
    the secondary trend; uncorrelated -> matches kriging), LOO numbers, add-wells updates only affected grids.
 
