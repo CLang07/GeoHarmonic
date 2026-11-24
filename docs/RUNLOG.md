@@ -368,7 +368,6 @@ the 2D lines, Tui-1/Amokura-1 wells).
   RMSE 4.4 us/ft against an irreducible 4.1, band covers 80 %), GMM / k-means electrofacies (100 % on synthetic facies);
   `petro/reports.py` - report tables + text keyword extraction, pressure gradients + contact (2050.3 m vs 2050 true),
   Haworth gas ratios (Tui-1 3550-3750 m: median wetness 14 %, gas / condensate), core-log calibration, Archie m / n fits.
-
 - Item 23 done (Seismic v0.45.0): `blend.py` - RGB / CMY / HSV co-blending with per-channel clip + gamma, colour-triangle
   legend, attribute overlay on the seismic, single-light illumination (tilted planes match cos(normal, light) exactly),
   amplitude on structure, bump-mapped sections; map hub blend layer + shade-by-structure; section co-blend / overlay /
@@ -424,7 +423,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
   1. Pull `dev`, run both tools' self-tests and `--guitest` with real PySide6 (first real-Qt run of items 20-30).
   2. Well Correlation > Petrophysics on Maui-7: QC, interpret, mineral solver, Show on map hub; check the C-sands numbers
      (net pay ~35 m, PHIE ~0.18, Sw ~0.14).
-  3. Seismic map hub: Map layers dock - add a horizon map, contours, petro bubbles, Apply style "Presentation", Export
+  3. Seismic map hub: Map layers dock - add a horizon map, contours, petro bubbles, Apply style "Print", Export
      map PDF; then Send map to QGIS and open it with the plugin (dev/build_qgis_plugin.py builds the zip).
   4. On a 3D inline: View > Co-blend (10/20/40 Hz), move the mouse and watch the basemap cross (linked cursor).
   5. Seismic inversion window: set wavelet, Resolution..., Single-well inversion at a tied well; Pre-stack tab:
