@@ -43,6 +43,9 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Petrophysics value per well...", lambda *_: self._add_petro_dialog()),
                          ("Mineral pies per well (mineral solver)...", lambda *_: self._add_pies_dialog()),
                          ("Text...", lambda *_: self._add_text_dialog()),
+                         ("Co-blend 2-3 grids (RGB / CMY / HSV)...", lambda *_: self._add_blend_dialog()),
+                         ("Shade selected grid by structure (amplitude on structure / bump map)...",
+                          lambda *_: self._shade_dialog()),
                          ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
                          ("Grid calculator...", lambda *_: self.grid_calc()),
                          ("Cross-check petrophysics vs maps (+ predicted maps, Analytics)...", lambda *_: self.cross_check()),
@@ -243,6 +246,75 @@ class LayersPanel(QtWidgets.QWidget):
         self._apply(f"{len(vals)} wells with {prop}" if vals else
                     "no petrophysics summary yet - run the Petrophysics window in the Well Correlation Tool")
         return lid
+
+    def add_blend(self, grid_ids, mode="rgb", clip=(2.0, 98.0), gamma=1.0, name=None):
+        """Co-blend layer of 2-3 grid / horizon layers (PLAN 23a); drawn on the first grid's geometry."""
+        ids = [i for i in grid_ids if i][:3]
+        if len(ids) < 2:
+            raise ValueError("pick 2 or 3 grid layers")
+        names = [self.stack.get(i)["name"] for i in ids]
+        lid = self.stack.add("blend", name or f"{mode.upper()} blend: " + " / ".join(names), src={"grids": ids},
+                             style={"mode": mode, "clip": tuple(clip), "gamma": gamma})
+        self._apply(f"{mode.upper()} co-blend of {', '.join(names)}")
+        return lid
+
+    def shade_by(self, lid, structure_lid=None, azimuth=315.0, elevation=35.0, ve=1.0, strength=0.6):
+        """Amplitude on structure / bump map (PLAN 23b): colour of grid lid shaded by the illuminated structure grid
+        (itself when structure_lid is None)."""
+        self.stack.set_style(lid, shade_from=structure_lid, hillshade=True, azimuth=float(azimuth),
+                             elevation=float(elevation), ve=float(ve), shade_strength=float(strength))
+        self._apply(f"{self.stack.get(lid)['name']} lit from {azimuth:.0f} deg / {elevation:.0f} deg")
+        return lid
+
+    def blend_legend(self, lid=None):
+        """(rgba triangle, [(x, y, label)]) legend of a blend layer - corners are its grids."""
+        from .. import blend as B
+        lay = self.stack.get(lid or self.selected_id())
+        names = [self.stack.get(i)["name"] for i in lay["src"].get("grids", [])]
+        return B.legend_triangle(lay["style"].get("mode", "rgb"), 96, names + [""] * (3 - len(names)))
+
+    def _grid_choices(self):
+        return [(l["id"], l["name"]) for l in self.stack.ordered() if l["kind"] in ("grid", "horizon")]
+
+    def _add_blend_dialog(self):
+        ch = self._grid_choices()
+        if len(ch) < 2:
+            self.status.setText("co-blend needs at least 2 grid / horizon layers")
+            return
+        items = [f"{i}: {n}" for i, n in ch]
+        picked = []
+        for k, col in enumerate(("red / cyan / hue", "green / magenta / saturation", "blue / yellow / value")):
+            opts = (["(none)"] if k == 2 else []) + items
+            t, ok = QtWidgets.QInputDialog.getItem(self, "Co-blend", f"Channel {k + 1} ({col})", opts, 0, False)
+            if not ok:
+                return
+            if t != "(none)":
+                picked.append(t.split(":")[0])
+        mode, ok = QtWidgets.QInputDialog.getItem(self, "Co-blend", "Mode", ["rgb", "cmy", "hsv"], 0, False)
+        if ok:
+            try:
+                self.add_blend(picked, mode)
+            except Exception as e:
+                self.status.setText(str(e))
+
+    def _shade_dialog(self):
+        lid = self.selected_id()
+        if not lid or self.stack.get(lid)["kind"] not in ("grid", "horizon"):
+            self.status.setText("select the grid to colour (e.g. an amplitude map) first")
+            return
+        items = ["(itself)"] + [f"{i}: {n}" for i, n in self._grid_choices() if i != lid]
+        t, ok = QtWidgets.QInputDialog.getItem(self, "Shade by structure", "Structure grid", items, 0, False)
+        if not ok:
+            return
+        az, ok = QtWidgets.QInputDialog.getDouble(self, "Shade by structure", "Light azimuth (deg from N)", 315, 0, 360, 0)
+        if not ok:
+            return
+        el, ok = QtWidgets.QInputDialog.getDouble(self, "Shade by structure", "Light elevation (deg)", 35, 1, 90, 0)
+        if not ok:
+            return
+        ve, ok = QtWidgets.QInputDialog.getDouble(self, "Shade by structure", "Vertical exaggeration", 2, 0.01, 1000, 2)
+        if ok:
+            self.shade_by(lid, None if t == "(itself)" else t.split(":")[0], az, el, ve)
 
     def add_polygon(self, name, xs, ys, layer_name="Polygons"):
         lay = next((l for l in self.stack.layers if l["kind"] == "polygons" and l["name"] == layer_name), None)

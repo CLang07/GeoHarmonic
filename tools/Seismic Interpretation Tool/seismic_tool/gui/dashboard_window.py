@@ -460,6 +460,27 @@ class DashboardWindow(QtWidgets.QMainWindow):
         rows = sorted({i.row() for i in self.table.selectedIndexes()})
         self.model.select([self._table_rows[i] for i in rows if i < len(self._table_rows)])
 
+    def show_cursor(self, msg):
+        """Linked cursor (23c): red cross on the dashboard map + nearest wellbore in the status bar."""
+        old = getattr(self, "_cursor_item", None)
+        if old is not None:
+            try:
+                self.map.removeItem(old)
+            except Exception:
+                pass
+            self._cursor_item = None
+        if msg is None or msg.get("clear") or msg.get("x") is None:
+            return None
+        it = pg.ScatterPlotItem([float(msg["x"])], [float(msg["y"])], symbol="+", size=18, pen=pg.mkPen((220, 0, 0), width=2))
+        it.setZValue(1000)
+        self.map.addItem(it)
+        self._cursor_item = it
+        k = self.nearest_well(float(msg["x"]), float(msg["y"]))
+        name = getattr(self.trajs[k], "name", None) if k is not None else None
+        if name:
+            self.statusBar().showMessage(f"cursor near {name}")
+        return name
+
     def nearest_well(self, x, y):
         if not self.trajs:
             return None

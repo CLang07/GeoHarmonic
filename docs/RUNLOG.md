@@ -369,3 +369,8 @@ the 2D lines, Tui-1/Amokura-1 wells).
   `petro/reports.py` - report tables + text keyword extraction, pressure gradients + contact (2050.3 m vs 2050 true),
   Haworth gas ratios (Tui-1 3550-3750 m: median wetness 14 %, gas / condensate), core-log calibration, Archie m / n fits.
 
+- Item 23 done (Seismic v0.45.0): `blend.py` - RGB / CMY / HSV co-blending with per-channel clip + gamma, colour-triangle
+  legend, attribute overlay on the seismic, single-light illumination (tilted planes match cos(normal, light) exactly),
+  amplitude on structure, bump-mapped sections; map hub blend layer + shade-by-structure; section co-blend / overlay /
+  bump; `linking.py` linked cursor (section <-> basemap, dashboard, petro strip), attribute parameter scan (movie),
+  saved window layouts + templates.

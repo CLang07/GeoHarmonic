@@ -206,6 +206,13 @@ class MainWindow(QtWidgets.QMainWindow):
                                            if self.qgis is not None else None)
         self.basemap.mapClicked.connect(lambda x, y, t: self.layers_panel.identify(x, y, t) if self.layers_panel.stack else None)
         self._petro_strip = None
+        # live-linked cursor (PLAN 23c): section <-> basemap, dashboard, petro strip
+        from ..linking import CursorBus
+        self.cursor_bus = CursorBus(min_interval=0.03)
+        self.cursor_bus.subscribe("map", lambda m: self.basemap.show_cursor(m))
+        self.cursor_bus.subscribe("section", lambda m: self.section.show_linked_cursor(m))
+        self.section.cursorMoved.connect(lambda m: self.cursor_bus.publish("section", **m))
+        self.basemap.cursorMoved.connect(lambda m: self.cursor_bus.publish("map", **m))
         self._hub_mtime = None
         self._hub_poll = QtCore.QTimer(self)  # the Well Correlation Tool's "Show on map hub" (PLAN 21b)
         self._hub_poll.setInterval(3000)
@@ -283,6 +290,21 @@ class MainWindow(QtWidgets.QMainWindow):
         m.addAction(self.dock_layers.toggleViewAction())
         m.addAction(self.dock_horizons.toggleViewAction())
         m.addAction(self.dock_faults.toggleViewAction())
+        m.addSeparator()
+        self.act_link = self._act(m, "&Linked cursor (section / map / dashboard / well strip)",
+                                  lambda *_: self.set_linked_cursor(self.act_link.isChecked()))
+        self.act_link.setCheckable(True)
+        self.act_link.setChecked(True)
+        self._act(m, "Co-&blend attributes on the section (RGB / CMY / HSV)...", lambda *_: self.coblend_dialog())
+        self._act(m, "Attribute &overlay on the seismic...", lambda *_: self.overlay_dialog())
+        self.act_bump = self._act(m, "Bump-map the section / slice", lambda *_: self.section.set_blend(
+            {"bump": True} if self.act_bump.isChecked() else None))
+        self.act_bump.setCheckable(True)
+        self._act(m, "Plain section (no blend / overlay / bump)", lambda *_: self.section.set_blend(None))
+        self._act(m, "Attribute parameter &scan (movie)...", lambda *_: self.scan_dialog())
+        m.addSeparator()
+        self._act(m, "Save window la&yout...", lambda *_: self._save_layout_dialog())
+        self._act(m, "Restore window layout...", lambda *_: self._load_layout_dialog())
         m.addSeparator()
         self.act_qgis = self._act(m, "Live link with &QGIS (localhost)", lambda *_: self.toggle_qgis())
         self.act_qgis.setCheckable(True)
@@ -392,6 +414,114 @@ class MainWindow(QtWidgets.QMainWindow):
         self._horizons_changed()
         self._faults_changed()
 
+    # ---------------------------------------------------------------- viewer quick wins (PLAN 23)
+    def set_linked_cursor(self, on):
+        self.cursor_bus.enabled = bool(on)
+        if not on:
+            self.cursor_bus.clear()
+        return self.cursor_bus.enabled
+
+    def coblend_dialog(self):
+        from .. import attributes as A
+        names = list(A.ATTRIBUTES)
+        picked = []
+        for k, col in enumerate(("red / cyan / hue", "green / magenta / saturation", "blue / yellow / value")):
+            opts = (["(none)"] if k == 2 else []) + names
+            default = {0: "Spectral 10 Hz", 1: "Spectral 20 Hz", 2: "Spectral 40 Hz"}[k]
+            t, ok = QtWidgets.QInputDialog.getItem(self, "Co-blend", f"Channel {k + 1} ({col})", opts,
+                                                   opts.index(default), False)
+            if not ok:
+                return None
+            if t != "(none)":
+                picked.append(t)
+        mode, ok = QtWidgets.QInputDialog.getItem(self, "Co-blend", "Mode", ["rgb", "cmy", "hsv"], 0, False)
+        if not ok:
+            return None
+        spec = {"attrs": picked, "mode": mode, "clip": (2.0, 98.0), "gamma": 1.0}
+        self.section.set_blend(spec)
+        return spec
+
+    def overlay_dialog(self):
+        from .. import attributes as A
+        t, ok = QtWidgets.QInputDialog.getItem(self, "Overlay", "Attribute over the seismic", list(A.ATTRIBUTES), 0, False)
+        if not ok:
+            return None
+        op, ok = QtWidgets.QInputDialog.getDouble(self, "Overlay", "Opacity (0-1)", 0.5, 0.05, 1.0, 2)
+        if not ok:
+            return None
+        spec = {"overlay": t, "opacity": op}
+        self.section.set_blend(spec)
+        return spec
+
+    def scan_dialog(self):
+        from .scan_dialog import ScanDialog
+        dlg = ScanDialog(self.section, self)
+        dlg.show()
+        self._scan_dialog = dlg
+        return dlg
+
+    def layout_state(self):
+        """Current window layout: docks shown, open tool windows, section state (+ Qt state when available)."""
+        import base64
+        st = {"docks": {k: bool(getattr(self, f"dock_{k}").isVisible()) for k in
+                        ("data", "basemap", "layers", "horizons", "faults")},
+              "windows": [n for n, w in (("petro_strip", self._petro_strip), ("dashboard", getattr(self, "_dashboard", None)))
+                          if w is not None and w.isVisible()],
+              "section": {"source": list(self.section.source) if self.section.source else None, "mode": self.section.mode,
+                          "number": self.section.number, "attr": self.section.attr, "blend": self.section.blend}}
+        try:
+            st["qt"] = base64.b64encode(bytes(self.saveState())).decode("ascii")
+        except Exception:
+            pass
+        return st
+
+    def apply_layout(self, st):
+        import base64
+        if not st:
+            return False
+        if st.get("qt"):
+            try:
+                self.restoreState(QtCore.QByteArray(base64.b64decode(st["qt"])))
+            except Exception:
+                pass
+        for k, vis in (st.get("docks") or {}).items():
+            d = getattr(self, f"dock_{k}", None)
+            if d is not None:
+                d.setVisible(bool(vis))
+        sec = st.get("section") or {}
+        if sec.get("source") and self.project is not None:
+            try:
+                self.section.show(sec["source"][0], sec["source"][1], sec.get("mode"), sec.get("number"))
+                if sec.get("attr"):
+                    self.section.set_attr(sec["attr"])
+                self.section.set_blend(sec.get("blend"))
+            except Exception as e:
+                self.statusBar().showMessage(f"layout: section not restored ({e})")
+        if "dashboard" in (st.get("windows") or []) and getattr(self.project, "well_project", None):
+            self.dashboard()
+        return True
+
+    def save_layout(self, name):
+        from ..linking import save_layout
+        return save_layout(self.project, name, self.layout_state())
+
+    def restore_layout(self, name):
+        from ..linking import load_layout, TEMPLATES
+        return self.apply_layout(load_layout(self.project, name) or TEMPLATES.get(name))
+
+    def _save_layout_dialog(self):
+        n, ok = QtWidgets.QInputDialog.getText(self, "Save layout", "Layout name")
+        if ok and n.strip():
+            self.save_layout(n.strip())
+            self.statusBar().showMessage(f"layout '{n.strip()}' saved in the project")
+
+    def _load_layout_dialog(self):
+        from ..linking import layout_names, TEMPLATES
+        names = layout_names(self.project) + [t for t in TEMPLATES if t not in layout_names(self.project)]
+        n, ok = QtWidgets.QInputDialog.getItem(self, "Restore layout", "Layout", names, 0, False)
+        if ok and n:
+            self.restore_layout(n)
+
     # ---------------------------------------------------------------- map hub (PLAN 21b)
     def well_clicked(self, name):
         """A well clicked on the map: show its petro strip when petrophysics results exist (or the strip is open)."""
@@ -403,6 +533,7 @@ class MainWindow(QtWidgets.QMainWindow):
         from .petro_strip import PetroStripDialog
         if self._petro_strip is None:
             self._petro_strip = PetroStripDialog(self.project, self)
+            self.cursor_bus.subscribe("petro_strip", lambda m: self._petro_strip.show_cursor(m))
         self._petro_strip.project = self.project
         d = self._petro_strip.show_well(name)
         self._petro_strip.show()
@@ -922,6 +1053,7 @@ class MainWindow(QtWidgets.QMainWindow):
             win.load_project_wells()
         win.show()
         self._dashboard = win
+        self.cursor_bus.subscribe("dashboard", lambda m: win.show_cursor(m))
         return win
 
     def velocity_model(self):

@@ -648,3 +648,23 @@ Test first: Send map to QGIS, open it in QGIS with the plugin, connect, select t
 - Library functions for core calibration: core-log depth shift + regression, Archie m from formation factors, n from
   resistivity index; mud-gas Haworth ratios (Tui-1 chromatograph CSV reads directly).
 
+
+## Viewer quick wins: co-blending, bump map, linked cursor (PLAN item 23, Seismic v0.45.0)
+- View > Co-blend attributes on the section: pick 2-3 attributes (default spectral 10 / 20 / 40 Hz) and RGB, CMY or HSV;
+  works on 3D inlines, crosslines and time slices (in time). Per-channel 2-98 % clip; NaN = transparent.
+- View > Attribute overlay on the seismic: an attribute in colour over the grey seismic with an opacity (optional
+  threshold in code: only values above it are drawn). View > Bump-map the section / slice: seismic lit by its own relief.
+  View > Plain section switches back.
+- Map layers > Add > Co-blend 2-3 grids: RGB / CMY / HSV of grid / horizon layers (resampled onto the first grid),
+  colour-triangle legend (corners = the grids). Add > Shade selected grid by structure: amplitude on structure (colour =
+  the selected grid, shading = another grid lit from an azimuth / elevation with vertical exaggeration) or a single-light
+  bump map of the grid itself.
+- Linked cursor (View > Linked cursor, on by default): moving over the section puts a red cross on the basemap and the
+  dashboard map and names the nearest well in the petro strip; moving over the basemap draws dashed lines on the section
+  when the point is on the current line (a cross on time slices).
+- View > Attribute parameter scan: computes an attribute (spectral frequency, RMS window, coherence window) on the current
+  section for a range of values; the slider steps through the frames like a movie.
+- View > Save window layout / Restore window layout: docks, open dashboard, section line / attribute / blend stored by
+  name in the project; built-in templates Interpretation, Mapping, Well review.
+Test first: open an inline of a 3D, View > Co-blend (10 / 20 / 40 Hz, rgb); then move the mouse over it and watch the cross
+on the basemap.

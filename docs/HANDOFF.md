@@ -353,6 +353,21 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   select_wells (set_selected_wells(emit=False) for selections that came from QGIS), `open_arbitrary` ->
   `gui/arbitrary_dialog.ArbitraryDialog` (Volume3D.arbitrary). Tests `test_qgislink.py` (run: GeoPackage, edits, plugin
   core, two-process protocol; run_gui: plugin under dev/fakeqgis + main window server).
+- `blend.py` (23a/b, v0.45): `normalize` (percentile clip, gamma), `channels_to_rgb` / `rgb_blend` (modes rgb additive, cmy
+  subtractive on white, hsv: ch1 hue * 0.8 (no wrap), ch2 saturation, ch3 value), `hsv_to_rgb`, `legend_triangle`
+  (barycentric, max-normalised; hsv = hue x value), `channel_swatches`, `lut_rgba`, `overlay` (alpha blend + threshold),
+  `gray_rgba`, `illuminate` (single-light Lambert, azimuth from north, rows = +y; plane = analytic), `shade_rgba`,
+  `amplitude_on_structure`, `on_grid` (MapGrid resampled onto another's nodes, vectorised), `section_blend`,
+  `spectral_blend`, `bump_section`, `param_scan`. maplayers: kind "blend" (src grids [lid..]), grid style shade_from /
+  azimuth / elevation. LayersPanel add_blend / shade_by / blend_legend. SectionPanel: `blend` spec + `set_blend`,
+  `blend_image` (rgba drawn instead of the LUT image; _apply_colors skips LUT), `scan_frames` / `show_frame`
+  (gui/scan_dialog.ScanDialog), `cursorMoved` signal, `linked_position` / `show_linked_cursor`.
+- `linking.py` (23c): `CursorBus` (publish / subscribe, no echo to the sender, throttle min_interval, enabled, clear;
+  broken subscribers ignored), `nearest_well`, layouts in display["layouts"] (`save_layout`, `load_layout`,
+  `delete_layout`, `layout_names`, `TEMPLATES`). MainWindow.cursor_bus: section -> "map" (Basemap.show_cursor),
+  "dashboard" (DashboardWindow.show_cursor), "petro_strip" (PetroStripDialog.show_cursor, follow flag); basemap
+  cursorMoved -> section. MainWindow layout_state / apply_layout (base64 saveState when available) / save_layout /
+  restore_layout. Tests `test_blend.py` (run incl. run_hub, run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

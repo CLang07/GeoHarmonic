@@ -81,6 +81,7 @@ def _click_through(item):
 class SectionPanel(QtWidgets.QWidget):
     positionChanged = QtCore.Signal()  # current line / slice changed (basemap follows)
     cursorInfo = QtCore.Signal(str)
+    cursorMoved = QtCore.Signal(object)  # {"x", "y", "t", "il", "xl" | "line", "cdp"} for the linked cursor (23c)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -89,6 +90,8 @@ class SectionPanel(QtWidgets.QWidget):
         self.mode = "Inline"
         self.number = None
         self._img = None
+        self._rgba = None  # co-blend / overlay / bump image drawn instead of the LUT image (23a / 23b)
+        self.blend = None  # {"attrs": [..], "mode"} | {"overlay": attr, "opacity"} | {"bump": True, ...}
         self._data = None  # current 2D array as displayed (rows = y)
         self._xaxis = None
         self._yaxis = None
@@ -347,10 +350,17 @@ class SectionPanel(QtWidgets.QWidget):
             self.cursorInfo.emit(f"Could not read data: {e}")
             return
         self._data, self._xaxis, self._yaxis = arr, x, y
+        self._rgba = None
+        if self.blend:
+            try:
+                self._rgba = self.blend_image(arr)
+            except Exception as e:
+                self.cursorInfo.emit(f"Co-blend not shown: {e}")
         view = None if reset_view else self.vb.viewRange()
         self.plot.clear()
+        self._link_items = []
         # autoDownsample: big sections (long 2D lines, large time slices) render at screen resolution when zoomed out
-        self._img = pg.ImageItem(arr, autoDownsample=True)
+        self._img = pg.ImageItem(arr if self._rgba is None else self._rgba, autoDownsample=True)
         dx = (x[-1] - x[0]) / max(1, len(x) - 1) if len(x) > 1 else 1
         dy = (y[-1] - y[0]) / max(1, len(y) - 1) if len(y) > 1 else 1
         self._img.setRect(QtCore.QRectF(x[0] - dx / 2, y[0] - dy / 2, dx * len(x), dy * len(y)))
@@ -613,6 +623,59 @@ class SectionPanel(QtWidgets.QWidget):
         self._stratal_surface = surf
         return stratal_slice(v, surf), v.xlines, v.inlines, "Crossline", "Inline"
 
+    # ------------------------------------------------------------ co-blend / overlay / bump (PLAN 23a / 23b)
+    def set_blend(self, spec):
+        """spec None (off) | {"attrs": [a, b(, c)], "mode": rgb|cmy|hsv, "clip": (lo, hi), "gamma": g}
+        | {"overlay": attr, "opacity": 0.5, "lut": name, "threshold": None} | {"bump": True, "azimuth", "elevation", "ve"}"""
+        self.blend = dict(spec) if spec else None
+        if self.project is not None:
+            self.project.display["section_blend"] = self.blend
+        self.redraw()
+
+    def blend_image(self, arr):
+        """rgba image for the current section according to self.blend (None when not applicable)."""
+        from .. import blend as B
+        sp = self.blend or {}
+        if not sp:
+            return None
+        if sp.get("bump"):
+            return B.bump_section(arr, sp.get("azimuth", 315.0), sp.get("elevation", 45.0), sp.get("ve", 1.0),
+                                  sp.get("strength", 0.6))
+        kind, name = self.source
+        if kind != "3D" or self.mode not in ("Inline", "Crossline", "Time slice") or self.wheeler_on() or self.depth_on():
+            raise ValueError("co-blend / overlay work on 3D inlines, crosslines and time slices in time")
+        v = self.project.volume(name)
+        if sp.get("overlay"):
+            from .. import attributes as A
+            attr = np.asarray(A.section_attribute(v, sp["overlay"], self.mode, self.number), float)
+            base = B.gray_rgba(arr)
+            return B.overlay(base, attr, colormaps.lut(sp.get("lut", "Rainbow (attributes)"), False),
+                             float(sp.get("opacity", 0.5)), threshold=sp.get("threshold"))
+        rgba, _ = B.section_blend(v, sp["attrs"], self.mode, self.number, sp.get("mode", "rgb"),
+                                  tuple(sp.get("clip", (2.0, 98.0))), sp.get("gamma", 1.0))
+        return rgba
+
+    def scan_frames(self, attr, param, values):
+        """Attribute-parameter movie (23c): [(value, array)] of attr on the current 3D section for each parameter
+        value, e.g. scan_frames("Spectral 20 Hz", "freq", range(10, 61, 5))."""
+        from .. import attributes as A
+        from .. import blend as B
+        kind, name = self.source
+        if kind != "3D" or self.mode not in ("Inline", "Crossline", "Time slice"):
+            raise ValueError("parameter scan works on 3D inlines, crosslines and time slices")
+        v = self.project.volume(name)
+        return list(B.param_scan(lambda p: np.asarray(A.section_attribute(v, attr, self.mode, self.number, {param: p})),
+                                 values))
+
+    def show_frame(self, arr):
+        """Display one scan frame (keeps the view)."""
+        if self._img is None:
+            return
+        self._data = np.asarray(arr)
+        self._rgba = None
+        self._img.setImage(self._data, autoLevels=False)
+        self._apply_colors()
+
     def set_attr(self, name):
         self.attr = name if name in ATTRS else "Seismic"
         self.redraw()
@@ -712,6 +775,10 @@ class SectionPanel(QtWidgets.QWidget):
     def _apply_colors(self):
         if self._img is None or self._data is None:
             return
+        if self._rgba is not None:  # true-colour image: no LUT / levels
+            self._img.setLookupTable(None)
+            self._img.setLevels([0, 255])
+            return
         cmap = self.cmap_combo.currentText()
         age = getattr(self, "_age", None)
         if (age and age.get("prop") and self.age_on()) or (self.attr == "Seismic" and _positive_volume(self)):
@@ -749,10 +816,14 @@ class SectionPanel(QtWidgets.QWidget):
             else:
                 il, xl, t = y[i], x[j], self.number
             X, Y = v.xy(il, xl)
+            self.cursorMoved.emit({"x": float(X), "y": float(Y), "t": float(t) if self.mode != "Stratal slice" else None,
+                                   "il": float(il), "xl": float(xl), "domain": "depth" if self.depth_on() else "time"})
             self.cursorInfo.emit(f"IL {il:.0f}  XL {xl:.0f}  {tl} {t:.0f}{'' if tl == 'RGT' else ' ms'}  amp {amp:.4g}"
                                  f"   X {X:.1f}  Y {Y:.1f}")
         else:
             l = self.project.line(name)
+            self.cursorMoved.emit({"x": float(l.x[j]), "y": float(l.y[j]), "t": float(y[i]), "line": name,
+                                   "cdp": float(x[j]), "domain": "depth" if self.depth_on() else "time"})
             self.cursorInfo.emit(f"{name}  CDP {x[j]:.0f}  t {y[i]:.0f} ms  amp {amp:.4g}   X {l.x[j]:.1f}  Y {l.y[j]:.1f}")
 
     # ------------------------------------------------------------ horizons
@@ -1313,6 +1384,58 @@ class SectionPanel(QtWidgets.QWidget):
             self._hz_items.append(it)
 
     # ------------------------------------------------------------ for the basemap
+    # ------------------------------------------------------------ linked cursor (PLAN 23c)
+    def linked_position(self, msg, tol=None):
+        """Where a cursor message from another view falls on this section: (x axis value, y value or None) in the
+        displayed axes, or None when the point is off this line / slice."""
+        if not self.source or msg.get("clear") or msg.get("x") is None or self.project is None:
+            return None
+        kind, name = self.source
+        x, y = float(msg["x"]), float(msg["y"])
+        t = msg.get("t")
+        if kind == "2D":
+            l = self.project.line(name)
+            d = np.hypot(np.asarray(l.x, float) - x, np.asarray(l.y, float) - y)
+            j = int(np.argmin(d))
+            step = float(np.median(np.hypot(np.diff(l.x), np.diff(l.y)))) if len(l.x) > 1 else 25.0
+            if d[j] > (tol if tol is not None else 3 * step):
+                return None
+            return float(l.cdp[j]), t
+        v = self.project.volume(name)
+        il, xl = v.ilxl_at(x, y)
+        if not (v.inlines[0] - v.il_step / 2 <= il <= v.inlines[-1] + v.il_step / 2 and
+                v.xlines[0] - v.xl_step / 2 <= xl <= v.xlines[-1] + v.xl_step / 2):
+            return None
+        if self.mode == "Inline":
+            return (float(xl), t) if abs(il - self.number) <= (tol or abs(v.il_step) * 1.5) else None
+        if self.mode == "Crossline":
+            return (float(il), t) if abs(xl - self.number) <= (tol or abs(v.xl_step) * 1.5) else None
+        return float(xl), float(il)  # time / stratal slice: a point
+
+    def show_linked_cursor(self, msg):
+        pos = self.linked_position(msg)
+        items = getattr(self, "_link_items", None) or []
+        for it in items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._link_items = []
+        self._link_pos = pos
+        if pos is None:
+            return None
+        pen = pg.mkPen((220, 0, 0), width=1, style=QtCore.Qt.DashLine)
+        if self.mode in ("Time slice", "Stratal slice") and self.source[0] == "3D":
+            it = pg.ScatterPlotItem([pos[0]], [pos[1]], symbol="+", size=16, pen=pg.mkPen((220, 0, 0), width=2))
+            self._link_items = [it]
+        else:
+            self._link_items = [pg.InfiniteLine(pos=pos[0], angle=90, pen=pen)]
+            if pos[1] is not None and np.isfinite(pos[1]):
+                self._link_items.append(pg.InfiniteLine(pos=pos[1], angle=0, pen=pen))
+        for it in self._link_items:
+            self.plot.addItem(it)
+        return pos
+
     def current_trace_line(self):
         """Map polyline (xs, ys) of the section being shown, or None (time slice)."""
         if not self.source:

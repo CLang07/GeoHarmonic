@@ -486,7 +486,7 @@ all consume their per-zone results. Design decisions (Chris can override):
    Tests: blocked-CV leakage check, GMM on synthetic clusters, report parser on sample text, pressure-gradient
    contact pick on a synthetic two-fluid column.
 
-23. **Viewer quick wins: co-blending, bump map, interactive linking (SeisWare-style)** - status: todo
+23. **Viewer quick wins: co-blending, bump map, interactive linking (SeisWare-style)** - status: done (run 5, Seismic v0.45.0; follow-ups: co-blend on stratal slices / 2D lines, blend legend drawn on the basemap, movie export to GIF)
    23a. Co-blending on sections, time slices, horizon maps and the map hub: RGB / CMY / HSV of 2-3 attributes (e.g.
         spectral 10/20/40 Hz from attributes.py), per-channel clip + gamma, legend (colour triangle / channel
         swatches - the legend OpendTect lacks), opacity blend of an attribute over the seismic.

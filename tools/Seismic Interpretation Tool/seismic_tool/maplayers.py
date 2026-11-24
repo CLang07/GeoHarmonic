@@ -22,8 +22,9 @@ import os
 
 import numpy as np
 
-KINDS = ("outline3d", "lines2d", "wells", "faults", "horizon", "grid", "contours", "polygons", "text", "petro", "vector")
-DEFAULT_Z = {"grid": 10, "horizon": 12, "vector": 25, "contours": 20, "polygons": 30, "faults": 40, "outline3d": 50, "lines2d": 60,
+KINDS = ("outline3d", "lines2d", "wells", "faults", "horizon", "grid", "contours", "polygons", "text", "petro", "vector",
+         "blend")
+DEFAULT_Z = {"grid": 10, "blend": 11, "horizon": 12, "vector": 25, "contours": 20, "polygons": 30, "faults": 40, "outline3d": 50, "lines2d": 60,
              "wells": 70, "petro": 75, "text": 80}
 DEFAULT_STYLE = {
     "outline3d": {"color": (31, 119, 180), "width": 2.0},
@@ -32,7 +33,11 @@ DEFAULT_STYLE = {
     "faults": {"color": None, "width": 2.0},
     "horizon": {"lut": "Rainbow (attributes)", "reverse": True},
     "grid": {"lut": "Rainbow (attributes)", "reverse": None, "vmin": None, "vmax": None,
-             "ramp": None, "hillshade": False, "ve": 1.0, "shade_strength": 0.55, "blank": None},
+             "ramp": None, "hillshade": False, "ve": 1.0, "shade_strength": 0.55, "blank": None,
+             "shade_from": None, "azimuth": None, "elevation": 35.0},
+    # shade_from: layer id of a structure grid whose illumination shades this one (amplitude on structure, 23b);
+    # azimuth: single light direction (bump map) instead of the multi-directional hillshade; elevation in degrees
+    "blend": {"mode": "rgb", "clip": (2.0, 98.0), "gamma": 1.0},  # src {"grids": [lid, lid, lid]} co-blend (23a)
     # ramp: carto ramp (depth / thickness / property / diverging / terrain / bathymetry) instead of lut; blank: list of
     # polygon-layer ids (or True = every polygons layer with style fault) blanked on the grid and its contours
     "contours": {"interval": None, "index_every": 5, "color": (40, 40, 40), "width": 1.0, "index_width": 2.0,
@@ -521,7 +526,18 @@ def render(stack, wells=None):
                 cb = stack.colorbar(lid)
                 if g is not None and cb is not None:
                     lut = _ramp_or_lut(st, cb)
-                    if st.get("hillshade"):
+                    if st.get("shade_from") or (st.get("hillshade") and st.get("azimuth") is not None):
+                        from . import blend as B
+                        sg = display_grid(stack, st["shade_from"]) if st.get("shade_from") else g
+                        if sg is None:
+                            raise ValueError(f"shade_from layer {st.get('shade_from')} has no grid")
+                        sz = B.on_grid(g, sg)
+                        cx_, cy_ = _cell_sizes(g)
+                        sh = B.illuminate(sz, cx_, cy_, 315.0 if st.get("azimuth") is None else float(st["azimuth"]),
+                                          float(st.get("elevation") or 35.0), float(st.get("ve") or 1.0))
+                        rgba, _, _ = _rgba_image(g.z, lut, cb["vmin"], cb["vmax"], a)
+                        rgba = B.shade_rgba(rgba, sh, float(st.get("shade_strength", 0.55)))
+                    elif st.get("hillshade"):
                         from .welltie import wc
                         wc()
                         from well_correlation.carto import hillshade, shaded_rgba
@@ -531,6 +547,16 @@ def render(stack, wells=None):
                     else:
                         rgba, _, _ = _rgba_image(g.z, lut, cb["vmin"], cb["vmax"], a)
                     prim.append(("image", lid, rgba, tuple(g.transform())))
+            elif kind == "blend":
+                from . import blend as B
+                ids = [i for i in (lay["src"].get("grids") or []) if i]
+                gs = [display_grid(stack, i) for i in ids]
+                if len(gs) < 2 or any(g is None for g in gs):
+                    raise ValueError("a blend layer needs 2-3 grid layers")
+                arrs = [B.on_grid(gs[0], g) for g in gs[:3]]
+                rgba = B.rgb_blend(arrs, st.get("mode", "rgb"), st.get("clip", (2.0, 98.0)), st.get("gamma", 1.0),
+                                   opacity=a)
+                prim.append(("image", lid, rgba, tuple(gs[0].transform())))
             elif kind == "contours":
                 g = display_grid(stack, lay["src"].get("grid")) if lay["src"].get("grid") else None
                 if g is not None:

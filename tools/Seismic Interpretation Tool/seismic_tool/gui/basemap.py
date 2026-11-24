@@ -18,6 +18,7 @@ class Basemap(QtWidgets.QWidget):
     openInline = QtCore.Signal(str, int, int)  # volume, inline, crossline (map click inside a survey)
     wellClicked = QtCore.Signal(str)  # well name (map hub: petro strip)
     polygonDrawn = QtCore.Signal(object)  # (xs, ys) when a drawn polygon is finished
+    cursorMoved = QtCore.Signal(object)  # {"x", "y"} mouse position on the map (linked cursor, 23c)
     mapClicked = QtCore.Signal(float, float, float)  # x, y, tolerance (map units) - identify vector features
     wellsSelected = QtCore.Signal(object)  # [names] selected on the map (lasso) - sent to QGIS
 
@@ -62,6 +63,9 @@ class Basemap(QtWidgets.QWidget):
         self._label_timer.timeout.connect(self.update_labels)
         self.plot.getPlotItem().getViewBox().sigRangeChanged.connect(lambda *_: self._label_timer.start())
         self.plot.scene().sigMouseClicked.connect(self._clicked)
+        self.plot.scene().sigMouseMoved.connect(self._mouse_moved)
+        self._cursor_item = None
+        self.cursor_xy = None
 
     def set_project(self, project):
         self.project = project
@@ -127,6 +131,7 @@ class Basemap(QtWidgets.QWidget):
 
     def redraw(self):
         self.plot.clear()
+        self._cursor_item = None
         self._lines = {}
         self._current = None
         self._layer_items = []
@@ -381,6 +386,28 @@ class Basemap(QtWidgets.QWidget):
             it = pg.PlotCurveItem(np.asarray(xs, float), np.asarray(ys, float), pen=pg.mkPen(c, width=2))
             self.plot.addItem(it)
             self._flt_items.append(it)
+
+    def _mouse_moved(self, pos):
+        vb = self.plot.getPlotItem().getViewBox()
+        if not vb.sceneBoundingRect().contains(pos):
+            return
+        pt = vb.mapSceneToView(pos)
+        self.cursorMoved.emit({"x": float(pt.x()), "y": float(pt.y())})
+
+    def show_cursor(self, msg):
+        """Linked cursor from another view (section, dashboard): red cross at msg x, y; msg clear hides it."""
+        if msg is None or msg.get("clear") or msg.get("x") is None:
+            self.cursor_xy = None
+            if self._cursor_item is not None:
+                self._cursor_item.setData([], [])
+            return
+        self.cursor_xy = (float(msg["x"]), float(msg["y"]))
+        if self._cursor_item is None:
+            self._cursor_item = pg.ScatterPlotItem(symbol="+", size=18, pen=pg.mkPen((220, 0, 0), width=2),
+                                                   brush=pg.mkBrush(220, 0, 0))
+            self._cursor_item.setZValue(1000)
+            self.plot.addItem(self._cursor_item)
+        self._cursor_item.setData([self.cursor_xy[0]], [self.cursor_xy[1]])
 
     def show_current(self, xy):
         if self._current is None:

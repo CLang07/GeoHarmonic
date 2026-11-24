@@ -183,6 +183,8 @@ def run():
         test_gis.run_export(check, tmp)
         from . import test_qgislink
         test_qgislink.run(check, tmp)
+        from . import test_blend
+        test_blend.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -268,6 +270,8 @@ def run_gui():
         test_gis.run_gui(check, tmp)
         from . import test_qgislink
         test_qgislink.run_gui(check, tmp)
+        from . import test_blend
+        test_blend.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

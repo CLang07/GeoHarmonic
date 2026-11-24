@@ -28,7 +28,24 @@ class PetroStripDialog(QtWidgets.QDialog):
         self.table = QtWidgets.QTableWidget()
         lay.addWidget(self.table, 1)
 
+    def show_cursor(self, msg, max_dist=750.0):
+        """Linked cursor (23c): name the nearest well; with follow on, switch the strip to it."""
+        from ..linking import nearest_well
+        if msg is None or msg.get("clear") or msg.get("x") is None or self.project is None:
+            return None
+        name = msg.get("well")
+        d = 0.0
+        if not name:
+            name, d = nearest_well(self.project.wells(), msg["x"], msg["y"], max_dist)
+        self.cursor_well = name
+        if name and getattr(self, "follow", False) and name != getattr(self, "_shown", None):
+            self.show_well(name)
+        elif name:
+            self.setWindowTitle(f"Petro strip - cursor near {name} ({d:.0f} m)")
+        return name
+
     def show_well(self, name):
+        self._shown = name
         self.data = MH.petro_strip_data(self.project, name)
         if self.data is None:
             self.title.setText(f"{name}: not in the linked well project")
