@@ -635,3 +635,16 @@ residual-corrected map; Send to Analytics hands the well table to the Analytics 
   Polygons / lines you digitise in the prospects_edit, leases or section_lines layers are picked up automatically.
 Test first: Send map to QGIS, open it in QGIS with the plugin, connect, select two wells in QGIS.
 
+## Petrophysics analytics + field reports (PLAN item 22, Well Correlation v0.12.0, Seismic v0.44.0)
+- Petrophysics window > Predict DT (ML): trains a gradient-boosting model on the wells that have DT (inputs GR, RHOB,
+  NPHI, RDEEP), reports a depth-blocked, well-grouped cross-validation (random K-fold on logs is optimistic - the test
+  shows it), and writes DT_PRED with a P10-P90 band where DT is missing (section track DTP). Other targets: use
+  `petro.logml.predict_curve(project, "RHOB", [...])`.
+- Electrofacies: Gaussian-mixture facies on GR / RHOB / NPHI / RDEEP for all wells -> FACIES curve (section track FAC).
+- Import report...: CSV / XLSX tables of shows, tests, cores, MICP or pressures (column names are matched loosely, feet
+  and psi converted), or a text / PDF report (sentences with shows / tests / cores and a depth are extracted and marked
+  "auto-extracted, check"). Pressures give fluid gradients and the contact. Results: <project>_petro/reports.json; the
+  map hub can post Shows / Tests / Cores / Pressures / Contact_TVDSS per well (Add... > Petrophysics value).
+- Library functions for core calibration: core-log depth shift + regression, Archie m from formation factors, n from
+  resistivity index; mud-gas Haworth ratios (Tui-1 chromatograph CSV reads directly).
+

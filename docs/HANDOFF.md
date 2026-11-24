@@ -463,6 +463,20 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   `classify_status`, `symbol_paths`, `nice_scale`, `north_arrow_angle`, `STYLE_PRESETS`, `styled_map` (used by
   gui/map_view.refresh_map when display["map"]["carto"] is not False). Tests `test_carto.py`.
 
+- `petro/logml.py` (22a, v0.12): `analytics()` imports seismic_tool.analytics (models, validation) from the sibling tool
+  folder; `blocked_splits(depth, wells, k, block_m, buffer_m)` (group_kfold over well x depth block, same-well training
+  samples within buffer_m of a test block dropped), `gather`, `make` (GBM / RF / quantile GBM), `predict_curve` (CV
+  report + <T>_PRED / _P10 / _P90 curves where T is missing), `electrofacies` (k-means / GMM on standardised curves,
+  facies ordered by the first curve's centre, FACIES curve), `facies_proportions`. `petro/reports.py` (22b): ALIASES +
+  `read_table(path, kind show|test|core|micp|pressure, depth_unit, pressure_unit)` (CSV, XLSX via pandas+openpyxl),
+  `extract_from_text` (sentence split, depth / range regex, kinds from TEXT_PATTERNS, flag "auto-extracted, check"),
+  `pdf_text` (pypdf optional), `fluid_gradients` (exhaustive 2-leg fit, contact = line crossing; 1 leg unless SSE drops
+  30 % and gradients differ > 0.0015 MPa/m), `gas_ratios` (Haworth Wh / Bh / Ch + zone), `read_mudgas`,
+  `core_log_calibration` (depth shift scan + linear fit), `fit_archie_m` / `fit_archie_n`, `save_reports` /
+  `load_reports` (reports.json + reports_summary.csv; maplayers.petro_values falls back to it for Shows / Tests / Cores /
+  Pressures / Contact_TVDSS). Section TRACKS FAC (FACIES) and DTP (DT_PRED + P10 / P90). PetroDialog: run_predict,
+  run_facies, import_report. Tests `run_ml_reports` (+ 22 GUI check in run_gui).
+
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.
 - GUI: PySide6 imported before pyqtgraph; `pg.setConfigOptions(antialias=False, imageAxisOrder="row-major")`;

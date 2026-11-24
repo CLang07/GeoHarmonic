@@ -36,6 +36,10 @@ FAMILY_INFO = {
     "BVW": ("BVW (v/v)", 0.5, 0.0, False),
     "SW": ("Sw (v/v)", 1.0, 0.0, False),
     "PERM": ("Perm (mD)", 0.01, 10000.0, True),
+    "FACIES": ("Facies (0..k-1)", -0.5, 7.5, False),
+    "DT_PRED": ("DT predicted (us/ft)", 140.0, 40.0, False),
+    "DT_P10": ("DT P10", 140.0, 40.0, False),
+    "DT_P90": ("DT P90", 140.0, 40.0, False),
 }
 
 STEP = 0.1524  # metres (half-foot) composite sampling

@@ -301,16 +301,22 @@ def petro_values(project, prop, zone=None):
     xy = {n: (x, y) for n, x, y in project.wells()}
     vals = {}
     with open(path, newline="") as f:
-        for r in csv.DictReader(f):
-            if zone and r.get("Zone") != zone:
-                continue
-            try:
-                v = float(r.get(prop, ""))
-            except ValueError:
-                continue
-            w = r.get("Well")
-            if w in xy:
-                vals.setdefault(w, []).append(v)
+        rows = list(csv.DictReader(f))
+    if rows and prop not in rows[0]:  # field-report counts / contacts (well_correlation petro/reports.py, item 22b)
+        rp = base + "_petro/reports_summary.csv"
+        if os.path.exists(rp):
+            with open(rp, newline="") as f:
+                rows = [dict(r, Zone=zone) for r in csv.DictReader(f)]
+    for r in rows:
+        if zone and r.get("Zone") != zone:
+            continue
+        try:
+            v = float(r.get(prop, ""))
+        except (TypeError, ValueError):
+            continue
+        w = r.get("Well")
+        if w in xy:
+            vals.setdefault(w, []).append(v)
     out = []
     for w, vs in vals.items():
         v = float(np.sum(vs)) if (zone is None and prop in ("NetPay_TVD", "NetRes_TVD", "PHIH_pay", "PHIH_res", "SoPhiH",

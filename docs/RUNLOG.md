@@ -363,4 +363,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
   geoharmonic_link` (+ dev/build_qgis_plugin.py, dev/fakeqgis), arbitrary seismic section from a QGIS line, View menu
   entries. Protocol tested between two processes (selection, polygon, section line, section cursor round trip). Item 21
   done.
+- Item 22 done (well_correlation v0.12.0, Seismic v0.44.0): `petro/logml.py` - curve prediction (GBM + quantile P10 / P90)
+  with depth-blocked CV (synthetic: random K-fold R2 0.22 vs blocked 0.17 - the leakage the blocking removes; blind well
+  RMSE 4.4 us/ft against an irreducible 4.1, band covers 80 %), GMM / k-means electrofacies (100 % on synthetic facies);
+  `petro/reports.py` - report tables + text keyword extraction, pressure gradients + contact (2050.3 m vs 2050 true),
+  Haworth gas ratios (Tui-1 3550-3750 m: median wetness 14 %, gas / condensate), core-log calibration, Archie m / n fits.
 

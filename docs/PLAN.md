@@ -474,7 +474,7 @@ all consume their per-zone results. Design decisions (Chris can override):
    Tests: layer state save/restore, contours never cross a fault polygon, label boxes do not overlap, cokriging against an analytic case (secondary perfectly correlated -> matches
    the secondary trend; uncorrelated -> matches kriging), LOO numbers, add-wells updates only affected grids.
 
-22. **Petrophysics analytics + field reports** - status: todo
+22. **Petrophysics analytics + field reports** - status: done (run 5, 2026-11-24: well_correlation v0.12.0 `petro/logml.py` (22a), `petro/reports.py` (22b), section tracks FAC + DTP, Petrophysics window buttons, map hub posts report counts / contacts (Seismic v0.44.0). Not done: report posting as markers on the log section, MICP -> top seal (item 27c consumes it))
    22a. ML on logs (item 13 models, numpy GBM / RF): predict missing curves (DT, RHOB, Vs) with depth-blocked CV
         and uncertainty, electrofacies (k-means / Gaussian mixture in numpy) with facies logs to the section and map,
         petro-to-seismic property prediction feeding 21e.

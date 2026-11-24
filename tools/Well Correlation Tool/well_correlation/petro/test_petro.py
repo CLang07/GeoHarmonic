@@ -723,3 +723,167 @@ def run_gui(check, tmp):
     except Exception as e:  # pragma: no cover - only if the mock cannot build the main window
         check(False, f"20e: main window under the mock failed: {type(e).__name__}: {e}")
     check(os.path.isdir(petro_dir(fwd)), "20e: results folder exists")
+    fz = dlg.run_facies(["GR", "RHOB", "NPHI"], 3, "kmeans")
+    tf = os.path.join(tmp, "wcr.txt")
+    with open(tf, "w") as fh:
+        fh.write("Gas show at 1010 m. DST 1 over 1002 - 1030 m flowed gas.\n")
+    recs = dlg.import_report(tf)
+    check(fz["counts"].sum() > 100 and len(recs) == 2 and "FAC" in TRACKS, "22 GUI: electrofacies + report import from the "
+          "Petrophysics window")
+
+
+def _ml_project(tmp, seed=5):
+    """4 wells: smooth correlated noise in the inputs (a 'key' random CV can memorise) + DT from the rocks."""
+    from ..project import Project
+    rng = np.random.default_rng(seed)
+    root = os.path.join(tmp, "ml_proj")
+    truth = {}
+
+    def smooth(n, L):
+        e = rng.standard_normal(n + 4 * L)
+        k = np.exp(-0.5 * (np.arange(-2 * L, 2 * L + 1) / L) ** 2)
+        v = np.convolve(e, k / k.sum(), "same")[2 * L:2 * L + n]
+        return v / v.std()
+
+    for wi, name in enumerate(["M-1", "M-2", "M-3", "M-4"]):
+        d = os.path.join(root, "wells", name, "las")
+        os.makedirs(d)
+        z = np.arange(1000.0, 1600.0, 0.1524)
+        n = z.size
+        fac = (np.sin(z / (7.0 + wi)) > 0.2).astype(float) + (np.sin(z / 23.0 + wi) > 0.6)
+        gr = np.choose(fac.astype(int), [30.0, 75.0, 120.0]) + 4 * rng.standard_normal(n)
+        rhob = np.choose(fac.astype(int), [2.25, 2.45, 2.58]) + 0.015 * rng.standard_normal(n)
+        nphi = np.choose(fac.astype(int), [0.20, 0.24, 0.33]) + 0.01 * rng.standard_normal(n)
+        key = smooth(n, 15)
+        gr = gr + 3 * key
+        resid = 4 * smooth(n, 15)  # smooth, unrelated to the inputs
+        dt = 40 + 110 * nphi + 25 * (2.65 - rhob) + resid + 1.0 * rng.standard_normal(n)
+        truth[name] = (z, dt, fac)
+        curves = {"GR": gr, "RHOB": rhob, "NPHI": nphi, "LLD": 10 ** (1.2 - 0.8 * fac + 0.05 * rng.standard_normal(n))}
+        if name != "M-4":
+            curves["DT"] = dt
+        write_las(os.path.join(d, f"{name}.las"), name, z, curves, {"NPHI": "V/V", "DT": "US/F"})
+    with open(os.path.join(root, "wells_header.csv"), "w") as fh:
+        fh.write("Well,UWI,Latitude,Longitude,Elevation_m,Elev_Ref,TD_m\n" + "".join(
+            f"M-{k},{k},-39.{60 + k},173.3,0,KB,1600\n" for k in range(1, 5)))
+    p = Project.from_folder(root)
+    p.save(os.path.join(root, "ml.wcproj.json"))
+    return Project.open(os.path.join(root, "ml.wcproj.json")), truth
+
+
+def run_ml_reports(check, tmp):
+    """22a + 22b."""
+    from . import logml as ML
+    from . import reports as R
+    from .store import load_curves, petro_dir
+    p, truth = _ml_project(tmp)
+    models, validation = ML.analytics()
+    X, y, d, ws = ML.gather(p, "DT", ["GR", "RHOB", "NPHI"])
+    sel = np.arange(0, len(y), 3)
+    X, y, d, ws = X[sel], y[sel], d[sel], [ws[i] for i in sel]
+    rf = models.RandomForest(n_estimators=40, max_depth=14, min_samples_leaf=1, seed=0)
+    pr = validation.cross_val_predict(rf, X, y, validation.kfold(len(y), 5))
+    pb = validation.cross_val_predict(rf, X, y, ML.blocked_splits(d, ws, 5, 30.0, 10.0))
+    r_rand, r_blk = validation.r2(y, pr), validation.r2(y[np.isfinite(pb)], pb[np.isfinite(pb)])
+    check(r_rand > r_blk + 0.03, f"22a: leakage check - random K-fold R2 {r_rand:.3f} flatters vs depth-blocked {r_blk:.3f}")
+    folds = list(ML.blocked_splits(d, ws, 5, 30.0, 10.0))
+    gap_ok = True
+    for tr, te in folds:
+        for w in set(ws[i] for i in te):
+            ti = [i for i in te if ws[i] == w]
+            tri = [i for i in tr if ws[i] == w]
+            if tri:
+                dist = np.min(np.abs(np.subtract.outer(d[tri], d[ti])))
+                gap_ok &= bool(dist >= 10.0 - 0.5)
+    check(all(len(set(tr) & set(te)) == 0 for tr, te in folds) and gap_ok, "22a: blocked folds disjoint, >= 10 m buffer "
+          "between same-well training and test samples")
+    rep = ML.predict_curve(p, "DT", ["GR", "RHOB", "NPHI"], max_rows=6000, k=4)
+    irreducible = float(np.sqrt(4.0 ** 2 + 1.0))  # the smooth residual + noise the inputs cannot explain
+    check(rep["predicted"].get("M-4", 0) > 3000 and rep["cv_rmse"] < 1.2 * irreducible,
+          f"22a: DT predicted in M-4 ({rep['predicted'].get('M-4')} samples); blocked CV RMSE {rep['cv_rmse']:.2f} us/ft "
+          f"(irreducible {irreducible:.2f}), R2 {rep['cv_r2']:.2f}")
+    z, dt, fac = truth["M-4"]
+    dz, cv = load_curves(p, "M-4")
+    pred = np.interp(z, dz, cv["DT_PRED"])
+    lo, hi = np.interp(z, dz, cv["DT_P10"]), np.interp(z, dz, cv["DT_P90"])
+    rm = float(np.sqrt(np.nanmean((pred - dt) ** 2)))
+    cover = float(np.nanmean((dt >= lo) & (dt <= hi)))
+    fin = np.isfinite(pred)
+    check(rm < 10.0 and np.all(lo[fin] <= pred[fin] + 1e-6) and np.all(pred[fin] <= hi[fin] + 1e-6) and 0.5 < cover < 0.98,
+          f"22a: blind well M-4: RMSE {rm:.1f} us/ft, P10-P90 band covers {100 * cover:.0f} %")
+    f = ML.electrofacies(p, ["GR", "RHOB", "NPHI"], k=3, method="gmm")
+    lab = f["labels"]["M-1"]
+    z1, _, fac1 = truth["M-1"]
+    w1 = p.load_well("M-1")
+    tf = np.interp(w1.depth, z1, fac1)
+    ok = np.isfinite(lab) & (np.abs(tf - np.round(tf)) < 1e-6)
+    acc = float(np.mean(lab[ok] == np.round(tf[ok])))
+    check(acc > 0.9 and f["centers"][0, 0] < f["centers"][-1, 0], f"22a: GMM electrofacies recover the 3 synthetic facies "
+          f"({100 * acc:.0f} % of samples)")
+    km = ML.electrofacies(p, ["GR", "RHOB", "NPHI"], k=3, method="kmeans", save=False)
+    check(km["counts"].sum() > 10000, "22a: k-means electrofacies")
+    _, cv1 = load_curves(p, "M-1")
+    check("FACIES" in cv1, "22a: FACIES curve saved for the section / map")
+    # ---- 22b reports
+    text = ("Gas show at 2,345 m MD with background gas rising to 4 %. Oil staining and fluorescence 2410-2418 mMD. "
+            "DST 1 over 2450 - 2462 m flowed gas at 5.2 MMscf/d. Conventional core no. 2 cut from 7,690 ft. "
+            "The sandstone is water bearing below 2500 m.")
+    hits = R.extract_from_text(text, "T-1")
+    kinds = [(h["kind"], round(h["top"], 1), round(h["base"], 1)) for h in hits]
+    check(("gas show", 2345.0, 2345.0) in kinds and ("oil show", 2410.0, 2418.0) in kinds and ("test", 2450.0, 2462.0) in kinds
+          and ("core", round(7690 * 0.3048, 1), round(7690 * 0.3048, 1)) in kinds and all(h["flag"] for h in hits),
+          f"22b: report text parsed {kinds}")
+    rng = np.random.default_rng(2)
+    zt = np.linspace(1950, 2150, 25)
+    gwc = 2050.0
+    pw = 20.0 + 0.0102 * (zt - 1950)
+    pg = 20.0 + 0.0102 * (gwc - 1950) + 0.0025 * (zt - gwc)
+    pres = np.where(zt < gwc, pg, pw) + 0.004 * rng.standard_normal(zt.size)
+    fg = R.fluid_gradients(zt, pres)
+    check(len(fg["legs"]) == 2 and fg["legs"][0][4] == "gas" and fg["legs"][1][4] == "water" and abs(fg["contact"] - gwc) < 3.0,
+          f"22b: pressure gradients gas {fg['legs'][0][2]:.4f} / water {fg['legs'][1][2]:.4f} MPa/m, contact "
+          f"{fg['contact']:.1f} m (true {gwc})")
+    one = R.fluid_gradients(zt, pw)
+    check(len(one["legs"]) == 1 and one["contact"] is None and one["legs"][0][4] == "water", "22b: single water leg")
+    gr_ = R.gas_ratios([1000, 100], [0.5, 30], [0.1, 20], 0.05, 0.05, 0.0, 0.0)
+    check(gr_["zone"][0] == "very dry gas" and gr_["zone"][1] in ("oil", "gas / oil", "gas / condensate"), "22b: Haworth gas ratios")
+    here = os.path.dirname(os.path.abspath(__file__))
+    mg = os.path.normpath(os.path.join(here, "..", "..", "..", "..", "data", "nz", "wells", "Tui-1", "mudlog",
+                                       "Tui-1_Chrom_1502m_3902m.csv"))
+    if os.path.exists(mg):
+        g = R.read_mudgas(mg)
+        rr = R.gas_ratios(g["C1"], g["C2"], g["C3"], g["IC4"], g["NC4"], g["IC5"], g["NC5"])
+        deep = (g["DEPTH"] > 3550) & (g["DEPTH"] < 3750)
+        z_ = list(rr["zone"][deep])
+        check(len(g["DEPTH"]) > 1000, f"22b: Tui-1 mud gas read ({len(g['DEPTH'])} samples); 3550-3750 m: median Wh "
+              f"{np.nanmedian(rr['Wh'][deep]):.1f} %, most common zone '{max(set(z_), key=z_.count) if z_ else '-'}'")
+    cm = np.arange(1010.0, 1100.0, 1.0)
+    w = p.load_well("M-1")
+    phi_log = 0.4 - 0.1 * np.asarray(w.logs["RHOB"])  # a stand-in porosity log
+    core_phi = np.interp(cm - 1.2, w.depth, phi_log) * 0.95 + 0.01 + 0.002 * rng.standard_normal(cm.size)
+    cal = R.core_log_calibration(w.depth, phi_log, cm, core_phi)
+    check(abs(cal["shift"] + 1.2) < 0.2 and abs(cal["b"] - 0.95) < 0.1 and cal["r"] > 0.9,
+          f"22b: core-log calibration: depth shift {cal['shift']:+.2f} m (true -1.2), slope {cal['b']:.2f}")
+    phi = np.linspace(0.08, 0.3, 15)
+    ff = 1.0 / phi ** 1.9 * np.exp(0.02 * rng.standard_normal(15))
+    m, a = R.fit_archie_m(phi, ff)
+    m2, a2 = R.fit_archie_m(phi, 0.8 / phi ** 2.1, free_a=True)
+    n_ = R.fit_archie_n(np.linspace(0.2, 1, 10), np.linspace(0.2, 1, 10) ** -2.2)
+    check(abs(m - 1.9) < 0.05 and abs(m2 - 2.1) < 1e-6 and abs(a2 - 0.8) < 1e-6 and abs(n_ - 2.2) < 1e-9,
+          f"22b: Archie m from formation factors ({m:.3f}), free a, n from resistivity index")
+    cfile = os.path.join(tmp, "cores.csv")
+    with open(cfile, "w") as fh:
+        fh.write("Well,Depth,Porosity,Perm (mD),Grain density\nM-1,3320.5,21.5,150,2.65\nM-1,3321.5,18.0,45,2.66\n")
+    cores = R.read_table(cfile, "core", depth_unit="ft")
+    check(abs(cores[0]["md"] - 3320.5 * 0.3048) < 1e-9 and abs(cores[0]["porosity"] - 0.215) < 1e-12 and cores[1]["perm"] == 45.0,
+          "22b: core table (feet, % porosity, column aliases)")
+    pfile = os.path.join(tmp, "mdt.csv")
+    with open(pfile, "w") as fh:
+        fh.write("Well,MD,TVDSS,Pressure (psi)\n" + "".join(f"M-2,{zz + 30},{zz},{pp / 0.00689475729:.2f}\n" for zz, pp in zip(zt, pres)))
+    prs = R.read_table(pfile, "pressure")
+    check(abs(prs[0]["pressure"] - pres[0]) < 1e-3, "22b: pressure table psi -> MPa")
+    R.save_reports(p, hits + cores + prs + [{"kind": "contact", "well": "M-2", "contact": fg["contact"]}])
+    with open(os.path.join(petro_dir(p), "reports_summary.csv")) as fh:
+        txt = fh.read()
+    check("M-2" in txt and "Contact_TVDSS" in txt and len(R.load_reports(p, "M-1")) == 2, "22b: reports saved (JSON + summary "
+          "for the map hub)")

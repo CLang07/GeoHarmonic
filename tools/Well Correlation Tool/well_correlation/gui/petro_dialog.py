@@ -98,7 +98,11 @@ class PetroDialog(QtWidgets.QDialog):
                          ("Interpret section wells", lambda *_: self.run_interp(self.project.section_wells())),
                          ("Interpret all wells", lambda *_: self.run_interp(list(self.project.wells))),
                          ("Mineral solver", lambda *_: self.run_multimin()), ("Monte Carlo", lambda *_: self.run_mc()),
-                         ("Rock physics", lambda *_: self.run_rockphysics()), ("Show on map hub", lambda *_: self.show_on_hub())):
+                         ("Rock physics", lambda *_: self.run_rockphysics()),
+                         ("Predict DT (ML)", lambda *_: self._safe(lambda: self.run_predict("DT", ["GR", "RHOB", "NPHI", "RDEEP"]))),
+                         ("Electrofacies", lambda *_: self._safe(lambda: self.run_facies(["GR", "RHOB", "NPHI", "RDEEP"], 4))),
+                         ("Import report...", lambda *_: self._import_dialog()),
+                         ("Show on map hub", lambda *_: self.show_on_hub())):
             b = QtWidgets.QPushButton(text)
             b.clicked.connect(fn)
             top.addWidget(b)
@@ -322,6 +326,76 @@ class PetroDialog(QtWidgets.QDialog):
         self._msg("rock physics: Vs from " + "; ".join(self.rp["vs_source"]))
         self.refresh_results()
         return self.rp
+
+    # ------------------------------------------------------------------ 22a / 22b
+    def _safe(self, fn):
+        try:
+            return fn()
+        except Exception as e:
+            self._msg(f"{type(e).__name__}: {e}")
+            return None
+
+    def run_predict(self, target, inputs, method="gbm"):
+        from ..petro import logml
+        self._busy(True)
+        try:
+            rep = logml.predict_curve(self.project, target, inputs, method=method)
+        finally:
+            self._busy(False)
+        self.text.setPlainText(f"{target} from {', '.join(inputs)} ({method}), trained on {len(rep['wells'])} wells, "
+                               f"{rep['n_train']} samples\ndepth-blocked CV ({rep['block_m']:g} m blocks, {rep['buffer_m']:g} m "
+                               f"buffer): R2 {rep['cv_r2']:.3f}, RMSE {rep['cv_rmse']:.3g}\npredicted where missing: "
+                               + ", ".join(f"{w} ({n})" for w, n in rep["predicted"].items()))
+        self._msg(f"{target} predicted in {len(rep['predicted'])} wells (section track DTP)")
+        self._refresh_section()
+        return rep
+
+    def run_facies(self, curves, k=4, method="gmm"):
+        from ..petro import logml
+        f = logml.electrofacies(self.project, curves, k, method)
+        lines = [f"Electrofacies ({method}, k={k}) on {', '.join(curves)}:"]
+        for j, c in enumerate(f["centers"]):
+            lines.append(f"  facies {j}: " + ", ".join(f"{n} {v:.3g}" for n, v in zip(curves, c)) + f"  ({f['counts'][j]} samples)")
+        self.text.setPlainText("\n".join(lines))
+        self._msg("FACIES curves saved (section track FAC)")
+        self._refresh_section()
+        return f
+
+    def import_report(self, path, kind=None, well=None):
+        """A table (show / test / core / micp / pressure) or a text / PDF report (keyword extraction) for `well`."""
+        from ..petro import reports as R
+        well = well or self.well
+        if kind:
+            recs = R.read_table(path, kind, well)
+        else:
+            text = R.pdf_text(path) if path.lower().endswith(".pdf") else open(path, errors="replace").read()
+            if text is None:
+                raise ValueError("PDF text needs pypdf (optional) - save the report as text instead")
+            recs = R.extract_from_text(text, well)
+        if kind == "pressure":
+            for w in {r["well"] for r in recs}:
+                z = [r["tvdss"] if r.get("tvdss") is not None else r["md"] for r in recs if r["well"] == w]
+                pr = [r["pressure"] for r in recs if r["well"] == w]
+                if len(z) >= 4:
+                    g = R.fluid_gradients(z, pr)
+                    recs.append({"kind": "contact", "well": w, "contact": g["contact"], "legs": g["legs"]})
+        R.save_reports(self.project, recs)
+        self.text.setPlainText("\n".join(f"{r.get('kind')}: {r.get('well')} {r.get('top', r.get('md'))} "
+                                         f"{r.get('flag', '')} {r.get('text', '')[:120]}" for r in recs))
+        self._msg(f"{len(recs)} report records imported")
+        return recs
+
+    def _import_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Field report", "", "Tables / text (*.csv *.xlsx *.txt *.pdf)")
+        if not path:
+            return
+        kind = None
+        if path.lower().endswith((".csv", ".xlsx")):
+            kind, ok = QtWidgets.QInputDialog.getItem(self, "Report table", "Kind", ["show", "test", "core", "micp", "pressure"],
+                                                      0, False)
+            if not ok:
+                return
+        self._safe(lambda: self.import_report(path, kind))
 
     def _refresh_section(self):
         w = self.project.wells.get(self.well)

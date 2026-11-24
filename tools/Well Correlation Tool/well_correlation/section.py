@@ -23,8 +23,11 @@ TRACKS = {
     "PHI": ("Petro porosity", [("PHIE", 0.5, 0, False, "#1f4fbf", 1.2), ("BVW", 0.5, 0, False, "#00a0a0", 1.0)]),
     "SW": ("Petro Sw", [("SW", 1, 0, False, "#c0161b", 1.2)]),
     "PERM": ("Petro perm", [("PERM", 0.01, 10000, True, "#7a2fb8", 1.1)]),
+    "FAC": ("Electrofacies", [("FACIES", -0.5, 7.5, False, "#333333", 1.4)]),
+    "DTP": ("Predicted DT (P10-P90)", [("DT_P10", 140, 40, False, "#c9a0e8", 0.8), ("DT_P90", 140, 40, False, "#c9a0e8", 0.8),
+                                       ("DT_PRED", 140, 40, False, "#7a2fb8", 1.3)]),
 }
-PETRO_FAMILIES = {"VSH", "PHIE", "BVW", "SW", "PERM"}
+PETRO_FAMILIES = {"VSH", "PHIE", "BVW", "SW", "PERM", "FACIES", "DT_PRED", "DT_P10", "DT_P90"}
 HC_COLOR = "#3cb043"
 SAND_COLOR = "#f2d64b"
 SHALE_COLOR = "#9aa48a"

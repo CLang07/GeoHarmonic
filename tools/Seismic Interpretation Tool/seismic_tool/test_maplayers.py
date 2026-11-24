@@ -95,6 +95,11 @@ def run(check, tmp):
     avg = {w: v for w, _, _, v in ML.petro_values(proj, "PHIE_res")}
     check(allz["W-1"] == 4.0 and abs(avg["W-1"] - (0.13 + 0.11) / 2) < 1e-9, "21b: all zones = sum of thickness-type "
           "values, mean of averages")
+    with open(os.path.join(d, "wells_petro", "reports_summary.csv"), "w") as fh:
+        fh.write("Well,Shows,Tests,Cores,Pressures,Contact_TVDSS\nW-1,3,1,0,0,\nW-2,0,0,2,5,2050.3\n")
+    sh = {w: v for w, _, _, v in ML.petro_values(proj, "Shows")}
+    check(sh == {"W-1": 3.0, "W-2": 0.0} and ML.petro_values(proj, "Contact_TVDSS")[0][3] == 2050.3,
+          "22b: field-report counts / contacts posted on the map hub")
     pl = st2.add("petro", "SoPhiH A", src={"property": "SoPhiH", "zone": "A"})
     pts = [q for q in ML.render(st2) if q[0] == "points" and q[1] == pl][0]
     sizes = np.asarray(pts[5])

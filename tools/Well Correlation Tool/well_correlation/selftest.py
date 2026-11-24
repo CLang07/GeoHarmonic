@@ -143,6 +143,7 @@ def run():
         fwd = test_petro.run_interp(check, tmp)
         test_petro.run_multimin(check, tmp, fwd)
         test_petro.run_rockphysics(check, tmp, fwd)
+        test_petro.run_ml_reports(check, tmp)
         # ---- cartography (PLAN 21f)
         from . import test_carto
         test_carto.run(check, tmp)
