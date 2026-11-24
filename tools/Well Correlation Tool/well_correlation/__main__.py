@@ -8,6 +8,8 @@
     python -m well_correlation --dlisinfo FILE.dlis      list logical files, frames, channels
     python -m well_correlation --dlis2las IN.dlis OUT_DIR [--arrays]   one LAS 2.0 per DLIS frame
     python -m well_correlation --checkshot IN.dlis OUT.csv            time-depth table from a CSAT/VSI DLIS
+    python -m well_correlation --petroqc PROJECT [WELL ...] [--out DIR]  tool / vendor / resolution + curve QC report
+    python -m well_correlation --tooltable OUT.json                     write the editable logging-tool table
 """
 import argparse
 import os
@@ -26,7 +28,27 @@ def main(argv=None):
     ap.add_argument("--dlis2las", nargs=2, metavar=("IN", "OUT_DIR"))
     ap.add_argument("--arrays", action="store_true", help="--dlis2las: also write array channels (one column each)")
     ap.add_argument("--checkshot", nargs=2, metavar=("IN", "OUT_CSV"))
+    ap.add_argument("--petroqc", nargs="+", metavar=("PROJECT", "WELL"))
+    ap.add_argument("--out", metavar="DIR", help="--petroqc: output folder (default <project>_petro)")
+    ap.add_argument("--tooltable", metavar="OUT_JSON")
     a = ap.parse_args(argv)
+
+    if a.tooltable:
+        from .petro.tools import write_tool_table
+        print("wrote", write_tool_table(a.tooltable))
+        return
+    if a.petroqc:
+        from .project import Project
+        from .petro import qc
+        p = Project.open(a.petroqc[0])
+        if a.out:
+            p.petro_out = a.out
+        reps = qc.qc_project(p, a.petroqc[1:] or None)
+        for r in reps.values():
+            print(qc.format_report(r))
+        from .petro.store import petro_dir
+        print("\nreports + QC curves in", petro_dir(p))
+        return
 
     if a.dlisinfo:
         from .dlis import DlisFile

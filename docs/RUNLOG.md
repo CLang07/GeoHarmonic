@@ -300,3 +300,10 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - Chris has QGIS (no ArcGIS Pro) and wants it interactive. Added PLAN 21h: live shared GeoPackage + GeoTIFF with
   overviews, a QGIS plugin (layers + styles, auto-refresh), and a localhost two-way message link (selection, click
   to open, draw line -> seismic section, draw polygon -> prospect, cursor marker). No code changed.
+
+## 2026-11-24 - run 5 (scheduled, started 07:18 UTC) - PLAN item 20 (in progress)
+- 20a done (well_correlation v0.6.0): new package `well_correlation/petro/` - tool / vendor / service identification
+  (DLIS TOOL objects, mnemonics, file-name services, descriptions; editable tool table), wireline vs LWD, effective
+  vertical resolution, curve QC (gaps, flat lines, spikes, bad hole, GR depth shift between runs, splices), bed
+  boundaries + thin-bed flags; CLI `--petroqc`, `--tooltable`. Real data: Tui-1 HLLD -> HALS from the DLIS TOOL object
+  (SLB wireline), Kiwi-1 = SLB D&M LWD (ARC), Maui-5 DLL / DIL / LDL / CNL / BHC from LAS file names and mnemonics.

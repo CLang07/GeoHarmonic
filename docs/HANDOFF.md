@@ -309,6 +309,23 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   Tui-1 checkshot (main survey): 11 levels 1897-3900 m MD, TWT 1685-2806 ms. Pateke-2 checkshot:
   SEIS_CSI_037PNP.DLIS (27 levels); the CSI_0xx files are cased-hole GR/CCL logs, not checkshots.
 
+- `petro/` (PLAN 20, v0.6+): results in `<project>_petro/` (`store.py`: `petro_dir(project, create, override)` -
+  `project.petro_out` overrides the folder, used by tests and the real-data runs so nothing is written into data/;
+  `save_curves` merges curves into `<well>.npz` on the composite MD grid (`replace_prefix` drops old QC_* first),
+  `load_curves`, `save_json`). `tools.py` (20a): `DEFAULT_TOOLS` table (vendor, desc, kind laterolog / induction /
+  propagation / microresistivity / density / ..., conveyance, families, distinctive mnemonics, aliases = service tokens
+  + DLIS generic / trademark names, typical vertical resolution m + per-mnemonic overrides, notes such as neutron
+  matrix), merged with `<project>_petro/tool_table.json`; `file_evidence` (DLIS ORIGIN PRODUCER-NAME + TOOL objects
+  and their CHANNELS, LAS SRVC / OS lines, file-name tokens, LWD vs wireline from drilling channels / D&M / LWD-only
+  mnemonics vs TENS/CS), `identify_curve` (order: DLIS tool > mnemonic > file-name service > description > generic;
+  eff_res = max(tool res, 2 x sample)), `identify_well`, `used_curves` (maps well.sources strings back to raw curves).
+  `qc.py`: `gaps`, `flatline_mask`, `rolling_median`, `spike_mask` (running median/MAD + isolated 1-2 sample
+  excursions vs local roughness), `estimate_bit_size` (p40 snapped to standard sizes), `bad_hole` (CALI - BS > 1 in or
+  |DRHO| > 0.15), `depth_shift` (detrended z-scored xcorr, parabolic; add shift to z), `bed_boundaries` (|d/dz| peaks
+  of the finest-resolution curve), `bed_thickness_curve`, `splice_report`, `well_qc` (report dict + QC_BADHOLE,
+  QC_SPIKE_<fam>, QC_THIN_<fam>, BED_THICK, BS_USED curves), `qc_project` (+ qc_summary.csv), `format_report`.
+  CLI `--petroqc PROJECT [WELL..] [--out DIR]`, `--tooltable OUT.json`. Tests `petro/test_petro.py` (`run_qc`).
+
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.
 - GUI: PySide6 imported before pyqtgraph; `pg.setConfigOptions(antialias=False, imageAxisOrder="row-major")`;

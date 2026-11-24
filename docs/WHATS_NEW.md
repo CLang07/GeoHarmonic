@@ -520,3 +520,17 @@ Interpret > Well tie has a second button row:
 - Saved with the project (`<project>_seismic\horizons`).
 - Known limits: tracking runs in the GUI thread (wait cursor) - a full 20 GB survey could take a minute;
   2D horizons are not yet tied to 3D horizons; no fault awareness yet (item 2).
+
+## Petrophysics (PLAN item 20, Well Correlation Tool v0.6+, run 5 - 24 Nov 2026)
+20a Tool / vendor / resolution + curve QC (no GUI yet - 20e adds the Petrophysics window):
+- `python -m well_correlation --petroqc "NZ Well Correlation.wcproj.json"` (or name wells after it) prints a report per
+  well and writes `<project>_petro/qc/<well>.json`, `qc_summary.csv` and QC curves (bad hole, spikes, thin-bed flags,
+  bed thickness) in `<project>_petro/<well>.npz`.
+- Per curve: tool (HALS / HRLA / DLL / AIT / DIL / TLD / LDL / CNL / DSI / BHC / NGS / ARC / ADN / HDIL / ZDL / CN /
+  XMAC / MPR / ACRt / EWR ...), vendor, kind (laterolog vs induction vs LWD propagation, ...), wireline vs LWD and why,
+  typical vertical resolution and the effective one (never finer than 2 samples).
+- Edit the tool table: `python -m well_correlation --tooltable my_tools.json`, edit, save it as
+  `<project>_petro/tool_table.json` (entries merge over the defaults by name).
+- QC: gaps, flat lines per raw curve, spikes, bad hole (caliper vs bit size or |DRHO|), GR depth shift of each run vs
+  the longest one, splices the composite makes (level difference + shift), bed boundaries from the finest curve and
+  the share of beds each curve cannot resolve.

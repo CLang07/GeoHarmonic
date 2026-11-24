@@ -137,6 +137,9 @@ def run():
         # ---- DLIS reader (synthetic file + real Tui-1 files when present)
         from . import test_dlis
         test_dlis.run(check, tmp)
+        # ---- petrophysics (PLAN 20)
+        from .petro import test_petro
+        test_petro.run_qc(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
