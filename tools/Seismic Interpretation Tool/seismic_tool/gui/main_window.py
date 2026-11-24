@@ -201,6 +201,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.basemap.openLine.connect(lambda n: self.section.show("2D", n))
         self.basemap.openInline.connect(lambda v, il, xl: self.section.show("3D", v, "Inline", il))
         self.basemap.wellClicked.connect(lambda n: self.well_clicked(n))
+        self.basemap.mapClicked.connect(lambda x, y, t: self.layers_panel.identify(x, y, t) if self.layers_panel.stack else None)
         self._petro_strip = None
         self._hub_mtime = None
         self._hub_poll = QtCore.QTimer(self)  # the Well Correlation Tool's "Show on map hub" (PLAN 21b)

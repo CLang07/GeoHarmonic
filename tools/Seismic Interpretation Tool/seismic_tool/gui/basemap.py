@@ -18,6 +18,7 @@ class Basemap(QtWidgets.QWidget):
     openInline = QtCore.Signal(str, int, int)  # volume, inline, crossline (map click inside a survey)
     wellClicked = QtCore.Signal(str)  # well name (map hub: petro strip)
     polygonDrawn = QtCore.Signal(object)  # (xs, ys) when a drawn polygon is finished
+    mapClicked = QtCore.Signal(float, float, float)  # x, y, tolerance (map units) - identify vector features
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -464,6 +465,7 @@ class Basemap(QtWidgets.QWidget):
                 self.finish_polygon()
             return
         px = abs(vb.viewPixelSize()[0]) * 8  # click tolerance
+        self.mapClicked.emit(float(pt.x()), float(pt.y()), float(px))
         wname = self.well_at(pt.x(), pt.y(), px)
         if wname:
             self.wellClicked.emit(wname)

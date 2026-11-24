@@ -321,6 +321,24 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   display["map_style"]), `export_map(stack, path, title, subtitle, author, page, dpi, crs, ref_latlon, lon0,
   contour_interval, symbols)` (exact industry well symbols via carto.symbol_paths, legend = stack.legend()).
   LayersPanel: preset combo, Apply style, Export map.
+- `gis/` (21g, v0.42; numpy + struct / zlib / sqlite3 / xml only): `crs.py` (crs dicts {kind geographic / tm / lcc /
+  albers / merc, a, rf, unit (m per unit), lat0, lon0, k0, fe, fn (in the unit), lat1, lat2, datum, towgs84}; Snyder
+  formulas, TM inverse = series + 3 Newton steps (round trip exact far from the CM); forward / inverse / transform
+  (3-parameter datum shift via ECEF, NAD27 flagged approximate); from_epsg (4326 4269 4267 4167 2193 3857 5070 32139
+  2278 32040 UTM 326xx 327xx 269xx 267xx), from_wkt (OGC / ESRI), to_wkt (ESRI .prj), same). Verified against Snyder
+  LCC + Albers examples, EPSG OSGB TM and NAD27 Texas South Central examples. `shapefile.py` (read / write shp shx dbf
+  prj; Point / MultiPoint / LineString / Polygon (CW outer), ring_roles / group_rings), `geotiff.py` (write float32
+  strips, deflate, ModelPixelScale / Tiepoint, GeoKeys EPSG else .aux.xml WKT, overview IFDs (NewSubfileType 1); read
+  strips / tiles, none / deflate, predictor 2), `gpkg.py` (write_layer / read_layer / list_layers / has_rtree,
+  GeoPackageBinary + WKB, rtree when SQLite has it; write_kml / read_kml), `vector.py` (VectorLayer: load .shp / .gpkg /
+  .kml / .csv (WKT or X,Y), reproject, select(expr) ast-safe filter, categorized / graduated, simplified (iterative
+  Douglas-Peucker, cached), in_view (grid buckets), identify, npz cache; `layer_of(stack, lay)` reprojects to the
+  project CRS; `vector_primitives`), `plss.py` (parse_legal, find_section (CadNSDI field guesses), spot with footage
+  calls, synthetic_township), `export.py` (project_crs / set_project_crs (display crs_epsg | crs_wkt), layer_features,
+  export_stack -> GeoTIFFs + shapefiles + one GeoPackage + KML). maplayers kind "vector". mapexport: layout_boxes has a
+  locator box; export_map(graticule, locator, source, neatline), graticule_lines, save_template / load_template
+  (display["map_templates"]). LayersPanel: add_vector, set_crs, export_gis, goto_legal, identify (Basemap.mapClicked),
+  attribute_rows. Tests `test_gis.py` (run, run_export, run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

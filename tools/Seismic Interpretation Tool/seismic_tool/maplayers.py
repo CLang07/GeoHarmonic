@@ -22,8 +22,8 @@ import os
 
 import numpy as np
 
-KINDS = ("outline3d", "lines2d", "wells", "faults", "horizon", "grid", "contours", "polygons", "text", "petro")
-DEFAULT_Z = {"grid": 10, "horizon": 12, "contours": 20, "polygons": 30, "faults": 40, "outline3d": 50, "lines2d": 60,
+KINDS = ("outline3d", "lines2d", "wells", "faults", "horizon", "grid", "contours", "polygons", "text", "petro", "vector")
+DEFAULT_Z = {"grid": 10, "horizon": 12, "vector": 25, "contours": 20, "polygons": 30, "faults": 40, "outline3d": 50, "lines2d": 60,
              "wells": 70, "petro": 75, "text": 80}
 DEFAULT_STYLE = {
     "outline3d": {"color": (31, 119, 180), "width": 2.0},
@@ -41,6 +41,8 @@ DEFAULT_STYLE = {
                  "down": None},  # fault: heave polygons, hatched; ticks outward on the edges facing 'down' (N, E, SW
                                  # or an azimuth; per polygon "down" overrides; None = all edges)
     "text": {"color": (0, 0, 0), "size": 10},
+    "vector": {"color": (80, 80, 80), "width": 1.0, "fill": None, "by": None, "mode": "categorized", "classes": 5,
+               "labels": None, "filter": "", "size": 6, "symbol": "o", "simplify": True},  # gis/vector.py (21g)
     "petro": {"lut": "Rainbow (attributes)", "reverse": False, "size": 14, "labels": True, "mode": "bubbles",
               "pie_radius": None},  # mode bubbles | values | pies (mineral solver volumes, 21b)
 }
@@ -241,7 +243,8 @@ class LayerStack:
                 continue
             st = lay["style"]
             sym = {"outline3d": "line", "lines2d": "line", "faults": "line", "contours": "line", "polygons": "polygon",
-                   "wells": "point", "petro": "point", "text": "text", "grid": "ramp", "horizon": "ramp"}[lay["kind"]]
+                   "wells": "point", "petro": "point", "text": "text", "grid": "ramp", "horizon": "ramp",
+                   "vector": "line"}[lay["kind"]]
             if lay["kind"] == "petro" and st.get("mode") == "pies":
                 from .maphub import petro_pies, COMPONENT_COLORS
                 comps = sorted({c for q in petro_pies(self.project, lay["src"].get("zone")) for c in q[3]})
@@ -582,6 +585,14 @@ def render(stack, wells=None):
                     prim.append(("curve", lid, xc, yc, col(st["color"]), st["width"], "all"))
                     if st.get("labels", True):
                         prim.append(("text", lid, float(np.mean(x)), float(np.mean(y)), poly.get("name", ""), col(st["color"]), 9))
+            elif kind == "vector":
+                from .gis.vector import vector_primitives, layer_of
+                vl = layer_of(stack, lay)
+                pix = None
+                if vl is not None and st.get("simplify", True) and vl.n_vertices() > 20000:
+                    b = vl.bounds()
+                    pix = max(b[1] - b[0], b[3] - b[2]) / 3000.0 if b else None
+                prim += vector_primitives(stack, lay, None, pix)
             elif kind == "text":
                 for t in lay["src"].get("items", []):
                     prim.append(("text", lid, float(t["x"]), float(t["y"]), str(t["text"]), col(st["color"]), st["size"]))

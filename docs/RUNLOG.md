@@ -353,4 +353,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
   (300 dpi PDF / PNG with title block, legend, scale bar, north arrow) and the Well Correlation map. Checks: hillshade of
   a plane = analytic, contours never cross a fault polygon, label boxes never overlap, spill depth of a cone with a
   saddle channel exact, fault-block gridding does not smear across the fault.
+- 21g done (Seismic v0.42.0): `seismic_tool/gis/` - projections (TM / UTM / NZTM, LCC, Albers, Mercator; WKT in / out;
+  EPSG table; NAD27 shift flagged approximate) verified against Snyder and EPSG examples to < 0.1 m (TM inverse round
+  trip 0.000 mm over NZ), shapefile / GeoTIFF / GeoPackage / KML read + write (round trips exact), generic vector layers
+  (filter, categorised / graduated styles, identify, Douglas-Peucker: 1M-vertex line simplified in ~1 s), PLSS legal
+  description spotting, GIS export of the map, page layout with locator, graticule, neatline, templates.
 

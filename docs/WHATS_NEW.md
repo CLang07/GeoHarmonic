@@ -612,4 +612,14 @@ residual-corrected map; Send to Analytics hands the well table to the Analytics 
   a grid with style blank = true is blanked inside them so contours stop at the faults.
 - Well Correlation Tool map: structure / isopach maps are now hillshaded with labels along the contours (set
   display "map" > "carto": false in the project file to get the old look).
+21g GIS + page layouts (v0.42.0) - Map layers > Add...:
+- Project coordinate system (EPSG): 2193 NZTM, UTM (326xx / 327xx / 269xx / 267xx), 32139 / 2278 Texas South Central,
+  32040 (NAD27), 5070 CONUS Albers, 4326 ... Needed for GIS export, lat / long graticule and reprojecting layers.
+- Vector layer: any shapefile / GeoPackage / KML / CSV (WKT or X,Y) - PLSS, counties, pipelines, leases, permits.
+  Reprojected from its .prj (NAD27 -> NAD83 is an approximate shift, flagged). Style in the project file: "by" field
+  (categorised, or "mode": "graduated"), "labels" field, "filter" e.g. "STATE == 'TX' and ACRES > 600", "fill".
+  Click a feature on the map: its attributes in the dock status line; Attribute table (with a filter).
+- Go to legal description: "660 FNL 1980 FWL Sec 14 T12N R3W" in a loaded PLSS sections layer (CadNSDI fields).
+- Export for QGIS / ArcGIS: GeoTIFFs (with overviews), shapefiles, one GeoPackage and a KML of the visible layers.
+- Export map...: now with a locator inset (red extent box), lat / long graticule, neatline and saved templates.
 

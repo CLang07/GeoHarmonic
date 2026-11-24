@@ -46,6 +46,11 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
                          ("Grid calculator...", lambda *_: self.grid_calc()),
                          ("Cross-check petrophysics vs maps (+ predicted maps, Analytics)...", lambda *_: self.cross_check()),
+                         ("Vector layer (shapefile / GeoPackage / KML / CSV)...", lambda *_: self._add_vector_dialog()),
+                         ("Project coordinate system (EPSG)...", lambda *_: self._crs_dialog()),
+                         ("Export for QGIS / ArcGIS (GeoTIFF, shapefile, GeoPackage, KML)...", lambda *_: self._export_gis_dialog()),
+                         ("Go to legal description (PLSS)...", lambda *_: self._legal_dialog()),
+                         ("Attribute table of the selected layer...", lambda *_: self._attr_dialog()),
                          ("New wells: import + petro + re-grid + tie...", lambda *_: self._add_wells_dialog())):
             a = m.addAction(text)
             a.triggered.connect(fn)
@@ -353,6 +358,141 @@ class LayersPanel(QtWidgets.QWidget):
                             if self.stack.project is not None else "")
         except Exception as e:
             self.status.setText(f"export failed: {e}")
+
+    # ------------------------------------------------------------------ GIS (21g)
+    def add_vector(self, path, name=None, style=None, table=None):
+        lid = self.stack.add("vector", name or os.path.splitext(os.path.basename(path))[0],
+                             src={"file": os.path.abspath(path), "table": table}, style=style)
+        from ..gis.vector import layer_of
+        vl = layer_of(self.stack, self.stack.get(lid))
+        msg = f"{len(vl)} features" if vl is not None else "could not read the file"
+        if vl is not None and vl.crs is None:
+            msg += " (no .prj: assumed in the project CRS)"
+        if self.stack.get(lid)["src"].get("approx_datum"):
+            msg += " - NAD27 -> NAD83 shift is approximate (no NADCON grids)"
+        self._apply(msg)
+        return lid
+
+    def set_crs(self, epsg=None, wkt=None):
+        from ..gis.export import set_project_crs
+        c = set_project_crs(self.stack.project, epsg, wkt)
+        from ..gis import vector as V
+        V._CACHE.clear()
+        self._apply(f"project CRS: {c['name']}")
+        return c
+
+    def export_gis(self, folder, epsg=None):
+        from ..gis.export import export_stack
+        out = export_stack(self.stack, folder, epsg=epsg)
+        self.status.setText(f"{len(out['files'])} files + GeoPackage + KML in {folder}" +
+                            ("; " + "; ".join(out["warnings"]) if out["warnings"] else ""))
+        return out
+
+    def goto_legal(self, text, lid=None):
+        """Spot a PLSS legal description in a vector layer (sections) and mark it with a text layer item."""
+        from ..gis.plss import spot
+        from ..gis.vector import layer_of
+        cands = [l for l in self.stack.layers if l["kind"] == "vector"] if lid is None else [self.stack.get(lid)]
+        for lay in cands:
+            vl = layer_of(self.stack, lay)
+            if vl is None:
+                continue
+            try:
+                r = spot(vl, text)
+            except ValueError:
+                continue
+            if r:
+                x, y, i = r
+                self.add_text(x, y, text.strip(), layer_name="Legal descriptions")
+                if self.basemap is not None:
+                    try:
+                        self.basemap.plot.getPlotItem().getViewBox().setRange(xRange=(x - 3000, x + 3000),
+                                                                             yRange=(y - 3000, y + 3000))
+                    except Exception:
+                        pass
+                return x, y
+        self.status.setText(f"not found: {text}")
+        return None
+
+    def identify(self, x, y, tol):
+        """Attribute row of the top-most visible vector feature at (x, y)."""
+        from ..gis.vector import layer_of
+        for lay in reversed(self.stack.ordered()):
+            if lay["kind"] != "vector" or not lay["visible"]:
+                continue
+            vl = layer_of(self.stack, lay)
+            if vl is None:
+                continue
+            i, row = vl.identify(x, y, tol)
+            if i is not None:
+                self.status.setText(f"{lay['name']} #{i}: " + ", ".join(f"{k}={v}" for k, v in list(row.items())[:8]))
+                return lay["id"], i, row
+        return None
+
+    def attribute_rows(self, lid, filter_expr=""):
+        from ..gis.vector import layer_of
+        vl = layer_of(self.stack, self.stack.get(lid))
+        if vl is None:
+            return [], []
+        idx = __import__("numpy").nonzero(vl.select(filter_expr))[0]
+        return vl.fields(), [vl.row(i) for i in idx]
+
+    def _add_vector_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Vector layer", "", "Vector (*.shp *.gpkg *.kml *.csv);;All (*)")
+        if path:
+            try:
+                self.add_vector(path)
+            except Exception as e:
+                self.status.setText(f"could not add {path}: {e}")
+
+    def _crs_dialog(self):
+        cur = (self.stack.project.display.get("crs_epsg") if self.stack.project is not None else None) or 2193
+        code, ok = QtWidgets.QInputDialog.getInt(self, "Project coordinate system", "EPSG code (2193 NZTM, 326xx UTM, "
+                                                 "32139 / 2278 Texas S Central, 5070 CONUS Albers ...)", int(cur), 1, 999999)
+        if ok:
+            try:
+                self.set_crs(code)
+            except Exception as e:
+                self.status.setText(str(e))
+
+    def _export_gis_dialog(self):
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Folder for the GIS files")
+        if folder:
+            try:
+                self.export_gis(folder)
+            except Exception as e:
+                self.status.setText(f"export failed: {e}")
+
+    def _legal_dialog(self):
+        t, ok = QtWidgets.QInputDialog.getText(self, "Legal description", "e.g. 660 FNL 1980 FWL Sec 14 T12N R3W")
+        if ok and t:
+            self.goto_legal(t)
+
+    def _attr_dialog(self):
+        lid = self.selected_id()
+        if not lid or self.stack.get(lid)["kind"] != "vector":
+            self.status.setText("select a vector layer first")
+            return
+        flt, ok = QtWidgets.QInputDialog.getText(self, "Attribute table", "Filter (optional), e.g. STATE == 'TX'")
+        if not ok:
+            return
+        try:
+            fields, rows = self.attribute_rows(lid, flt)
+        except Exception as e:
+            self.status.setText(str(e))
+            return
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle(f"{self.stack.get(lid)['name']} - {len(rows)} features")
+        lay = QtWidgets.QVBoxLayout(dlg)
+        t = QtWidgets.QTableWidget(min(len(rows), 5000), len(fields))
+        t.setHorizontalHeaderLabels(fields)
+        for i, r in enumerate(rows[:5000]):
+            for j, f in enumerate(fields):
+                t.setItem(i, j, QtWidgets.QTableWidgetItem(str(r[f])))
+        t.setSortingEnabled(True)
+        lay.addWidget(t)
+        dlg.resize(900, 500)
+        dlg.show()
 
     def crossplot(self):
         from .petro_strip import PetroCrossplotDialog

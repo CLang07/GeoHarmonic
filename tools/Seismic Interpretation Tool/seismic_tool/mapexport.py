@@ -31,11 +31,56 @@ def layout_boxes(page="A4 landscape", panel_frac=0.24, margin_in=0.4):
     gap = 0.012
     mapb = (mx, my, 1 - 2 * mx - pw - gap, 1 - 2 * my)
     px = 1 - mx - pw
-    title = (px, 1 - my - 0.22, pw, 0.22)
-    legend = (px, my + 0.2, pw, 1 - 2 * my - 0.22 - 0.2 - gap)
+    title = (px, 1 - my - 0.2, pw, 0.2)
+    locator = (px, 1 - my - 0.2 - gap - 0.2, pw, 0.2)
+    legend = (px, my + 0.2, pw, locator[1] - gap - (my + 0.2))
     scale = (px, my + 0.1, pw, 0.09)
     north = (px, my, pw, 0.09)
-    return {"map": mapb, "title": title, "legend": legend, "scale": scale, "north": north}
+    return {"map": mapb, "title": title, "locator": locator, "legend": legend, "scale": scale, "north": north}
+
+
+def save_template(project, name, settings):
+    """Named export settings (page, title, author, crs, graticule, locator, preset ...) in display["map_templates"]."""
+    project.display.setdefault("map_templates", {})[name] = dict(settings)
+    return name
+
+
+def load_template(project, name):
+    return dict((project.display.get("map_templates") or {})[name])
+
+
+def graticule_lines(c, x0, x1, y0, y1, n_target=5):
+    """Lat / long lines (map coordinates) covering the extent: {"lat": [(value, xs, ys)], "lon": [...]}, step in
+    degrees from 1/60 to 10 chosen for ~n_target lines."""
+    from .gis import crs as CRS
+    gx = np.linspace(x0, x1, 9)
+    gy = np.linspace(y0, y1, 9)
+    GX, GY = np.meshgrid(gx, gy)
+    la, lo = CRS.inverse(c, GX, GY)
+    lat_lo, lat_hi, lon_lo, lon_hi = float(la.min()), float(la.max()), float(lo.min()), float(lo.max())
+    span = max(lat_hi - lat_lo, lon_hi - lon_lo)
+    steps = [1 / 60, 2 / 60, 5 / 60, 10 / 60, 15 / 60, 0.5, 1.0, 2.0, 5.0, 10.0]
+    step = next((s_ for s_ in steps if span / s_ <= n_target), 10.0)
+    out = {"lat": [], "lon": [], "step": step}
+    for v in np.arange(np.ceil(lat_lo / step) * step, lat_hi, step):
+        lon = np.linspace(lon_lo, lon_hi, 60)
+        x, y = CRS.forward(c, np.full(lon.shape, v), lon)
+        out["lat"].append((float(v), x, y))
+    for v in np.arange(np.ceil(lon_lo / step) * step, lon_hi, step):
+        lat = np.linspace(lat_lo, lat_hi, 60)
+        x, y = CRS.forward(c, lat, np.full(lat.shape, v))
+        out["lon"].append((float(v), x, y))
+    return out
+
+
+def _dms(v, pos, neg):
+    h = pos if v >= 0 else neg
+    v = abs(v)
+    d = int(v)
+    m = int(round((v - d) * 60))
+    if m == 60:
+        d, m = d + 1, 0
+    return f"{d}\u00b0{m:02d}'{h}"
 
 
 def boxes_overlap(boxes):
@@ -92,7 +137,8 @@ def _draw_symbol(ax, x, y, kind, r, transform=None, color="k"):
 
 
 def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape", dpi=300, crs="",
-               ref_latlon=None, lon0=None, contour_interval=None, symbols=True):
+               ref_latlon=None, lon0=None, contour_interval=None, symbols=True, graticule=True, locator=True,
+               source="", neatline=True):
     """Draw the visible layers + furniture to PNG / PDF.  Returns {"path", "legend", "boxes"}."""
     import matplotlib
     matplotlib.use("Agg")
@@ -167,9 +213,34 @@ def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape
     for lab in ax.get_yticklabels():
         lab.set_rotation(90)
         lab.set_va("center")
+    pcrs = None
+    try:
+        from .gis.export import project_crs
+        pcrs = project_crs(stack.project) if stack.project is not None else None
+    except Exception:
+        pcrs = None
+    crs = crs or (pcrs["name"] if pcrs else "")
     if crs:
         ax.set_xlabel(f"Easting (m) - {crs}", fontsize=6)
         ax.set_ylabel("Northing (m)", fontsize=6)
+    if graticule and pcrs is not None and pcrs["kind"] != "geographic":
+        xl, yl = ax.get_xlim(), ax.get_ylim()
+        gr = graticule_lines(pcrs, xl[0], xl[1], yl[0], yl[1])
+        for v, gx_, gy_ in gr["lat"]:
+            ax.plot(gx_, gy_, color=(0.35, 0.35, 0.35), lw=0.4, ls=":", zorder=2)
+            ax.text(xl[0], np.interp(xl[0], gx_, gy_), _dms(v, "N", "S"), fontsize=5, ha="right", va="center",
+                    color=(0.3, 0.3, 0.3), clip_on=False)
+        for v, gx_, gy_ in gr["lon"]:
+            ax.plot(gx_, gy_, color=(0.35, 0.35, 0.35), lw=0.4, ls=":", zorder=2)
+            o = np.argsort(gy_)
+            ax.text(np.interp(yl[1], gy_[o], gx_[o]), yl[1], _dms(v, "E", "W"), fontsize=5, ha="center", va="bottom",
+                    color=(0.3, 0.3, 0.3), clip_on=False)
+        ax.set_xlim(xl)
+        ax.set_ylim(yl)
+        if ref_latlon is None and pcrs["kind"] == "tm":
+            from .gis import crs as CRS
+            la_, lo_ = CRS.inverse(pcrs, 0.5 * (xl[0] + xl[1]), 0.5 * (yl[0] + yl[1]))
+            ref_latlon, lon0 = (float(la_), float(lo_)), pcrs["lon0"]
     # wells with industry symbols + names
     if symbols and wells_lids and stack.project is not None:
         xl = ax.get_xlim()
@@ -195,6 +266,39 @@ def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape
         if text:
             tb.text(0.05, yy, text, fontsize=size, weight=weight, va="top", transform=tb.transAxes, wrap=True)
             yy -= 0.12 if size >= 8 else 0.1
+    if source:
+        tb.text(0.05, 0.04, f"Data: {source}", fontsize=5, va="bottom", transform=tb.transAxes)
+    if locator:
+        la = fig.add_axes(B["locator"])
+        la.set_xticks([])
+        la.set_yticks([])
+        ex, ey = [], []
+        if stack.project is not None:
+            for _, x, y in stack.project.wells():
+                ex.append(x)
+                ey.append(y)
+            for v in stack.project.volumes:
+                try:
+                    vx, vy = stack.project.volume(v["name"]).outline()
+                    la.plot(vx, vy, color=(0.4, 0.4, 0.4), lw=0.6)
+                    ex += list(vx)
+                    ey += list(vy)
+                except Exception:
+                    pass
+        if ex:
+            la.plot(ex, ey, ".", color=(0.3, 0.3, 0.3), ms=1.5)
+        xl, yl = ax.get_xlim(), ax.get_ylim()
+        la.add_patch(plt.Rectangle((xl[0], yl[0]), xl[1] - xl[0], yl[1] - yl[0], fill=False, ec="red", lw=1.2))
+        allx = ex + [xl[0], xl[1]]
+        ally = ey + [yl[0], yl[1]]
+        cxl, cyl = 0.5 * (min(allx) + max(allx)), 0.5 * (min(ally) + max(ally))
+        half = 0.6 * max(max(allx) - min(allx), max(ally) - min(ally), 1.0) * 1.5
+        la.set_xlim(cxl - half, cxl + half)
+        la.set_ylim(cyl - half, cyl + half)
+        la.set_aspect("equal", adjustable="box")
+        la.set_title("Location", fontsize=6)
+    if neatline:
+        fig.add_artist(plt.Rectangle((0.01, 0.01), 0.98, 0.98, fill=False, lw=1.2, transform=fig.transFigure))
     lg = fig.add_axes(B["legend"])
     lg.axis("off")
     lg.text(0.02, 0.98, "Legend", fontsize=8, weight="bold", va="top")
