@@ -159,6 +159,14 @@ class MainWindow(QtWidgets.QMainWindow):
             d.setWidget(w)
             self.addDockWidget(area, d)
             setattr(self, f"dock_{title.lower()}", d)
+        from .layers_dock import LayersPanel
+        self.layers_panel = LayersPanel(self.basemap)
+        self.dock_layers = QtWidgets.QDockWidget("Map layers", self)
+        self.dock_layers.setObjectName("Map layers")
+        self.dock_layers.setWidget(self.layers_panel)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.dock_layers)
+        self.tabifyDockWidget(self.dock_data, self.dock_layers)
+        self.dock_data.raise_()
         self.resizeDocks([self.dock_data, self.dock_basemap], [200, 500], QtCore.Qt.Vertical)
         self.resizeDocks([self.dock_basemap], [520], QtCore.Qt.Horizontal)
         self.progress = QtWidgets.QProgressBar()
@@ -253,6 +261,7 @@ class MainWindow(QtWidgets.QMainWindow):
         m.addSeparator()
         m.addAction(self.dock_data.toggleViewAction())
         m.addAction(self.dock_basemap.toggleViewAction())
+        m.addAction(self.dock_layers.toggleViewAction())
         m.addAction(self.dock_horizons.toggleViewAction())
         m.addAction(self.dock_faults.toggleViewAction())
         m.addSeparator()
@@ -350,6 +359,9 @@ class MainWindow(QtWidgets.QMainWindow):
         for w in p.wells():
             QtWidgets.QTreeWidgetItem(rw, [w[0]])
         self.tree.expandAll()
+        from ..maplayers import LayerStack
+        self.basemap.stack = LayerStack.load(p)  # map hub layers (PLAN 21a), saved in display["map_layers"]
+        self.layers_panel.set_stack(self.basemap.stack)
         self.basemap.set_project(p)
         self.section.set_project(p)
         self.horizon_dock.set_project(p)

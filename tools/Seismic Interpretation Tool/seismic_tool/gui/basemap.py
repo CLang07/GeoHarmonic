@@ -45,6 +45,9 @@ class Basemap(QtWidgets.QWidget):
         self.hz_range = None  # (vmin, vmax) of the last map, for the legend text
         self.wells = None  # wellindex.WellLayer
         self._label_items = []
+        self.stack = None  # maplayers.LayerStack: when set, the map is drawn from the layer stack (PLAN 21a)
+        self._layer_items = []
+        self.layer_errors = []
         self._label_timer = QtCore.QTimer(self)
         self._label_timer.setSingleShot(True)
         self._label_timer.setInterval(150)
@@ -56,12 +59,77 @@ class Basemap(QtWidgets.QWidget):
         self.project = project
         self.redraw()
 
+    def set_stack(self, stack):
+        """Draw the map from a maplayers.LayerStack (None = the fixed legacy basemap)."""
+        self.stack = stack
+        self.redraw()
+
+    def _wells_layer_on(self):
+        if self.stack is None:
+            return True
+        return any(l["kind"] == "wells" and l["visible"] and l["style"].get("labels", True) for l in self.stack.layers)
+
+    def draw_layers(self):
+        """(Re)draw the layer-stack primitives (keeps the horizon / grid / tie / current-line overlays)."""
+        for it in self._layer_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._layer_items = []
+        if self.stack is None:
+            return []
+        from PySide6 import QtGui
+        from ..maplayers import render
+        prims = render(self.stack)
+        self.layer_errors = [q for q in prims if q[0] == "error"]
+        order = {l["id"]: k for k, l in enumerate(self.stack.ordered())}
+        for q in prims:
+            kind, lid = q[0], q[1]
+            zval = -100 + order.get(lid, 0)  # all layers below the overlays (horizon map, grid, ties, current line)
+            if kind == "image":
+                it = pg.ImageItem(q[2])
+                it.setTransform(QtGui.QTransform(*q[3]))
+            elif kind == "curve":
+                it = pg.PlotCurveItem(q[2], q[3], connect=q[6], pen=pg.mkPen(q[4], width=q[5]))
+            elif kind == "points":
+                br = [pg.mkBrush(*c) for c in q[4]] if isinstance(q[4], list) else pg.mkBrush(*q[4])
+                sz = list(np.asarray(q[5], float)) if np.ndim(q[5]) else q[5]
+                it = pg.ScatterPlotItem(q[2], q[3], symbol=q[6], size=sz, brush=br, pen=pg.mkPen("w"))
+            elif kind == "text":
+                it = pg.TextItem(q[4], color=q[5][:3], anchor=(0, 1))
+                it.setPos(q[2], q[3])
+            else:
+                continue
+            it.setZValue(zval)
+            self.plot.addItem(it, ignoreBounds=(kind == "text"))
+            self._layer_items.append(it)
+        return prims
+
     def redraw(self):
         self.plot.clear()
         self._lines = {}
         self._current = None
+        self._layer_items = []
         p = self.project
         if not p:
+            return
+        if self.stack is not None:
+            self.stack.project = p
+            self._lines_for_clicks()
+            self.draw_layers()
+            from ..wellindex import WellLayer
+            self.wells = WellLayer(p.wells() if self._wells_layer_on() else [])
+            self._label_items = []
+            self._hz_items = []
+            self._flt_items = []
+            self._grid_items = []
+            self._draw_horizon_map()
+            self._draw_grid()
+            self._current = pg.PlotCurveItem(pen=pg.mkPen((220, 0, 0), width=3))
+            self.plot.addItem(self._current)
+            self.plot.getPlotItem().getViewBox().autoRange(padding=0.05)
+            self.update_labels()
             return
         for k, v in enumerate(p.volumes):
             try:
@@ -110,6 +178,21 @@ class Basemap(QtWidgets.QWidget):
         self.plot.addItem(self._current)
         self.plot.getPlotItem().getViewBox().autoRange(padding=0.05)
         self.update_labels()
+
+    def _lines_for_clicks(self):
+        """Decimated 2D line coordinates for click picking (also in layer mode)."""
+        p = self.project
+        hidden = set(p.display.get("hidden_lines", []) or [])
+        for l in p.lines:
+            if l["name"] in hidden:
+                continue
+            try:
+                line = p.line(l["name"])
+            except Exception:
+                continue
+            if line.has_coords:
+                step = max(1, len(line.x) // 400)
+                self._lines[l["name"]] = (line.x[::step], line.y[::step])
 
     def label_view(self):
         """((x0, x1), (y0, y1)) of the map view, or None when it cannot be read."""
@@ -266,6 +349,9 @@ class Basemap(QtWidgets.QWidget):
         return out
 
     def draw_faults(self):
+        if self.stack is not None:  # faults are a layer
+            self.draw_layers()
+            return
         for it in self._flt_items:
             try:
                 self.plot.removeItem(it)

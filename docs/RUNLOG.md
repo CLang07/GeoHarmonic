@@ -330,4 +330,8 @@ the 2D lines, Tui-1/Amokura-1 wells).
   zone results table, "Show on map hub" (summary.csv + hub_request.json), section result tracks VSH / PHI / SW / PERM.
   New `python -m well_correlation --guitest`. Item 20 done. Maui-7 C-sands N-D shows the gas crossover cluster and
   the Pickett plot a clean water line through the wet sands plus the gas leg at 100-1000 ohm.m.
+- Item 21 started. 21a done (Seismic v0.36.0): `maplayers.py` layer stack (grid, contours with index lines, horizon,
+  polygons, text, petro + the legacy outlines / 2D lines / wells / faults) with order / visibility / opacity / style,
+  saved in the project (grids as npz), Qt-free renderer + matplotlib PNG; basemap draws from the stack; Map layers dock.
+  21b part: petro zone values per well as labelled bubbles from `<wcproj>_petro/summary.csv`.
 

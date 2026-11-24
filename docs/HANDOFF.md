@@ -267,6 +267,19 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
 - `volume.py` stores (v0.21.0): data_ilxl + data_t + optional data_xl (nxl, nil, ns; `Volume3D.xldata`, used by
   `xline()` when present; `build_xline_store(store)`, CLI `--xlstore`, menu 'Fast crosslines'); import writes sorted
   chunks as one contiguous slab (`flat[k0:k1]`), scattered write only for unsorted/irregular traces.
+- `maplayers.py` (21a, v0.36): `LayerStack` (layers = dicts {id, kind, name, visible, opacity, z, src, style}; kinds
+  outline3d, lines2d, wells, faults, horizon, grid, contours, polygons, text, petro; add / add_grid (npz in
+  `<project>_seismic/maps/<id>.npz` via save_grid / load_grid, + contour layer) / remove (drops its contours) / move /
+  set_visible / set_opacity / set_style / grid(lid) / colorbar / legend (visible only, top first); saved in
+  display["map_layers"], `LayerStack.load(project)` -> saved stack or `default_stack` = legacy basemap content).
+  `render(stack)` -> Qt-free primitives ("image", lid, rgba, transform6) / ("curve", lid, xs, ys, rgba, width, connect)
+  / ("points", ...) / ("text", ...) / ("error", lid, msg); `render_png` (matplotlib, also the visual check);
+  `petro_values(project, prop, zone)` reads `<wcproj>_petro/summary.csv` (all zones: sum of thickness-type values, mean
+  of averages). Basemap layer mode: `Basemap.stack` + `draw_layers()` (z -100+order, under the old overlays: horizon
+  map, show_grid, ties, current line), `_lines_for_clicks`; MainWindow sets `basemap.stack = LayerStack.load(p)` on
+  open; dock "Map layers" = `gui/layers_dock.LayersPanel` (set_visible, move, remove, set_opacity, set_style (contour
+  interval goes to the grid's contour layer), add_current_grid, add_cps3, add_horizon, add_petro, add_polygon,
+  add_text; `select(lid)` + `_sel` because the Qt mock has no current row). Tests `test_maplayers.py` (run, run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

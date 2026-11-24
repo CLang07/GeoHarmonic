@@ -572,3 +572,12 @@ Interpret > Well tie has a second button row:
 Test first: open the NZ project, select Maui-7, Ctrl+Shift+P, Interpret well, look at the N-D and Pickett plots for
 the C-sands (gas crossover and the gas leg should stand out), switch on the PHI and SW tracks in the section.
 
+## Map hub (PLAN item 21, Seismic tool v0.36+, run 5 - 24 Nov 2026)
+21a Layers: View > Map layers (tab next to Data). The basemap is now drawn from a saved layer list: tick boxes for
+visibility, Up / Down for drawing order, opacity slider, colour ramp, contour interval (index contours every 5th, bold).
+Add...: current basemap grid (from Interpret > Horizon maps), CPS-3 file, horizon time map, petrophysics value per well
+(bubbles + labels from the Well Correlation Tool's petro summary - run its Petrophysics window first), text. Layers are
+saved with the project (grids in `<project>_seismic/maps/`).
+Test first: open the Maui / NPRA project - the basemap should look as before; Horizon maps > compute a structure map
+> Map layers > Add... > Current basemap grid; change opacity, interval, order; save, reopen.
+
