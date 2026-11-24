@@ -576,7 +576,7 @@ all consume their per-zone results. Design decisions (Chris can override):
         drainage ellipse cross-sections, linked to a map strip showing the section line and ellipses.
    Tests: distances on a known pattern, ellipse orientation follows SHmax, gun-barrel offsets match geometry.
 
-30. **Depletion, resource left, recovery factor, RTA, frac complexity, M&A screen** - status: todo
+30. **Depletion, resource left, recovery factor, RTA, frac complexity, M&A screen** - status: done (run 5, Seismic v0.53.0; follow-ups: production import (RRC / NDIC monthly) wired to the dashboard, RTA plot window, remaining-resource map layer, economics dialog with a price deck, one-page summary with maps)
    30a. Depletion factor (Chris: "!!"): for each child well, parent cumulative production inside the child's
         drainage volume at the child's first production / in-place volume of that drainage volume (from 21 petro
         maps), plus a pressure-depletion proxy; child performance vs depletion factor cross-plot.

@@ -493,6 +493,29 @@ class DashboardWindow(QtWidgets.QMainWindow):
         self.status.setText(f"{len(rows)} well pairs; SHmax {shmax_az:.0f} deg; ellipses drawn")
         return self.spacing_result
 
+    def recovery(self, eur_sm3, sophih_grid, fvf=1.2, first_prod=None, cum_at=None):
+        """PLAN 30a/b on the dashboard: needs spacing() first (ellipses).  sophih_grid: MapGrid of SoPhiH (m, petro map
+        hub).  Returns {well: {"RF", "inplace_sm3", "DF" (children, when first_prod + cum_at {child: {parent: cum}})}}."""
+        from .. import depletion as DP
+        if not getattr(self, "spacing_result", None):
+            raise RuntimeError("run Spacing + ellipses first")
+        X, Y = sophih_grid.node_xy()
+        X, Y = np.asarray(X, float), np.asarray(Y, float)
+        cell = abs(sophih_grid.dx * sophih_grid.dy) if sophih_grid.kind == "xy" else \
+            abs(float(np.hypot(X[0, 1] - X[0, 0], Y[0, 1] - Y[0, 0]) * np.hypot(X[1, 0] - X[0, 0], Y[1, 0] - Y[0, 0])))
+        ell = self.spacing_result["ellipses"]
+        rf = DP.recovery_factors(ell, eur_sm3, sophih_grid.z, X, Y, cell, fvf)
+        out = {e["name"]: {"RF": rf[e["name"]], "inplace_sm3": DP.inplace_in(e, sophih_grid.z, X, Y, cell, fvf)} for e in ell}
+        if first_prod and cum_at:
+            by = {e["name"]: e for e in ell}
+            for child, cums in cum_at.items():
+                if child in by:
+                    r = DP.depletion_factor(by[child], [by[p] for p in cums if p in by], cums, sophih_grid.z, X, Y, cell, fvf)
+                    out[child]["DF"] = r["df"]
+        self.recovery_result = out
+        self.status.setText(f"RF for {len(out)} wells (median {np.nanmedian([v['RF'] for v in out.values()]):.2f})")
+        return out
+
     def _spacing_dialog(self):
         az, ok = QtWidgets.QInputDialog.getDouble(self, "Spacing", "SHmax azimuth (deg)", 90.0, 0.0, 180.0, 0)
         if ok:

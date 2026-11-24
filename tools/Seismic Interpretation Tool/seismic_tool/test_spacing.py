@@ -80,3 +80,10 @@ def run_gui(check, tmp):
     check(len(res["ellipses"]) == 6 and len(win._ellipse_items) == 6 and abs(res["per_well"]["P1-2"]["Nearest_m"] - 250) < 1e-6
           and res["per_well"]["P2-1"]["Class"] == "child" and len(gb["wells"]) == 6 and len(gb["ellipses"]) == 6,
           "29 GUI: dashboard spacing (ellipses on the map, nearest distances, parent / child) + gun-barrel window")
+    from .maps import MapGrid
+    g = MapGrid(np.ones((80, 60)), "xy", "m", "SoPhiH", None, -2000.0, -500.0, 50.0, 50.0)
+    eur = {t.name: 20000.0 for t in trajs}
+    rec = win.recovery(eur, g, 1.2, {n: v["first_prod"] for n, v in info.items()},
+                       {"P2-1": {"P1-3": 30000.0, "P1-2": 10000.0}})
+    check(all(0 < v["RF"] < 1 for v in rec.values()) and rec["P2-1"]["DF"] > 0,
+          "30 GUI: recovery factor per well + depletion factor of a child on the dashboard")

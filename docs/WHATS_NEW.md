@@ -736,3 +736,12 @@ Test first: nothing to click yet beyond the API - check the numbers on a known p
 - Readers for Texas RRC, NDIC and FracFocus CSV exports (column names mapped to one schema) and the World Stress Map
   (SHmax from nearby A-C quality points) are in seismic_tool/spacing.py (UI hook-up next).
 Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellipses (your SHmax), then Gun barrel.
+
+## Depletion, recovery factor, RTA, frac complexity, M&A screen (PLAN item 30, Seismic v0.53.0)
+- Dashboard (after Spacing + ellipses): recovery(...) gives each well's recovery factor (EUR / in-place inside its
+  drainage ellipse from a SoPhiH map) and each child well's depletion factor (parent cumulative inside the child's
+  ellipse at its first production / in-place) - UI button with the production import is the next step.
+- In seismic_tool/depletion.py: remaining-resource map, undrilled locations at a chosen spacing, square-root-time RTA
+  with end of linear flow (rate-only proxy flagged), frac complexity index (fluid type, volumes, cluster spacing,
+  stress anisotropy, brittleness) -> drainage shape, type curves P10 / P50 / P90, monthly cash flow / NPV10, PDP + PUD
+  inventory and a one-page HTML area summary.

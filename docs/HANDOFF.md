@@ -430,6 +430,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `wells_in_polygons` (maphub.point_in_polygon), `drainage_ellipse`, `ellipse_polygon`, `ellipse_overlap`, `gun_barrel`.
   DashboardWindow.spacing (ellipses on its map, per-well nearest distance / class) and gun_barrel_view (dialog +
   section line on the basemap). Tests `test_spacing.py` (run, run_gui).
+- `depletion.py` (30, v0.53): `ellipse_mask` / `ellipse_area`, `inplace_in` (SoPhiH x cell / B), `overlap_fraction`,
+  `depletion_factor` (parent cum x overlap fraction / child in-place; pressure proxy), `performance_vs_depletion`,
+  `recovery_factors`, `remaining_map`, `undrilled_locations` (slots across the unit at a spacing, < 20 % covered),
+  `material_balance_time`, `rta_linear` (1/q or dp/q vs sqrt t; t_elf = 3 points > 10 % off; final fit on points
+  within 2.5 %), `investigation_distance`, FLUID_COMPLEXITY + `frac_complexity_index` (-> aspect for
+  spacing.drainage_ellipse), `type_curves`, `cash_flow`, `npv` (monthly end-of-month discounting, economic limit),
+  `inventory`, `area_summary` (HTML). DashboardWindow.recovery (RF + child DF). Tests `test_depletion.py`,
+  test_spacing GUI.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

@@ -403,3 +403,8 @@ the 2D lines, Tui-1/Amokura-1 wells).
   = 0), distances on a known wine-rack pattern (200 m / 60 m vertical, 400 m same zone), parent / child / co-completed,
   wells per section, ellipses along SHmax (major axis at 45.0 +- 3 deg), overlap areas, gun-barrel offsets exactly
   200 m; dashboard Spacing + Gun barrel.
+- Item 30 done (Seismic v0.53.0): `depletion.py` - depletion factor on a synthetic parent-child pair (= cum / in-place
+  when stacked, falls to 0 as the child moves away), child performance vs DF slope, RF hand case 0.10, remaining map,
+  7 undrilled 200 m slots beside existing drainage, RTA on an analytic linear-flow well (slope 1/C within 2 %, end of
+  linear flow 300-450 d for true 300 d), frac complexity index, NPV10 equal to a hand cash flow, type curves, inventory,
+  HTML summary; dashboard recovery / depletion.

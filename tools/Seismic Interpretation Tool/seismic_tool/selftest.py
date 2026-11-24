@@ -199,6 +199,8 @@ def run():
         test_prospect.run(check, tmp)
         from . import test_spacing
         test_spacing.run(check, tmp)
+        from . import test_depletion
+        test_depletion.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
