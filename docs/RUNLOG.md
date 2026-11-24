@@ -324,4 +324,10 @@ the 2D lines, Tui-1/Amokura-1 wells).
   Rickman brittleness; CLI `--rockphysics`. Checks: pure water 1482 m/s / 0.997 g/cc, Gassmann + substitution round
   trips exact, fizz (7 % gas) gives 84 % of the commercial-gas Vp drop but 9 % of its density drop. Real data: Tui-1
   uses measured DTSM where logged, median Vp/Vs 1.76.
+- 20e done (v0.10.0): Petrophysics window (`gui/petro_dialog.py`) - parameter table with sources and 4 edit scopes, run
+  buttons (QC, interpret well / section / all, mineral solver, Monte Carlo, rock physics), cross-plots (N-D, M-N,
+  Pickett, Buckles, histogram with discriminators) drawn with pyqtgraph and exportable as PNG (`petro/plotdata.py`),
+  zone results table, "Show on map hub" (summary.csv + hub_request.json), section result tracks VSH / PHI / SW / PERM.
+  New `python -m well_correlation --guitest`. Item 20 done. Maui-7 C-sands N-D shows the gas crossover cluster and
+  the Pickett plot a clean water line through the wet sands plus the gas leg at 100-1000 ohm.m.
 

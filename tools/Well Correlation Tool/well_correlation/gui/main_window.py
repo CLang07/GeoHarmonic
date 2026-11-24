@@ -65,6 +65,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.info_dock = self._dock("Well info", self.info, QtCore.Qt.LeftDockWidgetArea)
         self.tops_dock = self._dock("Tops", self._build_tops_panel(), QtCore.Qt.RightDockWidgetArea)
         self.undo_stack, self.redo_stack = [], []
+        self._petro_dlg = None
 
         self._build_actions()
         self._build_toolbar()
@@ -159,6 +160,9 @@ class MainWindow(QtWidgets.QMainWindow):
         c.addSeparator()
         self._act(c, "Zone statistics...", self.show_zone_stats, "Z")
         self._act(c, "Compare tops with reference (e.g. PR3099)...", self.show_reference, "R")
+        pm = m.addMenu("&Petrophysics")
+        self._act(pm, "Petrophysics window...", self.show_petro, "Ctrl+Shift+P")
+        self._act(pm, "Curve QC + tool report (selected well)", lambda *_: self.show_petro().run_qc())
         v = m.addMenu("&View")
         self._act(v, "Fit section", lambda: self.section.redraw(), "F")
         self._act(v, "Fit map", self.map.fit)
@@ -898,6 +902,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self._ref_dlg.refresh()
         self._ref_dlg.show()
         self._ref_dlg.raise_()
+
+    def show_petro(self):
+        """Petrophysics window (PLAN 20e) on the selected (or first section) well."""
+        from .petro_dialog import PetroDialog
+        if not self.project:
+            return None
+        if getattr(self, "_petro_dlg", None) is None or self._petro_dlg.project is not self.project:
+            self._petro_dlg = PetroDialog(self)
+        sel = getattr(self.section, "selected", None)
+        if sel and sel in self.project.wells and sel != self._petro_dlg.well:
+            self._petro_dlg.set_well(sel)
+        self._petro_dlg.show()
+        self._petro_dlg.raise_()
+        return self._petro_dlg
 
     def show_zone_stats(self):
         if not self.project:

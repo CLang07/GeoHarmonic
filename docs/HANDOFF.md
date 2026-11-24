@@ -357,6 +357,16 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   rp_sw_hc, rp_fizz_sg, brie_e, rp_lith; measured shear from DTSM-type raw curves else GC; scenarios brine / oil / gas
   / fizz substituted only in 20b NET_RES rock; saves RP_* curves), `scenario_table(res, zone_rows, net)`. CLI
   `--rockphysics`. Tests `run_rockphysics`.
+  20e (v0.10): `petro/plotdata.py` (nd, mn, pickett, buckles, histogram with discriminators, render_png via matplotlib;
+  pure numpy, <= 20k points), `gui/petro_dialog.PetroDialog(win)` (win needs .project, .section (or None), optional
+  .selected_well; logic: set_well / set_zone / param_rows / set_param(name, text, scope 0 project | 1 zone | 2 well+zone
+  | 3 well all zones) -> params.json / run_qc / run_interp(wells) / run_multimin / run_mc / run_rockphysics /
+  summary_rows / crossplot_data / set_discriminators / export_png / show_on_hub(prop) -> `<petro>/hub_request.json`
+  {time, wells, zone, property, summary, project} for the map hub of item 21). MainWindow menu Petrophysics
+  (`show_petro`, Ctrl+Shift+P). Section tracks VSH / PHI (PHIE + BVW, hydrocarbon fill) / SW / PERM: `TRACKS` +
+  `FAMILY_INFO` entries, `SectionLayout.log_values` falls back to `petro.store.well_curves` (npz cached on the Well
+  by path + mtime). `python -m well_correlation --guitest` (real Qt offscreen or PYTHONPATH=dev/fakeqt; monkeypatches
+  SectionView._apply_lod under the mock).
 
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.

@@ -3,6 +3,8 @@
     python -m well_correlation                      open the app
     python -m well_correlation MyProject.wcproj.json
     python -m well_correlation --selftest           test the data layer (no GUI needed)
+    python -m well_correlation --guitest            GUI logic tests (Petrophysics window; real Qt offscreen or the
+                                                    Qt mock: PYTHONPATH=<repo>/dev/fakeqt)
     python -m well_correlation --check FOLDER       print a curve inventory for a data folder
     python -m well_correlation --png PROJECT OUT.png   export the current section without the GUI
     python -m well_correlation --dlisinfo FILE.dlis      list logical files, frames, channels
@@ -29,6 +31,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="well_correlation", description="Well log correlation (Geo Tool Kit)")
     ap.add_argument("project", nargs="?", help="project file (.wcproj.json)")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--guitest", action="store_true")
     ap.add_argument("--check", metavar="FOLDER")
     ap.add_argument("--png", nargs=2, metavar=("PROJECT", "OUT"))
     ap.add_argument("--dlisinfo", metavar="FILE")
@@ -144,6 +147,29 @@ def main(argv=None):
         print(f"wrote {a.checkshot[1]}: {len(t['md'])} levels {t['md'].min():.0f}-{t['md'].max():.0f} m MD")
         return
 
+    if a.guitest:
+        import shutil
+        import tempfile
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        try:
+            from PySide6 import QtWidgets
+            app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv[:1])  # noqa: F841
+        except Exception:
+            pass
+        ok = [True]
+
+        def check(c, m):
+            print(("PASS " if c else "FAIL ") + m)
+            ok[0] &= bool(c)
+
+        from .petro import test_petro
+        tmp = tempfile.mkdtemp(prefix="wc_guitest_")
+        try:
+            test_petro.run_gui(check, tmp)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        print("GUI TEST PASSED" if ok[0] else "GUI TEST FAILED")
+        sys.exit(0 if ok[0] else 1)
     if a.selftest:
         from .selftest import run
         sys.exit(0 if run() else 1)

@@ -560,4 +560,15 @@ Interpret > Well tie has a second button row:
   Young's / brittleness, and Gassmann brine / oil / gas / fizz (7 % gas) versions of Vp, Vs, density, AI, Vp/Vs
   (RP_* curves). Fluids from Batzle-Wang at the zone's temperature and hydrostatic pressure; set salinity, api, gor,
   gas_gravity, rp_hc (gas / oil), rp_lith (sandstone / limestone / dolomite) per zone in params.json.
+20e Petrophysics window (v0.10.0) - Well Correlation Tool > Petrophysics > Petrophysics window (Ctrl+Shift+P):
+- Left: every parameter with its value and where it comes from (built-in / project / zone / well + zone). Edit the
+  Value column; "Edit applies to" picks project default, zone (all wells), this well + zone, or this well (all zones).
+  Type "auto" to remove an override. Saved to `<project>_petro/params.json` at once.
+- Buttons: QC report, Interpret well / section wells / all wells, Mineral solver, Monte Carlo, Rock physics, Show on
+  map hub (writes summary.csv + hub_request.json; the map hub itself is PLAN item 21).
+- Cross-plots: N-D (matrix lines), M-N (mineral points), Pickett (Sw 1 / 0.5 / 0.25 lines from the zone's Rw, m, n),
+  Buckles (constant BVW), histogram of any curve with discriminators ("VSH 0 0.4; PHIE 0.08 1"); Export PNG.
+- Section: new toolbar tracks VSH, PHI (PHIE + BVW with the hydrocarbon fill), SW, PERM show the saved results.
+Test first: open the NZ project, select Maui-7, Ctrl+Shift+P, Interpret well, look at the N-D and Pickett plots for
+the C-sands (gas crossover and the gas leg should stand out), switch on the PHI and SW tracks in the section.
 

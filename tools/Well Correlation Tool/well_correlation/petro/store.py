@@ -78,3 +78,25 @@ def _json_default(o):
     if isinstance(o, np.ndarray):
         return o.tolist()
     return str(o)
+
+
+def well_curves(project, well):
+    """Saved petro curves resampled to the well's current MD grid, cached on the Well object until the npz changes.
+    Used by the section view for the petro result tracks.  Returns {} when nothing is saved."""
+    p = curves_path(project, well.name)
+    if not p or not os.path.exists(p) or well.depth is None or not len(well.depth):
+        return {}
+    mt = os.path.getmtime(p)
+    cached = getattr(well, "_petro_cache", None)
+    if cached is not None and cached[0] == (p, mt, len(well.depth)):
+        return cached[1]
+    depth, curves = load_curves(project, well.name)
+    out = {}
+    for k, v in curves.items():
+        v = np.asarray(v, float)
+        if len(depth) == len(well.depth) and np.allclose(depth, well.depth):
+            out[k] = v
+        else:
+            out[k] = np.interp(well.depth, depth, v, left=np.nan, right=np.nan)
+    well._petro_cache = ((p, mt, len(well.depth)), out)
+    return out

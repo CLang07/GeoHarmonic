@@ -30,6 +30,12 @@ FAMILY_INFO = {
     "PE": ("PE (b/e)", 0.0, 10.0, False),
     "SP": ("SP (mV)", -100.0, 50.0, False),
     "CALI": ("CALI (in)", 6.0, 16.0, False),
+    # petrophysics results (not log families; shown in the petro tracks)
+    "VSH": ("Vsh (v/v)", 0.0, 1.0, False),
+    "PHIE": ("PHIE (v/v)", 0.5, 0.0, False),
+    "BVW": ("BVW (v/v)", 0.5, 0.0, False),
+    "SW": ("Sw (v/v)", 1.0, 0.0, False),
+    "PERM": ("Perm (mD)", 0.01, 10000.0, True),
 }
 
 STEP = 0.1524  # metres (half-foot) composite sampling

@@ -18,7 +18,14 @@ TRACKS = {
     "PE": ("PE", [("PE", 0, 10, False, "#8a5a00", 1.0)]),
     "SP": ("SP", [("SP", -100, 50, False, "#444444", 1.0)]),
     "CALI": ("Caliper", [("CALI", 6, 16, False, "#666666", 1.0)]),
+    # petrophysics results (PLAN 20e; curves from <project>_petro/<well>.npz)
+    "VSH": ("Petro Vsh", [("VSH", 0, 1, False, "#8b5a2b", 1.2)]),
+    "PHI": ("Petro porosity", [("PHIE", 0.5, 0, False, "#1f4fbf", 1.2), ("BVW", 0.5, 0, False, "#00a0a0", 1.0)]),
+    "SW": ("Petro Sw", [("SW", 1, 0, False, "#c0161b", 1.2)]),
+    "PERM": ("Petro perm", [("PERM", 0.01, 10000, True, "#7a2fb8", 1.1)]),
 }
+PETRO_FAMILIES = {"VSH", "PHIE", "BVW", "SW", "PERM"}
+HC_COLOR = "#3cb043"
 SAND_COLOR = "#f2d64b"
 SHALE_COLOR = "#9aa48a"
 GAS_COLOR = "#ffcc00"
@@ -180,7 +187,7 @@ class SectionLayout:
         y = self.y_full(w)
         for tid, tx0, tx1 in panel.tracks:
             for fam, left, right, log, col, lw in TRACKS[tid][1]:
-                v = w.logs.get(fam)
+                v = self.log_values(w, fam)
                 if v is None:
                     continue
                 x = to_x(v, left, right, log, tx0, tx1 - tx0)
@@ -188,6 +195,17 @@ class SectionLayout:
                 xx, yy = (peak_decimate(x, y, max_points) if max_points and len(x) > max_points else (x, y))
                 yield {"x": xx, "y": yy, "color": col, "width": lw, "family": fam, "track": tid,
                        "left": left, "right": right, "log": log}
+
+    def log_values(self, w, fam):
+        """A composited log, or a saved petrophysics result curve (VSH, PHIE, BVW, SW, PERM)."""
+        v = w.logs.get(fam)
+        if v is None and fam in PETRO_FAMILIES:
+            try:
+                from .petro.store import well_curves
+                v = well_curves(self.project, w).get(fam)
+            except Exception:
+                v = None
+        return v
 
     def fills(self, panel):
         """Yield fill polygons as (x_a, x_b, y, colour): fill between two x curves along y."""
@@ -208,6 +226,13 @@ class SectionLayout:
                 xh = np.where(ok, np.maximum(x, xc), xc)
                 yield (xs, np.full_like(xs, xc), y, SAND_COLOR)
                 yield (np.full_like(xh, xc), xh, y, SHALE_COLOR)
+            if tid == "PHI":
+                phie, bvw = self.log_values(w, "PHIE"), self.log_values(w, "BVW")
+                if phie is not None and bvw is not None:
+                    ok = np.isfinite(phie) & np.isfinite(bvw)
+                    xp = to_x(np.where(ok, phie, 0), 0.5, 0, False, tx0, tx1 - tx0)
+                    xb = to_x(np.where(ok, bvw, 0), 0.5, 0, False, tx0, tx1 - tx0)
+                    yield (xp, xb, y, HC_COLOR)  # hydrocarbon = PHIE - BVW
             if tid == "DN" and "RHOB" in w.logs and "NPHI" in w.logs:
                 xr = to_x(w.logs["RHOB"], 1.95, 2.95, False, tx0, tx1 - tx0)
                 xn = to_x(w.logs["NPHI"], 0.45, -0.15, False, tx0, tx1 - tx0)

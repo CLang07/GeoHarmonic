@@ -633,3 +633,88 @@ def run_rockphysics(check, tmp, fwd_project=None):
 def I_zone_rows(project, well):
     from . import interp as I
     return I.interpret_well(project, well, save=False)["zones"]
+
+
+def run_gui(check, tmp):
+    """20e: Petrophysics window logic under the Qt mock (PYTHONPATH=dev/fakeqt) or real Qt offscreen."""
+    import types
+    from . import interp as I
+    from .store import petro_dir
+    fwd = run_interp(lambda *a: None, os.path.join(tmp, "gui1"))
+    from ..gui import petro_dialog as G
+    from ..gui.main_window import MainWindow
+    from ..gui.section_view import SectionView
+    from ..section import SectionLayout, TRACKS
+    win = types.SimpleNamespace(project=fwd, section=None, selected_well="Fwd-1")
+    dlg = G.PetroDialog(win)
+    check(dlg.well == "Fwd-1" and dlg.zone == "A" and dlg._zones == ["A", "B", "C"], "20e: window opens on the well, zones A-C")
+    rows = {k: (v, s) for k, v, s in dlg.param_rows()}
+    check(rows["sw_method"] == ("simandoux", "project") and rows["m"] == (2.0, "built-in"), "20e: parameter rows show value + source")
+    dlg.set_param("m", "1.9", scope=1)  # zone A
+    dlg.set_param("n", "2.1", scope=2)  # Fwd-1 / A
+    rows = {k: (v, s) for k, v, s in dlg.param_rows()}
+    check(rows["m"] == (1.9, "zone") and rows["n"] == (2.1, "well + zone"), "20e: zone and well+zone edits")
+    check(I.load_params(fwd)["zones"]["A"]["m"] == 1.9, "20e: edits saved to params.json")
+    dlg.set_param("m", "auto", scope=1)
+    check("m" not in I.load_params(fwd)["zones"].get("A", {}), "20e: 'auto' removes the override")
+    try:
+        dlg.set_param("sw_method", "bogus", scope=0)
+        bad = False
+    except ValueError:
+        bad = True
+    check(bad, "20e: invalid method rejected")
+    dlg.set_param("mm_minerals", "quartz, illite", scope=0)
+    check(I.load_params(fwd)["default"]["mm_minerals"] == ["quartz", "illite"], "20e: list parameter parsed")
+    r = dlg.run_interp()
+    check(r is not None and any(z["Zone"] == "A" for z in r["zones"]), "20e: Interpret well")
+    rows = dlg.summary_rows()
+    check(rows and rows[0]["Zone"] == "A" and abs(rows[0]["NetPay_TVD"] - 40) < 1.0, f"20e: zone results table ({rows[0]['NetPay_TVD']} m)")
+    for k in G.XPLOTS:
+        dlg.set_crossplot(k)
+        d = dlg.crossplot_data()
+        ok = d is not None and ((k == "Histogram" and d["n"] > 0) or (k != "Histogram" and len(d["x"]) > 50))
+        check(ok, f"20e: {k} cross-plot data ({(d or {}).get('n', len((d or {}).get('x', [])))} points)")
+    dlg.set_crossplot("Histogram")
+    n_all = dlg.crossplot_data()["n"]
+    dd = dlg.set_discriminators("VSH 0 0.4; PHIE 0.08 1")
+    n_disc = dlg.crossplot_data()["n"]
+    check(dd == {"VSH": (0.0, 0.4), "PHIE": (0.08, 1.0)} and 0 < n_disc < n_all, f"20e: histogram discriminators ({n_disc} of {n_all})")
+    dlg.set_crossplot("Pickett")
+    pk = dlg.crossplot_data()
+    check(abs(pk["params"]["rw"] - 0.05) < 1e-9 and "Sw 1" in pk["lines"], "20e: Pickett water line from the zone's Rw")
+    png = os.path.join(tmp, "pickett.png")
+    dlg.export_png(png)
+    check(os.path.getsize(png) > 5000, "20e: cross-plot exported as PNG (matplotlib)")
+    mm = dlg.run_multimin()
+    mc = dlg.run_mc(n=30)
+    rp = dlg.run_rockphysics()
+    rows = dlg.summary_rows()
+    check(mm and mc and rp and "MM_PHIE" in rows[0] and "SoPhiH_P50" in rows[0], "20e: mineral solver, Monte Carlo, rock physics "
+          "columns in the results table")
+    qc = dlg.run_qc()
+    check(qc["well"] == "Fwd-1" and "families" in qc, "20e: QC report")
+    # batch + map hub
+    res = dlg.run_interp(["Fwd-1"])
+    hub = dlg.show_on_hub("SoPhiH")
+    with open(hub) as fh:
+        req = json.load(fh)
+    check(req["property"] == "SoPhiH" and req["wells"] and os.path.exists(req["summary"]), "20e: Show on map hub writes summary + "
+          "hub_request.json")
+    # section result tracks read the saved petro curves
+    fwd.display["tracks"] = ["GR", "VSH", "PHI", "SW", "PERM"]
+    lay = SectionLayout(fwd, ["Fwd-1"], fwd.display)
+    fams = {c["family"] for c in lay.curves(lay.panels[0])}
+    fills = list(lay.fills(lay.panels[0]))
+    check({"VSH", "PHIE", "BVW", "SW", "PERM"} <= fams and any(f[3] == "#3cb043" for f in fills),
+          "20e: section tracks VSH / PHI (+ hydrocarbon fill) / SW / PERM drawn from the petro results")
+    hdr = lay.headers(lay.panels[0])
+    check(any(h[2] == "Petro Sw" for h in hdr) and all(t in TRACKS for t in ("VSH", "PHI", "SW", "PERM")), "20e: track headers")
+    # main window menu entry (Qt mock: section view range is a mock - skip level-of-detail)
+    SectionView._apply_lod = lambda self, *a: None
+    try:
+        mw = MainWindow(fwd.path)
+        d2 = mw.show_petro()
+        check(d2 is not None and d2.well in fwd.wells, "20e: Petrophysics > Petrophysics window... opens from the main window")
+    except Exception as e:  # pragma: no cover - only if the mock cannot build the main window
+        check(False, f"20e: main window under the mock failed: {type(e).__name__}: {e}")
+    check(os.path.isdir(petro_dir(fwd)), "20e: results folder exists")
