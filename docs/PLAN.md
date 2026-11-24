@@ -3,6 +3,8 @@
 Status values: `todo`, `partial`, `done`, `blocked: <reason>`. Do the first `todo`/`partial` item.
 Chris's priorities: both 2D and 3D everywhere; PaleoScan-style relative geologic time (RGT) workflow;
 Kingdom-like interaction; large data.
+Phase 2 (items 20-30, added 2026-11-24): petrophysics + integrated map hub first, then exploration risk, then
+reservoir engineering / M&A. Several items per run allowed (CLAUDE.md rule 1).
 
 1. **Horizon picking + autotracking** - status: done (run 1, 2026-11-23; v0.2.0)
    - `horizons.py`: Horizon object per survey (3D: float32 grid (nil, nxl) of TWT ms, NaN = unpicked;
@@ -338,6 +340,198 @@ Kingdom-like interaction; large data.
         the results coloured by a well log, export SEG-Y). Note: the public NPRA lines and Maui 3D are stacks, so
         pre-stack is tested on synthetics unless partial stacks turn up in the NZP&M catalogue.
    Run order: 19a -> 19b -> 19c -> 19d.
+
+## Phase 2 - Chris's brainstorm (added 2026-11-24, interactive session)
+Source: Chris's list (Exploration / Petrophysics / M&A / General). Order is by dependency: petrophysics + the
+integrated map come first because seal, DHI, fizz gas, inversion, Rose risking and the reservoir-engineering items
+all consume their per-zone results. Design decisions (Chris can override):
+- Petrophysics lives in the Well Correlation Tool as a new package `well_correlation/petro/` (LAS/DLIS, curves,
+  zones, tops are already there). Results are saved per well in `<wcproj>_petro/<well>.npz` (computed curves) plus a
+  per-zone summary table `<wcproj>_petro/summary.csv`, so the Seismic tool (basemap, dashboard, analytics, inversion,
+  Rose) reads them through the linked .wcproj without new links.
+- ONE integrated map: the Seismic tool's basemap/dashboard map becomes the "Map hub" (it already has wells, laterals,
+  grids, the 3D outline and 2D lines). The Well Correlation Tool gets a "Show on map hub" action (writes the summary and
+  the hub reloads on file change, same pattern as the DDC watcher from 17c), and its own mapping.py stays as is.
+- Rose & Associates: their software and DHI Consortium database are proprietary. Build Rose-style methodology
+  (chance factors, lognormal volumetrics, DHI-based Pg revision with user-editable weights) and CSV export; no copying
+  of their database or file formats.
+- M&A / completions test data: synthetic fields generated at test time (extend dev/make_synthetic_engineering.py) +
+  readers for the public CSV exports Chris downloads (Texas RRC, NDIC, FracFocus - FracFocus helper exists in item 13).
+- Animations are written as GIF (PIL) and an MP4 only if ffmpeg exists on the PC (optional, try/except).
+- All numpy. Optional ML backends only behind try/except (CLAUDE.md rule 4).
+
+20. **Petrophysics core (Geolog / Interactive Petrophysics style)** - status: todo
+   Reference workflows: IP (Interpretation wizard, Mineral Solver, Monte-Carlo, cutoff sensitivity, Pickett /
+   Buckles plots, parameter zones, batch), Geolog (Determin / Multimin, project-wide sets, tool-aware logic).
+   20a. Data QC + tool type + resolution: identify the logging tool / vendor / service from DLIS frame + tool objects
+        and LAS ~Parameter / ~Curve descriptions and mnemonic tables (e.g. HALS/HRLA/DSI/PEX = SLB, HDIL/XMAC = Baker,
+        ACRt/WaveSonic = Halliburton; editable JSON table), so corrections and default parameters depend on the tool
+        (array induction vs laterolog, wireline vs LWD). Data frequency: sample interval, effective vertical
+        resolution per curve (tool resolution table vs sample rate), thin-bed flag where beds (from 20b bed-boundary
+        detection) are below resolution; report per well. Curve QC: gaps, flat lines (exists), spikes, caliper /
+        bad-hole flag, depth-shift (cross-correlate to a reference GR, reuse autocorr.py), splice runs.
+   20b. Deterministic interpretation per zone with parameter sets: Vsh (GR linear / Larionov old + Tertiary /
+        Clavier / Steiber, SP, neutron-density, min-of), porosity (density, sonic Wyllie / Raymer-Hunt-Gardner,
+        N-D crossplot with gas correction, effective vs total), Rw (Pickett fit, SP, Rwa minimum, temperature from
+        the basin-model geotherm of item 18), Sw (Archie, Simandoux, modified Simandoux, Indonesia, Waxman-Smits /
+        dual-water), permeability (Timur, Coates, Wyllie-Rose), TOC (Passey delta-log-R) for source rocks, bed
+        boundaries. Cutoffs (Vsh, PHIE, Sw) -> net/gross, net res, net pay, PHIH, SoPhiH, HCPV per zone, cutoff
+        sensitivity curves (IP-style), all written to the summary table.
+   20c. Multi-mineral solver (Multimin / Mineral Solver): constrained weighted least squares (numpy NNLS + sum-to-1)
+        over GR, RHOB, NPHI, DT, PEF, Rt with editable end-points (quartz, calcite, dolomite, illite, ...) and fluid;
+        reconstructed-curve misfit as QC. Monte-Carlo uncertainty on parameters (Rw, m, n, a, end-points, cutoffs) ->
+        P10/P50/P90 of PHIH / SoPhiH per zone.
+   20d. Rock physics at wells (needed by items 23-25): Vs prediction (Greenberg-Castagna), dry-rock moduli,
+        Gassmann fluid substitution (brine / oil / gas / fizz at 5-10 % gas sat; Batzle-Wang fluids at pressure and
+        temperature), elastic logs (AI, SI, Vp/Vs, lambda-rho, mu-rho), Young's modulus + Poisson's ratio +
+        brittleness index (also used by item 30c).
+   20e. GUI: Petrophysics window in the Well Correlation Tool (zone parameter table, cross-plots: N-D, M-N, Pickett,
+        Buckles, histograms with discriminator; results tracks in the section view; batch over selected wells;
+        "Show on map hub"). Tests: synthetic wells with known mineralogy / porosity / Sw generated from the forward
+        models (recover within tolerance), Archie / Simandoux against hand-computed values, NNLS against an analytic
+        2-mineral case, Gassmann round trip, real-data run on Maui-5/6/7 + Tui-1 (DLIS) recorded in the RUNLOG.
+   Run order: 20a -> 20b -> 20c -> 20d -> 20e.
+
+21. **Integrated Map hub (petrophysics + seismic + wells on one map)** - status: todo
+   Chris: "having an integrated map is very important". Extends gui/basemap.py + dashboard_window.py.
+   21a. Layers manager: background grid (structure, isochron, attribute, inversion slice / horizon extraction,
+        predicted property, basin %Ro), contours, fault polygons, 2D lines, 3D outline, wells (surface + BH,
+        trajectories), laterals, prospect polygons, text; per-layer opacity, order, colour bar; saved in the project.
+   21b. Petro on the map: post any zone summary value (net pay, PHIH, SoPhiH, Vsh, Sw, TOC) as labelled values,
+        bubbles or pies (mineral fractions from 20c); filter by zone; click a well -> petro strip (logs + results)
+        and its row in the table; lasso -> linked cross-plot.
+   21c. Gridding of zone properties: IDW / TPS / kriging (vgrid), plus collocated cokriging and kriging with
+        external drift using a seismic attribute or inversion map as the secondary (correlation shown, cross-
+        validation per method, leave-one-out residual map). Map arithmetic (grid calculator: +, -, *, /, clip,
+        mask by polygon) - SeisWare-style.
+   21d. "Add wells" workflow: one action when new wells arrive -> import LAS/DLIS, batch tie (item 16), petro batch
+        (20), re-grid affected maps, update the LFM (19a) and DDC (17c), list of what changed with before/after
+        maps and a residual-at-new-wells table (the honest test of the old maps).
+   21e. Cross-check view: petro values vs seismic attribute / inversion at the wells (cross-plot + map of residuals),
+        hook for analytics (item 13) to predict a property map with uncertainty.
+   Tests: layer state save/restore, cokriging against an analytic case (secondary perfectly correlated -> matches
+   the secondary trend; uncorrelated -> matches kriging), LOO numbers, add-wells updates only affected grids.
+
+22. **Petrophysics analytics + field reports** - status: todo
+   22a. ML on logs (item 13 models, numpy GBM / RF): predict missing curves (DT, RHOB, Vs) with depth-blocked CV
+        and uncertainty, electrofacies (k-means / Gaussian mixture in numpy) with facies logs to the section and map,
+        petro-to-seismic property prediction feeding 21e.
+   22b. Field reports: importers for shows, DST / production tests, cores (porosity, perm, grain density), MICP
+        (used by top seal in 25), mudlog gas (Tui-1 CSV exists) and pressures (RFT/MDT -> fluid gradients, contacts)
+        from CSV/XLSX templates (pandas) and plain-text reports with a keyword extractor (depth + show / test
+        phrases, flagged "auto-extracted, check"). PDF text only if pypdf exists (optional). Posted on the logs and
+        the map hub; core data used to calibrate 20b (core-log cross-plot, m / n fit).
+   Tests: blocked-CV leakage check, GMM on synthetic clusters, report parser on sample text, pressure-gradient
+   contact pick on a synthetic two-fluid column.
+
+23. **Viewer quick wins: co-blending, bump map, interactive linking (SeisWare-style)** - status: todo
+   23a. Co-blending on sections, time slices, horizon maps and the map hub: RGB / CMY / HSV of 2-3 attributes (e.g.
+        spectral 10/20/40 Hz from attributes.py), per-channel clip + gamma, legend (colour triangle / channel
+        swatches - the legend OpendTect lacks), opacity blend of an attribute over the seismic.
+   23b. Bump map / hillshade: directional illumination (azimuth, elevation, exaggeration) of horizon grids and of
+        amplitude-on-structure (colour = amplitude, shading = structure), also for time slices.
+   23c. Interactive: live-linked cursor across section, map hub, well strip and dashboard; attribute parameter
+        "movie" scan (slider redraws the section for a parameter range); saved window layouts / templates.
+   Tests: blend channel maths, hillshade against an analytic plane / dome, cursor link messages under fakeqt.
+
+24. **Seismic resolution, single-well inversion, predictive 2D modelling** - status: todo
+   24a. Recommended frequency from existing data: dominant frequency + usable bandwidth (spectrum vs noise floor)
+        per window and per area, interval velocities from the wells / velocity model, tuning thickness (lambda/4,
+        lambda/8) maps, bed-thickness distribution from the logs (20a) -> recommended target frequency / bandwidth
+        for the reservoir and the expected gain from spectral balancing (shown on wedge synthetics).
+   24b. Single-well inversion: the item-19 model-based / simultaneous inversion run on the trace(s) at one well,
+        with Monte-Carlo over wavelet, LFM and noise -> uncertainty bands vs the logs; answers "can the seismic see
+        this reservoir property here?".
+   24c. Predictive 2D modelling + amplitude statistics: stochastic pseudo-wells (vary thickness, Vsh, porosity,
+        fluid via 20d Gassmann) along a 2D section or wedge, synthetic gathers / stacks; amplitude-variation stats
+        (amplitude, intercept-gradient, inverted property) vs property and fluid -> Bayesian classification of the
+        real seismic into probability-of-pay / fluid volumes and maps (with the stats plots behind it).
+   24d. Synthetics as PaleoScan seeds: tied-well synthetic events (16) become horizon seeds and RGT control points
+        (rgt/solve add_horizon), so the RGT and horizon tracking are guided at the wells.
+   Tests: tuning thickness vs a wedge model, Monte-Carlo bands contain the true synthetic, classifier recovers the
+   fluid of a synthetic section, RGT honours well seeds.
+
+25. **AVO, DHI, fizz gas, angle-stack risk** - status: todo
+   25a. AVO at wells and on data: Zoeppritz / Aki-Richards / Shuey, AVO class (I, II, IIp, III, IV), intercept-
+        gradient from angle stacks or gathers, fluid factor, IG cross-plot with background trend and anomalies
+        highlighted on the section / map; Gassmann scenario synthetics from 20d.
+   25b. Fizz gas: low-gas-saturation case modelled explicitly (Vp drops like full gas, density does not), so the
+        discriminator is density / mu-rho / Vp/Vs-rho from the item-19c pre-stack inversion; low-frequency shadow and
+        attenuation (spectral attributes) as supporting evidence; a fizz-risk score per anomaly with its reasoning.
+   25c. Angle-stack vs full-gather risk: for the actual angle ranges, noise and wavelet, simulate inversion from
+        2-3-5 angle stacks vs full gathers on the well pseudo-models and report the expected error of Zp / Zs / rho
+        (density is the usual casualty with max angle < ~35 deg); result feeds the DHI confidence and Pg.
+   25d. DHI checklist (Rose / DHI-Consortium style, user-editable weights): amplitude strength vs background, fit to
+        structure / conformance (amplitude vs depth-contour fit over the closure), flat spot, phase / polarity change,
+        AVO behaviour, edge / termination sharpness, consistency across stacks, data quality; each scored with the
+        plot that justifies it; output a DHI index per prospect for item 28.
+   Tests: AVO class from known elastic contrasts, fizz vs commercial gas separated only by density, gather vs stack
+   error ordering, conformance score on a synthetic anomaly that fits / does not fit a closure.
+
+26. **Structural timing, paleo-structure animations, structural reconstruction** - status: todo
+   26a. Wheeler with tectonic phases: tag each age interval pre-rift / syn-rift / post-rift (inversion, other) in the
+        age table (18a); fault growth analysis (throw vs depth / time per fault from horizons + sticks, expansion
+        index across faults) proposes the syn-rift interval; colour the Wheeler by phase.
+   26b. Paleo-structure: successive flattening on each dated horizon (RGT / horizons), decompaction + backstripping
+        from the basin model (18b), paleo-depth maps per age; animation oldest -> youngest of sections and maps
+        co-rendered with lithology (petro / electrofacies from 20-22 projected along RGT) - and the same with the
+        inversion volumes (AI / Vp/Vs, item 19) as Chris asked. Export GIF (MP4 optional).
+   26c. Structural reconstruction on 2D sections: remove fault throw horizon by horizon (block restoration matching
+        hanging-wall / footwall cutoffs), vertical / inclined shear unfolding, line-length / area checks; per-step
+        restored sections in the animation.
+   Tests: flattening honours the datum, decompaction conserves grain thickness (exists), restoration of a synthetic
+   faulted section returns the unfaulted layers, growth index on a synthetic growth fault.
+
+27. **Migration and seal (charge, fault seal, top seal)** - status: todo
+   27a. Migration prediction: map-based flow-path ray tracing on paleo-structure surfaces (26b) per time step,
+        drainage areas, fill-spill chains, accumulations; charge timing from basin-model expulsion (18c TR) vs trap
+        timing (age of paleo-closure from 26b) -> critical-moment chart per prospect.
+   27b. Fault migration and fault seal: juxtaposition (Allan diagram along the fault plane from horizons + sticks),
+        shale gouge ratio from Vsh (20b) and throw, SGR -> supported column height (editable calibration), fault-as-
+        conduit along up-dip fault segments in the flow-path model, slip / dilation tendency from a stress tensor
+        (SHmax azimuth + magnitudes; shared with item 29).
+   27c. Top seal: seal thickness + Vsh maps from petro (map hub), capillary entry pressure from MICP (22b) or
+        editable defaults -> column height supported vs spill / fault-seal limited columns; seal risk maps.
+   Tests: flow paths on an analytic dome / saddle, fill-spill order, SGR on a hand case, column height maths.
+
+28. **Prospect risking + volumetrics (Rose & Associates style)** - status: todo
+   28a. Prospect object: polygon + reservoir zone; GRV from depth maps (17) with contacts at spill, fault-seal or
+        top-seal limited depth (27), area-depth / area-thickness curves; Monte-Carlo volumetrics (lognormal / user
+        distributions for area, net pay, phi, Sw, FVF, RF) -> P90/P50/P10, Swanson's mean.
+   28b. Chance of success: Rose-style factors (source/charge, reservoir, trap, seal/containment, timing/migration)
+        prefilled from items 18, 20, 25, 27 with the evidence attached; DHI-based Pg revision from the 25d index;
+        dependency between prospects; portfolio table, CSV export (Rose-compatible columns where known).
+   Tests: lognormal maths and P-values, GRV of an analytic cone, Pg revision bounded and monotonic in the DHI index.
+
+29. **Reservoir engineering foundations: spacing, stress, drainage ellipses, gun barrel** - status: todo
+   29a. Data: readers for Texas RRC, NDIC and FracFocus CSV exports + synthetic unconventional field generator (test
+        time); stress: SHmax azimuth (user / World Stress Map CSV / map grid), magnitudes optional.
+   29b. Spacing: 3D inter-well distances (horizontal + vertical offset in the same / adjacent zone), wells per
+        section / per DSU, parent / child / co-completed classification by first-production date.
+   29c. Drainage ellipses: per well, half-length along SHmax and width across it (from completion size, frac
+        geometry of 30c or user), drawn on the map hub around each lateral, overlap areas flagged.
+   29d. Gun-barrel view: section perpendicular to the laterals (TVD vs lateral offset) with zones, wells and their
+        drainage ellipse cross-sections, linked to a map strip showing the section line and ellipses.
+   Tests: distances on a known pattern, ellipse orientation follows SHmax, gun-barrel offsets match geometry.
+
+30. **Depletion, resource left, recovery factor, RTA, frac complexity, M&A screen** - status: todo
+   30a. Depletion factor (Chris: "!!"): for each child well, parent cumulative production inside the child's
+        drainage volume at the child's first production / in-place volume of that drainage volume (from 21 petro
+        maps), plus a pressure-depletion proxy; child performance vs depletion factor cross-plot.
+   30b. Resource left + RF automation: in-place per unit / zone from petro maps (SoPhiH x area), drained volume from
+        ellipses, EUR (Arps from item 13) -> recovery factor per well automated over all wells, remaining-resource
+        map and count of undrilled locations at a chosen spacing.
+   30c. RTA (rate-transient analysis): rate-normalised plots vs material-balance time, square-root-time linear-flow
+        plot (A*sqrt(k) estimate when pressures are available, rate-only proxy otherwise, clearly flagged), end of
+        linear flow -> drainage estimate to check the ellipses. Complex vs planar fractures from the frac job: fluid
+        type (slickwater / hybrid / gel), rate, fluid + proppant per ft, cluster spacing, ISIP / net pressure if
+        present, brittleness (20d) and horizontal stress anisotropy -> fracture complexity index and implied drainage
+        shape (narrow planar vs wide SRV) fed back to 29c.
+   30d. M&A screen: area type curves (P10/P50/P90 by zone and vintage), PDP / PUD inventory from 30b, simple economics
+        (price deck, royalty, opex, capex, NPV10, PV per location) and a one-page area summary export. Uses the item-13
+        analytics for completion-vs-geology attribution.
+   Tests: depletion factor on a synthetic parent-child pair, RF = EUR / OOIP on a hand case, RTA linear-flow slope on
+   a synthetic analytic linear-flow well, economics against a hand-computed cash flow.
 
 Later (Chris back): run `dev/bench.py --gb 5..20` on the PC and fix what it shows (overview volume only if zoomed-out display is slow); Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.

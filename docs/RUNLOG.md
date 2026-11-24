@@ -268,3 +268,13 @@ the 2D lines, Tui-1/Amokura-1 wells).
   5. Export the AI volume as SEG-Y and load it in Kingdom/Petrel.
 - Next: PLAN has no todo/partial items left. "Later (Chris back)" items remain (PC benchmark, Maui 3D subset, mistie
   with the 2D lines, Tui-1/Amokura-1 wells).
+
+## 2026-11-24 - interactive (Chris): Phase 2 plan added
+- Chris's brainstorm (exploration, petrophysics incl. Geolog / IP ideas, M&A / reservoir engineering, general viewer
+  ideas) turned into PLAN items 20-30, all `todo`. Order: 20 petrophysics core -> 21 integrated map hub -> 22 petro
+  analytics + field reports -> 23 co-blend / bump map / linking -> 24 resolution, single-well inversion, predictive
+  2D modelling, synthetics as RGT seeds -> 25 AVO / DHI / fizz gas / angle-stack risk -> 26 structural timing,
+  paleo-structure animations, restoration -> 27 migration + fault / top seal -> 28 Rose-style risking + volumetrics
+  -> 29 spacing, stress, drainage ellipses, gun barrel -> 30 depletion factor, resource left, RF, RTA, frac
+  complexity, M&A screen. Design decisions are listed at the top of the Phase 2 section in PLAN.md.
+- No code changed. Next: item 20a.
