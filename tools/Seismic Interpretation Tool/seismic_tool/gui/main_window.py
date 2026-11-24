@@ -161,6 +161,7 @@ class MainWindow(QtWidgets.QMainWindow):
             setattr(self, f"dock_{title.lower()}", d)
         from .layers_dock import LayersPanel
         self.layers_panel = LayersPanel(self.basemap)
+        self.layers_panel.analytics_hook = lambda t: self.analytics().add_table(t)  # map hub cross-check (21e)
         self.dock_layers = QtWidgets.QDockWidget("Map layers", self)
         self.dock_layers.setObjectName("Map layers")
         self.dock_layers.setWidget(self.layers_panel)

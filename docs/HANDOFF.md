@@ -306,6 +306,12 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   wc v0.10) + petro interpret_project; tie via tie.batch_tie on the first volume; DynamicDepthModel rebuilt when
   display["velocity_model"] exists; LFM volumes only flagged. LayersPanel.add_new_wells / _add_wells_dialog. Tests
   `test_addwells.py` (run, run_gui).
+- `crosscheck.py` (21e, v0.40): `crosscheck(stack, prop, zone, grid_lids)` (multiple linear regression of the zone value
+  on the grid layers sampled at the wells; coef, r, sigma, exact LOO residuals via leverages, AtA_inv), `predicted_maps`
+  (P50, P90 / P10 = P50 -/+ 1.2816 x prediction SE, residual IDW, corrected = P50 + residual; first grid's geometry),
+  `to_attribute_table` (AttributeTable for AnalyticsWindow.add_table). `gui/propgrid_dialog.CrossCheckDialog` (compute,
+  add_maps, send_to_analytics via `LayersPanel.analytics_hook`, set by MainWindow to analytics().add_table). Tests
+  `test_crosscheck.py`.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

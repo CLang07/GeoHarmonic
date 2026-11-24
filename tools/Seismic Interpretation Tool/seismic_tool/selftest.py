@@ -175,6 +175,8 @@ def run():
         from . import test_addwells
         os.makedirs(os.path.join(tmp, "addwells"))
         test_addwells.run(check, os.path.join(tmp, "addwells"))
+        from . import test_crosscheck
+        test_crosscheck.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -253,6 +255,9 @@ def run_gui():
         from . import test_addwells
         os.makedirs(os.path.join(tmp, "addwellsgui"))
         test_addwells.run_gui(check, os.path.join(tmp, "addwellsgui"))
+        from . import test_crosscheck
+        os.makedirs(os.path.join(tmp, "ccgui"))
+        test_crosscheck.run_gui(check, os.path.join(tmp, "ccgui"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

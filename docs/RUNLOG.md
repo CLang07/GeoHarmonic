@@ -344,4 +344,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - 21d done (Seismic v0.39.0, well_correlation Project.add_from_folder): `addwells.py` "New wells" workflow - import, petro
   batch, blind residuals of the old maps at the new wells, re-grid + change maps, batch tie, depth-model rebuild; LFM
   only flagged. Synthetic check: E-1 SoPhiH 7.69 (true 7.70); re-gridded map at E-1 7.68.
+- 21e done (Seismic v0.40.0): `crosscheck.py` + CrossCheckDialog - zone value vs grid layers at the wells (multiple
+  regression, LOO), predicted P50 / P90 / P10 / residual / corrected maps, Send to Analytics. Synthetic: coefficients
+  recovered, the 80 % interval covers 83 % of the wells.
 

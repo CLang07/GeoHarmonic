@@ -599,4 +599,8 @@ wells_header.csv). It imports the wells that are not in the well project yet, ru
 existing property maps at the new wells BEFORE re-gridding (the honest blind test: predicted vs actual table), re-grids
 the maps made with "Grid a zone property" (plus a change map), ties the new wells on the first 3D survey and rebuilds the
 depth model. Low-frequency models for inversion are only flagged - rebuild them in the Inversion window.
+21e Cross-check (v0.40.0): Map layers > Add... > Cross-check petrophysics vs maps: pick a zone value and one or more grid
+layers (attribute, inversion slice, structure ...): cross-plot with the regression line, r, residual sigma and
+leave-one-out RMSE; Add predicted maps posts P50, P90 / P10 (80 % prediction interval), the residual map and the
+residual-corrected map; Send to Analytics hands the well table to the Analytics window (GBM / SHAP / Model QC).
 

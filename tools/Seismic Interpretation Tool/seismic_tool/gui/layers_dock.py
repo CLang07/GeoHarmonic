@@ -20,6 +20,7 @@ class LayersPanel(QtWidgets.QWidget):
         self._ids = []
         self._sel = None
         self.last_report = ""
+        self.analytics_hook = None  # set by the main window: callable(AttributeTable) -> Analytics window
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(2, 2, 2, 2)
         self.list = QtWidgets.QListWidget()
@@ -44,6 +45,7 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Text...", lambda *_: self._add_text_dialog()),
                          ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
                          ("Grid calculator...", lambda *_: self.grid_calc()),
+                         ("Cross-check petrophysics vs maps (+ predicted maps, Analytics)...", lambda *_: self.cross_check()),
                          ("New wells: import + petro + re-grid + tie...", lambda *_: self._add_wells_dialog())):
             a = m.addAction(text)
             a.triggered.connect(fn)
@@ -301,6 +303,12 @@ class LayersPanel(QtWidgets.QWidget):
         box.setText(self.last_report.split("\n")[0] if self.last_report else "done")
         box.setDetailedText(self.last_report or "")
         box.exec()
+
+    def cross_check(self):
+        from .propgrid_dialog import CrossCheckDialog
+        dlg = CrossCheckDialog(self.stack, self, self)
+        dlg.show()
+        return dlg
 
     def crossplot(self):
         from .petro_strip import PetroCrossplotDialog
