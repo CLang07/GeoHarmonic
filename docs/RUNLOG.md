@@ -307,3 +307,10 @@ the 2D lines, Tui-1/Amokura-1 wells).
   vertical resolution, curve QC (gaps, flat lines, spikes, bad hole, GR depth shift between runs, splices), bed
   boundaries + thin-bed flags; CLI `--petroqc`, `--tooltable`. Real data: Tui-1 HLLD -> HALS from the DLIS TOOL object
   (SLB wireline), Kiwi-1 = SLB D&M LWD (ARC), Maui-5 DLL / DIL / LDL / CNL / BHC from LAS file names and mnemonics.
+- 20b done (v0.7.0): `petro/interp.py` - Vsh (GR linear / Larionov / Clavier / Steiber, SP, N-D, min), porosity (density,
+  sonic Wyllie / RHG, N-D with gas correction, shale-corrected PHIE), Rw (Rwa min, Pickett fit, SP, Arps), Sw (Archie,
+  Simandoux, modified Simandoux, Indonesia, Waxman-Smits, dual water), perm (Timur, Coates, Wyllie-Rose), Passey TOC,
+  cutoffs -> net res / net pay / PHIH / SoPhiH / kh per zone, cutoff sensitivity, parameter sets per zone and well;
+  CLI `--petro`. Real data (default parameters): Maui-7 C-sands net pay 35 m TVD, PHIE 0.18, Sw 0.14; Maui-5 C-sands
+  5.8 m (median Rt 2.3 ohm.m - mostly wet there), Tui-1 F1 9.6 m PHIE 0.16 Sw 0.30.
+

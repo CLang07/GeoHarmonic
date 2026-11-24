@@ -10,6 +10,8 @@
     python -m well_correlation --checkshot IN.dlis OUT.csv            time-depth table from a CSAT/VSI DLIS
     python -m well_correlation --petroqc PROJECT [WELL ...] [--out DIR]  tool / vendor / resolution + curve QC report
     python -m well_correlation --tooltable OUT.json                     write the editable logging-tool table
+    python -m well_correlation --petro PROJECT [WELL ...] [--out DIR]    deterministic interpretation per zone
+                               (parameters: <project>_petro/params.json, written with defaults on the first run)
 """
 import argparse
 import os
@@ -31,11 +33,32 @@ def main(argv=None):
     ap.add_argument("--petroqc", nargs="+", metavar=("PROJECT", "WELL"))
     ap.add_argument("--out", metavar="DIR", help="--petroqc: output folder (default <project>_petro)")
     ap.add_argument("--tooltable", metavar="OUT_JSON")
+    ap.add_argument("--petro", nargs="+", metavar=("PROJECT", "WELL"))
     a = ap.parse_args(argv)
 
     if a.tooltable:
         from .petro.tools import write_tool_table
         print("wrote", write_tool_table(a.tooltable))
+        return
+    if a.petro:
+        import os as _os
+        from .project import Project
+        from .petro import interp
+        from .petro.store import petro_dir
+        p = Project.open(a.petro[0])
+        if a.out:
+            p.petro_out = a.out
+        if not _os.path.exists(interp.params_path(p)):
+            interp.save_params(p, {"default": {}, "zones": {f["name"]: {} for f in p.formations}, "wells": {},
+                                   "_defaults_for_reference": interp.DEFAULTS, "_choices": interp.METHOD_CHOICES})
+        res = interp.interpret_project(p, a.petro[1:] or None)
+        for n, r in res.items():
+            for q in r["zones"]:
+                print(f"{n:12s} {q['Zone'][:24]:24s} gross {q['Gross_TVD']:7.1f}  net res {q['NetRes_TVD']:6.1f}  "
+                      f"net pay {q['NetPay_TVD']:6.1f} m  PHIE {q['PHIE_res']}  Sw(pay) {q['Sw_pay']}  SoPhiH {q['SoPhiH']}")
+            for note in r.get("notes", []):
+                print(f"{n:12s} ! {note}")
+        print("\nsummary.csv, params.json and curves in", petro_dir(p))
         return
     if a.petroqc:
         from .project import Project

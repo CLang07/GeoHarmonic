@@ -534,3 +534,14 @@ Interpret > Well tie has a second button row:
 - QC: gaps, flat lines per raw curve, spikes, bad hole (caliper vs bit size or |DRHO|), GR depth shift of each run vs
   the longest one, splices the composite makes (level difference + shift), bed boundaries from the finest curve and
   the share of beds each curve cannot resolve.
+20b Deterministic interpretation per zone (v0.7.0):
+- `python -m well_correlation --petro "NZ Well Correlation.wcproj.json" Maui-7` -> zone table (gross / net res / net pay
+  TVD, PHIE, Sw, SoPhiH) and `<project>_petro/summary.csv`, `params.json`, curves VSH / PHIT / PHIE / SW / PERM / ...
+- Edit `params.json`: "default" for all, "zones": {"C-sands (Mangahewa)": {...}}, "wells": {"Maui-7": {"C-sands ...":
+  {...}}}. Choices: vsh_method gr_linear / larionov_tertiary / larionov_old / clavier / steiber / sp / nd / min;
+  phi_method nd / density / sonic_wyllie / sonic_rhg; sw_method archie / simandoux / modified_simandoux / indonesia /
+  waxman_smits / dual_water; rw (value, or rw_method rwa_min / pickett / sp); a, m, n; cutoffs vsh_cut, phi_cut,
+  sw_cut; perm_method timur / coates / wyllie_rose; toc true + LOM for Passey TOC. Empty = automatic, the values used
+  are reported.
+- Defaults are a sandstone model (rho_ma 2.65, Rw from the Rwa minimum, 15 degC + 30 degC/km): set Rw and the matrix
+  for the Tikorangi Limestone before trusting it there.

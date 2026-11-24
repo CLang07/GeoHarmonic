@@ -325,6 +325,20 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   of the finest-resolution curve), `bed_thickness_curve`, `splice_report`, `well_qc` (report dict + QC_BADHOLE,
   QC_SPIKE_<fam>, QC_THIN_<fam>, BED_THICK, BS_USED curves), `qc_project` (+ qc_summary.csv), `format_report`.
   CLI `--petroqc PROJECT [WELL..] [--out DIR]`, `--tooltable OUT.json`. Tests `petro/test_petro.py` (`run_qc`).
+  `interp.py` (20b, v0.7): equations (vsh_from_igr linear / Larionov x2 / Clavier / Steiber, vsh_sp, vsh_nd, phi_density,
+  phi_sonic_wyllie / _rhg, phi_nd (gas: rms form where PHID - NPHI > gas_xover), temperature (surface + gradient on
+  TVDSS or a curve), arps, rwa, rw_from_rwa (P5 in clean porous rock), pickett_fit (lower-envelope water line, m free or
+  fixed, intercept = mode of the lower half), rw_from_sp, juhasz_b, sw_archie / simandoux (closed form) /
+  modified_simandoux / waxman_smits / dual_water (vectorised bisection `solve_sw` on the conductivity model) /
+  indonesia, perm_timur / coates / wyllie_rose, toc_passey). Parameter sets: `DEFAULTS` < params.json default < zones
+  < wells[well]['*'] < wells[well][zone] (`resolve`); None = auto (GR baselines from lithology.gr_baselines, shale points
+  = median at Vsh >= 0.8, Rw from Rwa min). `zones_of` (tops in formation order; outside = zone None, default params,
+  not summarised). `interpret_well` -> {depth, tvdss, rt, curves (VSH PHIT PHIE SW SWT BVW PERM RWA TEMP GAS_FLAG
+  NET_RES NET_PAY TOC DLOGR ZONE_ID), zones (summary rows, TVD-weighted, SoPhiH = sum PHIE (1 - Sw) dTVD over pay),
+  used {zone: params incl. rw_how}, notes}; saves curves + summary.csv (rows of other wells kept). `cutoff_sensitivity`,
+  `pickett_data`, `interpret_project`. CLI `--petro PROJECT [WELL..] [--out DIR]` (writes a params.json template on the
+  first run). Tests `run_interp` (hand values, round trips, forward-modelled shaly-sand well, precedence, real Maui-5 /
+  Tui-1).
 
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.

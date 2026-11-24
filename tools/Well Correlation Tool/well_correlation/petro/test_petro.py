@@ -245,3 +245,156 @@ def run_qc(check, tmp):
             check(rep["files"][0]["conveyance"] == "LWD" and "ARC" in rep["families"]["RDEEP"]["tools"], "Kiwi-1 = SLB LWD (ARC)")
     else:
         print("SKIP real-data petro QC (data/nz not found)")
+
+
+def run_interp(check, tmp):
+    """20b: equations against hand values / round trips, a forward-modelled well, parameter sets, real data."""
+    from ..project import Project
+    from . import interp as I
+    from .store import petro_dir, load_curves
+    rng = np.random.default_rng(3)
+    # ---- equations
+    check(abs(float(I.sw_archie(20.0, 0.05, 0.2)) - 0.25) < 1e-12, "Archie Sw = 0.25 (hand value)")
+    sim = float(I.sw_simandoux(10.0, 0.05, 0.2, 0.2, 2.0))
+    hand = 0.05 / (2 * 0.04) * (np.sqrt(0.1 ** 2 + 4 * 0.04 / (0.05 * 10)) - 0.1)
+    check(abs(sim - hand) < 1e-12 and abs(hand - 0.29653) < 1e-4, f"Simandoux Sw = {sim:.5f} (hand 0.29653)")
+    i = np.array([0.5])
+    vals = {mth: float(I.vsh_from_igr(i, mth)[0]) for mth in ("larionov_tertiary", "larionov_old", "clavier", "steiber")}
+    want = {"larionov_tertiary": 0.083 * (2 ** 1.85 - 1), "larionov_old": 0.33 * (2 ** 1.0 - 1),
+            "clavier": 1.7 - np.sqrt(3.38 - 1.2 ** 2), "steiber": 0.25}
+    check(all(abs(vals[k] - want[k]) < 1e-12 for k in want), "Vsh: Larionov (2), Clavier, Steiber at IGR 0.5")
+    phi = rng.uniform(0.08, 0.3, 200)
+    vsh = rng.uniform(0.0, 0.4, 200)
+    sw0 = rng.uniform(0.15, 1.0, 200)
+    rw, rsh, m, n = 0.05, 2.5, 2.0, 2.2
+    ct = phi ** m * sw0 ** n / (rw * (1 - vsh)) + vsh * sw0 / rsh
+    sw = I.sw_modified_simandoux(1 / ct, rw, phi, vsh, rsh, 1.0, m, n)
+    check(np.max(np.abs(sw - sw0)) < 1e-6, "modified Simandoux: forward -> inverse round trip")
+    rt = 1.0 / ((vsh ** (1 - vsh / 2) / np.sqrt(rsh) + phi ** (m / 2) / np.sqrt(rw)) * sw0 ** (n / 2)) ** 2
+    check(np.max(np.abs(I.sw_indonesia(rt, rw, phi, vsh, rsh, 1.0, m, n) - sw0)) < 1e-9, "Indonesia: round trip")
+    qv, T = 0.4 * vsh, 80.0
+    B = I.juhasz_b(T, rw)
+    ct = phi ** m * sw0 ** n * (1 / rw + B * qv / sw0)
+    check(np.max(np.abs(I.sw_waxman_smits(1 / ct, rw, phi, qv, T, 1.0, m, n) - sw0)) < 1e-6, "Waxman-Smits: round trip")
+    b25 = float(I.juhasz_b(25.0, 0.05))
+    check(3.5 < b25 < 4.6 and float(B) > b25, f"Juhasz B {b25:.2f} at 25 degC (Waxman-Smits ~4), rises with T ({float(B):.1f} at 80)")
+    swb, rwb = np.minimum(vsh * 0.3, sw0 * 0.9), 0.2
+    ct = phi ** m * sw0 ** n * (1 / rw + swb / sw0 * (1 / rwb - 1 / rw))
+    check(np.max(np.abs(I.sw_dual_water(1 / ct, rw, phi, swb, rwb, 1.0, m, n) - sw0)) < 1e-6, "dual water: round trip")
+    phit, gas = I.phi_nd(np.array([0.30, 0.20]), np.array([0.10, 0.22]))
+    check(abs(phit[0] - np.sqrt(0.05)) < 1e-12 and gas[0] and abs(phit[1] - 0.21) < 1e-12 and not gas[1],
+          "N-D porosity: gas crossover uses sqrt((PHID^2 + NPHI^2) / 2)")
+    check(abs(float(I.perm_timur(0.2, 0.2)) - 0.136 * 20 ** 4.4 / 20 ** 2) < 1e-9 * 200, "Timur = 0.136 phi%^4.4 / Swi%^2")
+    check(abs(float(I.perm_coates(0.2, 0.2)) - 256.0) < 1e-9 and abs(float(I.perm_wyllie_rose(0.2, 0.2)) - 100.0) < 1e-9,
+          "Coates / Wyllie-Rose hand values")
+    toc, dlr = I.toc_passey(50.0, 100.0, 5.0, 100.0, 10.0)
+    check(abs(float(dlr) - 1.0) < 1e-12 and abs(float(toc) - 10 ** (2.297 - 1.688)) < 1e-9, "Passey TOC (dlogR = 1, LOM 10)")
+    check(abs(float(I.arps(0.1, 25.0, 100.0)) - 0.1 * 46.5 / 121.5) < 1e-12, "Arps temperature conversion")
+    K = 61 + 0.133 * (80 * 1.8 + 32)
+    ssp = -K * np.log10(0.85 * 0.5 / 0.05)
+    check(abs(I.rw_from_sp(ssp, 0.5, 80.0) - 0.05) < 1e-9, "Rw from SSP (inverse of the SSP equation)")
+    # Pickett: 60 % water-bearing points (m = 1.9, Rw = 0.06) + 40 % hydrocarbon points above the line
+    phi = rng.uniform(0.06, 0.3, 600)
+    swp = np.where(rng.uniform(size=600) < 0.6, 1.0, rng.uniform(0.2, 0.6, 600))
+    rt = 0.06 / (phi ** 1.9 * swp ** 2) * np.exp(0.03 * rng.standard_normal(600))
+    fit = I.pickett_fit(rt, phi, m=None)
+    check(abs(fit["m"] - 1.9) < 0.1 and abs(fit["rw"] / 0.06 - 1) < 0.08, f"Pickett fit m {fit['m']:.2f} (1.9), Rw {fit['rw']:.4f} (0.06)")
+    fit2 = I.pickett_fit(rt, phi, m=1.9)
+    check(abs(fit2["rw"] / 0.06 - 1) < 0.05, f"Pickett with fixed m: Rw {fit2['rw']:.4f}")
+
+    # ---- forward-modelled well
+    root = os.path.join(tmp, "interp_proj")
+    d = os.path.join(root, "wells", "Fwd-1", "las")
+    os.makedirs(d)
+    z = np.arange(950.0, 1260.0, 0.1524)
+    V = np.full(z.size, 0.9)
+    P = np.full(z.size, 0.0)
+    S = np.ones(z.size)
+    pay = (z >= 1000) & (z < 1040)
+    wat = (z >= 1045) & (z < 1095)
+    shaly = (z >= 1110) & (z < 1190)
+    V[pay | wat], P[pay | wat], S[pay] = 0.1, 0.22, 0.3
+    V[shaly], P[shaly] = 0.5, 0.05
+    rho_ma, rho_sh, nphi_sh, rw, rsh = 2.65, 2.55, 0.35, 0.05, 2.0
+    rhob = (1 - P - V) * rho_ma + V * rho_sh + P * 1.0
+    nphi = P + V * nphi_sh
+    gr = 20 + 100 * V
+    ct = P ** 2 * S ** 2 / rw + V * S / rsh
+    rt = 1 / ct
+    dt = 55.5 + (P + 0.2 * V) * (189 - 55.5)
+    e = lambda s_: s_ * rng.standard_normal(z.size)  # noqa: E731  tiny noise: constant stretches would be blanked as flat lines
+    gr, rhob, nphi, rt, dt = gr + e(0.05), rhob + e(0.0003), nphi + e(0.0003), rt * np.exp(e(0.002)), dt + e(0.05)
+    write_las(os.path.join(d, "fwd.las"), "Fwd-1", z, {"GR": gr, "RHOB": rhob, "NPHI": nphi, "LLD": rt, "LLS": rt, "DT": dt},
+              {"NPHI": "V/V"}, srvc="Schlumberger")
+    with open(os.path.join(root, "wells_header.csv"), "w") as fh:
+        fh.write("Well,UWI,Latitude,Longitude,Elevation_m,Elev_Ref,TD_m\nFwd-1,1,-39.6,173.3,0,KB,1260\n")
+    p = Project.from_folder(root)
+    p.formations = [{"name": "A", "color": "#ff0000"}, {"name": "B", "color": "#00ff00"}, {"name": "C", "color": "#0000ff"}]
+    p.tops = {"Fwd-1": {"A": 1000.0, "B": 1100.0, "C": 1200.0}}
+    p.save(os.path.join(root, "fwd.wcproj.json"))
+    p = Project.open(os.path.join(root, "fwd.wcproj.json"))
+    pset = {"default": {"gr_clean": 20.0, "gr_shale": 120.0, "rho_sh": rho_sh, "nphi_sh": nphi_sh, "rw": rw, "rsh": rsh,
+                        "sw_method": "simandoux", "vsh_cut": 0.4, "phi_cut": 0.08, "sw_cut": 0.6}}
+    I.save_params(p, pset)
+    r = I.interpret_well(p, "Fwd-1")
+    c = r["curves"]
+    kz = (r["depth"] >= 1002) & (r["depth"] < 1038)
+    check(np.nanmax(np.abs(c["PHIE"][kz] - 0.22)) < 0.005 and np.nanmax(np.abs(c["VSH"][kz] - 0.1)) < 0.005,
+          f"forward well: PHIE {np.nanmedian(c['PHIE'][kz]):.3f} (0.22), Vsh {np.nanmedian(c['VSH'][kz]):.3f} (0.10)")
+    check(np.nanmax(np.abs(c["SW"][kz] - 0.3)) < 0.01, f"forward well: Simandoux Sw {np.nanmedian(c['SW'][kz]):.3f} (0.30)")
+    row = {q["Zone"]: q for q in r["zones"]}
+    check(abs(row["A"]["NetPay_TVD"] - 40.0) < 0.5 and abs(row["A"]["NetRes_TVD"] - 90.0) < 0.8,
+          f"zone A net pay {row['A']['NetPay_TVD']} m (40), net res {row['A']['NetRes_TVD']} m (90)")
+    check(abs(row["A"]["SoPhiH"] - 40 * 0.22 * 0.7) < 0.15 and row["B"]["NetPay_TVD"] == 0.0,
+          f"SoPhiH {row['A']['SoPhiH']} ({40 * 0.22 * 0.7:.2f}); shaly zone B no pay")
+    check(row["A"]["Sw_pay"] is not None and abs(row["A"]["Sw_pay"] - 0.3) < 0.01 and row["A"]["kh_pay"] > 0, "pay Sw + kh")
+    sr = I.read_summary(p)
+    check(len(sr) == 3 and sr[0]["Well"] == "Fwd-1", "summary.csv written (one row per zone)")
+    dz, saved = load_curves(p, "Fwd-1")
+    check("PHIE" in saved and "SW" in saved and "NET_PAY" in saved, "computed curves saved to the well's npz")
+    # Archie overestimates Sw-hydrocarbon (lower Sw) in shaly sand? (shale conductivity ignored -> higher Sw)
+    pa = I.copy_params(pset)
+    pa["default"]["sw_method"] = "archie"
+    ra = I.interpret_well(p, "Fwd-1", pa, save=False)
+    check(np.nanmedian(ra["curves"]["SW"][kz]) > np.nanmedian(c["SW"][kz]) + 0.01,
+          "Archie Sw higher than Simandoux in shaly sand (shale conductance ignored)")
+    # Rw from Rwa minimum (water leg in zone A): Rwa = phi^2 Rt in the water leg ~ Rw (shale term small)
+    pb = I.copy_params(pset)
+    pb["default"].pop("rw")
+    rb = I.interpret_well(p, "Fwd-1", pb, save=False)
+    check(abs(rb["used"]["A"]["rw"] / rw - 1) < 0.35 and "Rwa" in rb["used"]["A"]["rw_how"],
+          f"Rw auto from the Rwa minimum: {rb['used']['A']['rw']:.4f} (true 0.05; shale conductance biases it low)")
+    # parameter precedence
+    ps = {"default": {"m": 2.1}, "zones": {"A": {"m": 1.8}}, "wells": {"Fwd-1": {"A": {"m": 1.7}, "*": {"n": 2.3}}}}
+    check(I.resolve(ps, "Fwd-1", "A")["m"] == 1.7 and I.resolve(ps, "X", "A")["m"] == 1.8 and I.resolve(ps, "X", "B")["m"] == 2.1
+          and I.resolve(ps, "Fwd-1", "B")["n"] == 2.3 and I.resolve(ps, "X", "B")["n"] == 2.0, "parameter sets: well+zone > zone > default")
+    sens = I.cutoff_sensitivity(r, "A")
+    npay = sens["phi_cut"]["net_pay_tvd"]
+    check(np.all(np.diff(npay) <= 1e-9) and npay[0] >= 40 - 0.5 and npay[-1] < 1e-9,
+          "cutoff sensitivity: net pay falls monotonically with the porosity cut-off")
+    swc = sens["sw_cut"]["net_pay_tvd"]
+    check(np.all(np.diff(swc) >= -1e-9) and swc[-1] > 85, "cutoff sensitivity: Sw cut 1.0 makes all net reservoir pay")
+    pk = I.pickett_data(r, "A")
+    check(len(pk["phi"]) > 100 and pk["rw"] == rw, "Pickett plot data")
+    # TOC on a source-rock interval
+    pt = I.copy_params(pset)
+    pt["zones"] = {"B": {"toc": True, "rt_base": 2.0, "dt_base": 100.0}}
+    rt_ = I.interpret_well(p, "Fwd-1", pt, save=False)
+    check(np.isfinite(rt_["curves"]["TOC"]).any() and not np.isfinite(rt_["curves"]["TOC"][kz]).any(), "TOC only where asked (zone B)")
+
+    # ---- real data (Maui-5 / Tui-1, default parameters)
+    here = os.path.dirname(os.path.abspath(__file__))
+    nz = os.path.normpath(os.path.join(here, "..", "..", "..", "..", "data", "nz", "NZ Well Correlation.wcproj.json"))
+    if os.path.exists(nz):
+        pr = Project.open(nz)
+        pr.petro_out = os.path.join(tmp, "nz_petro")
+        for wn in ("Maui-5", "Tui-1"):
+            if wn not in pr.wells or not pr.tops.get(wn):
+                continue
+            rr = I.interpret_well(pr, wn)
+            ok = [q for q in rr["zones"] if q["PHIE_res"] is not None]
+            good = all(0.03 < q["PHIE_res"] < 0.35 for q in ok) and all(np.isfinite(q["SoPhiH"]) for q in rr["zones"])
+            check(ok and good, f"{wn} real run: " + "; ".join(f"{q['Zone'][:12]} net pay {q['NetPay_TVD']} m PHIE "
+                                                           f"{q['PHIE_res']} Sw {q['Sw_pay']}" for q in rr["zones"]))
+    else:
+        print("SKIP real-data petro interpretation (data/nz not found)")
