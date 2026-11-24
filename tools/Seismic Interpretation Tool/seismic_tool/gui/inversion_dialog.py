@@ -149,6 +149,13 @@ class InversionDialog(QtWidgets.QDialog):
                                 "amplitude statistics -> Bayesian classifier -> P(fluid) volumes (PLAN 24c)")
         self.b_bayes.clicked.connect(lambda *_: self._safe(self._bayes_dialog))
         b_row.addWidget(self.b_bayes)
+        self.b_avo = QtWidgets.QPushButton("AVO volumes (intercept, gradient, anomaly, fluid factor)")
+        self.b_avo.clicked.connect(lambda *_: self._safe(self.avo_volumes))
+        self.b_risk = QtWidgets.QPushButton("Angle-stack risk")
+        self.b_risk.setToolTip("Expected Zp / Zs / density errors from 2 / 3 / 5 stacks vs the full gather (PLAN 25c)")
+        self.b_risk.clicked.connect(lambda *_: self._safe(self.stack_risk))
+        b_row.addWidget(self.b_avo)
+        b_row.addWidget(self.b_risk)
         l3.addLayout(b_row)
         tabs.addTab(t3, "Pre-stack")
         # ---- cross-plot / export
@@ -493,6 +500,55 @@ class InversionDialog(QtWidgets.QDialog):
         self._set_info(f"Predictive model: {n} pseudo-wells ({', '.join(fluids)}), angles {a0:g} / {a1:g} deg, "
                        f"classifier self-accuracy {100 * acc:.0f} %" + (f"; wrote {', '.join(names)}" if names else ""))
         return self.predictive_result
+
+    # ------------------------------------------------------------------ AVO (PLAN 25)
+    def avo_volumes(self, n_trend=20000):
+        """Intercept, gradient, anomaly (sd from the background trend) and fluid factor volumes from the nearest and
+        farthest angle stacks."""
+        from .. import avo as V
+        from ..inversion.common import write_volumes
+        if len(self.stacks) < 2:
+            raise RuntimeError("add a near and a far angle stack first")
+        (near, a0), (far, a1) = self.stacks[0], self.stacks[-1]
+        vn, vf = self.project.volume(near), self.project.volume(far)
+        rng = np.random.default_rng(0)
+        idx = rng.choice(vn.nil * vn.nxl, min(400, vn.nil * vn.nxl), replace=False)
+        sn = np.asarray(vn.ilxl[idx // vn.nxl, idx % vn.nxl], np.float32) * vn.inv
+        sf = np.asarray(vf.ilxl[idx // vf.nxl, idx % vf.nxl], np.float32) * vf.inv
+        A, B = V.shuey_ab(sn, sf, a0, a1)
+        strong = np.abs(A) > np.percentile(np.abs(A), 50)  # trend from reflections, not from the zero crossings
+        sel = np.nonzero(strong.ravel())[0][:n_trend]
+        trend = V.background_trend(A.ravel()[sel], B.ravel()[sel])
+
+        def compute(a, b):
+            n_ = np.asarray(vn.ilxl[a:b], np.float32) * vn.inv
+            f_ = np.asarray(vf.ilxl[a:b], np.float32) * vf.inv
+            Ai, Bi = V.shuey_ab(n_, f_, a0, a1)
+            return {"Intercept": Ai.astype(np.float32), "Gradient": Bi.astype(np.float32),
+                    "AVO anomaly": V.ig_anomaly(Ai, Bi, trend).astype(np.float32),
+                    "Fluid factor": V.fluid_factor(Ai, Bi).astype(np.float32)}
+        names = write_volumes(self.project, near, ["Intercept", "Gradient", "AVO anomaly", "Fluid factor"], compute,
+                              meta_extra={"avo_trend": list(trend), "angles": [a0, a1]})
+        self.avo_trend = trend
+        self._set_info(f"AVO from {near} ({a0:g} deg) / {far} ({a1:g} deg): background B = {trend[0]:.2f} A + "
+                       f"{trend[1]:.3g}; wrote {', '.join(names)}")
+        return names
+
+    def stack_risk(self, noise=0.02):
+        """PLAN 25c for the actual angle range of the loaded stacks."""
+        from .. import avo as V
+        if not self.stacks:
+            raise RuntimeError("add the angle stacks first")
+        angs = [a for _, a in self.stacks]
+        lo, hi = min(angs), max(angs)
+        r = V.stack_vs_gather_risk(hi, max(1.0, lo - (angs[1] - angs[0]) / 2 if len(angs) > 1 else lo), 1.0,
+                                   (len(self.stacks), 2, 3, 5), noise)
+        self.stack_risk_result = r
+        txt = "; ".join(f"{k}: Zp {100 * v['zp']:.1f} %, Zs {100 * v['zs']:.1f} %, rho {100 * v['rho']:.1f} %"
+                        for k, v in r.items() if k != "angles")
+        warn = " - density poorly constrained (max angle < 35 deg)" if hi < 35 else ""
+        self._set_info(f"Angle-stack risk {lo:g}-{hi:g} deg (reflectivity 1-sd errors): {txt}{warn}")
+        return r
 
     def _bayes_dialog(self):
         t, ok = QtWidgets.QInputDialog.getText(self, "Predictive modelling", "Fluids (comma separated: brine, gas, oil, "

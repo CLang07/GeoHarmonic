@@ -390,6 +390,16 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   NaN), `classify_volumes` (write_volumes '<near> [P(fluid)]'), `probability_map` (max in a window around a horizon),
   `stats_table`. InversionDialog.predictive (Pre-stack tab button; nearest / farthest stack; min_amp default 0.3 x
   median |near| of the simulation). Tests `test_resolution.py` (run, run_seeds, run_predictive) + test_inversion GUI.
+- `avo.py` (25, v0.48): `zoeppritz_pp` (exact 4x4, complex past critical), `avo_class` (I / IIp / II / III / IV with
+  a_small 0.02 and theta_max), `ig_from_gather`, `background_trend` (LS with 2-sd trimming), `ig_anomaly` (signed
+  perpendicular distance in sd), `fluid_factor` (Rp - 1.16 Vs/Vp Rs, Rs from A, B), `interface_avo`, `scenario_avo`
+  (Gassmann fluids), `ar3_rows`, `stack_vs_gather_risk` (Bayesian linear AR3 with prior_sd, stacks = mean rows with
+  noise / sqrt(fold); MC check), `fizz_assessment` (density likelihoods gas vs fizz with rho_err, separation, reasons),
+  `lf_shadow` (12 / 30 Hz spectral ratio below vs above + centroid drop), `DHI_CHECKS` (weights, computed flag),
+  `amplitude_score`, `conformance_score` (best Jaccard of anomaly vs shallower-than-level), `avo_score`,
+  `stack_consistency_score`, `dhi_index` (renormalised weights), `assess_prospect`. InversionDialog.avo_volumes
+  (Intercept / Gradient / AVO anomaly / Fluid factor volumes, trend from the stronger half of the samples), stack_risk;
+  LayersPanel.dhi (display["dhi"][name]). Tests `test_avo.py`, test_inversion GUI, test_blend GUI.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

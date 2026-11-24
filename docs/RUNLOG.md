@@ -380,3 +380,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
   case flagged NO), `wellseeds.py` (tops / synthetic events -> snapped seed horizons; RGT spread at 5 wells across a
   fault 23 -> 0.7 with seeds), `predictive.py` (pseudo-wells with Gassmann, Aki-Richards / Shuey, Bayesian classifier:
   86 % on independent pseudo-wells, 95 % of traces of a synthetic brine / gas section, P(fluid) volumes).
+- Item 25 done (Seismic v0.48.0): `avo.py` - exact Zoeppritz (= AI reflectivity at 0 deg, Aki-Richards within 0.003 to
+  30 deg), AVO classes I-IV from known contrasts, background trend + anomaly z-scores, fluid factor, Gassmann scenarios;
+  fizz vs commercial gas from density (gas -7.5 % vs fizz -0.7 % density at 25 % porosity; Vp -17 % vs -15 %); angle-
+  stack risk (density error 2 stacks >= 3 >= 5 >= gather, halves when the far angle goes 35 -> 50 deg; MC confirms);
+  DHI checklist with conformance (fitting anomaly 0.9+ vs cutting anomaly < 0.5) and weighted index; GUI: AVO volumes,
+  angle-stack risk, DHI from the Map layers dock.

@@ -684,3 +684,18 @@ on the basemap.
   Compute RGT then honours them (also across faults) and T grows a seed into a full horizon.
 Test first: on a 3D with tied wells, Seismic inversion > set wavelet > Resolution (window around the reservoir), then
 Single-well inversion at a well with a known pay zone.
+
+## AVO, fizz gas, angle-stack risk, DHI checklist (PLAN item 25, Seismic v0.48.0)
+- Seismic inversion > Pre-stack tab: "AVO volumes" writes Intercept, Gradient, AVO anomaly (distance from the wet
+  background trend in standard deviations; strongly negative = hydrocarbon side) and Fluid factor from the nearest and
+  farthest stacks - show them on sections / time slices or as overlays (item 23).
+- "Angle-stack risk": for your actual angle range and stack count, the expected errors of Zp, Zs and density from the
+  stacks vs a full gather; warns when the far angle is below ~35 deg (density poorly constrained).
+- Fizz gas (avo.fizz_assessment, used by the DHI work): Vp drops almost as much as commercial gas, density does not -
+  the observed density change from the pre-stack inversion is compared with both Gassmann cases and the result says when
+  the density error is too large to decide. Low-frequency shadow / attenuation are reported as supporting evidence.
+- Map layers > Add > DHI checklist: pick an amplitude grid and the structure grid; amplitude strength and conformance
+  (does the anomaly outline follow a structural contour?) are computed, flat spot / phase change / edges / data quality
+  are your scores; weighted DHI index with reasons, stored with the project for prospect risking (item 28).
+Test first: AVO volumes on a project with near / far stacks, then View the "[AVO anomaly]" volume on an inline over a
+known gas sand.

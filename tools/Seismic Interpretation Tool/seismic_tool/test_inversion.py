@@ -423,6 +423,14 @@ def run_gui(check, tmp):
     vals = np.asarray(pv.ilxl[:, :, :], np.float32) * pv.inv
     check(pnames == ["Near [P(brine)]", "Near [P(gas)]"] and vals.min() >= -1e-3 and vals.max() <= 1.001 and
           len(rows) == 2, "24c GUI: predictive modelling -> P(brine) / P(gas) volumes from the near / far stacks")
+    an = dlg.avo_volumes()
+    av = w.project.volume(an[2])
+    zz = np.asarray(av.ilxl[:, :, :], np.float32) * av.inv
+    check(an == ["Near [Intercept]", "Near [Gradient]", "Near [AVO anomaly]", "Near [Fluid factor]"] and
+          np.isfinite(zz).all() and np.nanstd(zz) > 0, "25a GUI: AVO volumes from the near / far stacks")
+    rk = dlg.stack_risk()
+    check(rk["gather"]["rho"] <= rk["2 stacks"]["rho"] and "density poorly constrained" in dlg._last_text,
+          "25c GUI: angle-stack risk for the loaded 8-28 deg stacks")
     out_p = dlg.run_prestack()
     check(len(out_p) == 6 and "Near [SI VpVs]" in out_p, "19d: simultaneous inversion -> 6 volumes")
     cp = dlg.crossplot("Near [SI Zp]", "Near [SI VpVs]", "log: GR")

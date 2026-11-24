@@ -253,3 +253,14 @@ def run_gui(check, tmp):
           "23a GUI: co-blend layer added from the Map layers dock with a triangle legend")
     panel.shade_by(b, a, 315, 30, 3)
     check(st.get(b)["style"]["shade_from"] == a and not mw.basemap.layer_errors, "23b GUI: shade a grid by structure")
+    # PLAN 25d: DHI checklist from the Map layers dock (amplitude grid conformant with the Top structure)
+    from .maps import MapGrid
+    top = st.grid(a)
+    crest = top.z <= np.nanpercentile(top.z, 25)
+    amp = MapGrid(np.where(crest, 3.0, 1.0) + np.random.default_rng(3).normal(0, 0.1, top.z.shape), "ilxl", "amp",
+                  "amp", top.vol)
+    am, _ = st.add_grid(amp, "Amp")
+    res = panel.dhi(am, a, {"flat_spot": 0.5, "quality": 0.8}, "P1")
+    check(res["details"]["amp_ratio"] > 2 and res["used"]["conformance"] > 0.8 and 0.4 < res["index"] < 1 and
+          mw.project.display["dhi"]["P1"]["index"] == res["index"], f"25d GUI: DHI index {res['index']:.2f} for a "
+          f"conformant anomaly (conformance {res['used']['conformance']:.2f}) stored with the project")

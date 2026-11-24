@@ -513,7 +513,7 @@ all consume their per-zone results. Design decisions (Chris can override):
    Tests: tuning thickness vs a wedge model, Monte-Carlo bands contain the true synthetic, classifier recovers the
    fluid of a synthetic section, RGT honours well seeds.
 
-25. **AVO, DHI, fizz gas, angle-stack risk** - status: todo
+25. **AVO, DHI, fizz gas, angle-stack risk** - status: done (run 5, Seismic v0.48.0; follow-ups: IG cross-plot window with brushing to the section, gather input (pre-stack gathers not stored yet), DHI plots per check, fizz assessment in a dialog)
    25a. AVO at wells and on data: Zoeppritz / Aki-Richards / Shuey, AVO class (I, II, IIp, III, IV), intercept-
         gradient from angle stacks or gathers, fluid factor, IG cross-plot with background trend and anomalies
         highlighted on the section / map; Gassmann scenario synthetics from 20d.

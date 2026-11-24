@@ -5,6 +5,7 @@ import os
 
 os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
 from PySide6 import QtCore, QtWidgets  # noqa: E402
+import numpy as np  # noqa: E402
 
 from .. import maplayers as ML  # noqa: E402
 from . import colormaps  # noqa: E402
@@ -44,6 +45,7 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Mineral pies per well (mineral solver)...", lambda *_: self._add_pies_dialog()),
                          ("Text...", lambda *_: self._add_text_dialog()),
                          ("Co-blend 2-3 grids (RGB / CMY / HSV)...", lambda *_: self._add_blend_dialog()),
+                         ("DHI checklist (amplitude grid vs structure grid)...", lambda *_: self._dhi_dialog()),
                          ("Shade selected grid by structure (amplitude on structure / bump map)...",
                           lambda *_: self._shade_dialog()),
                          ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
@@ -272,6 +274,51 @@ class LayersPanel(QtWidgets.QWidget):
         lay = self.stack.get(lid or self.selected_id())
         names = [self.stack.get(i)["name"] for i in lay["src"].get("grids", [])]
         return B.legend_triangle(lay["style"].get("mode", "rgb"), 96, names + [""] * (3 - len(names)))
+
+    def dhi(self, amp_lid, depth_lid, manual=None, name="Prospect", weights=None, threshold=None):
+        """PLAN 25d: DHI checklist on the map hub - amplitude strength and conformance computed from an amplitude grid
+        and a structure grid (time or depth, deeper = larger), the other checks from `manual` {check: 0..1}.  The
+        anomaly is |amp| > threshold (default 1.5 x the mean |amp|); result stored in display['dhi'][name]."""
+        from .. import avo as V
+        from .. import blend as B
+        ga, gd = ML.display_grid(self.stack, amp_lid), ML.display_grid(self.stack, depth_lid)
+        if ga is None or gd is None:
+            raise ValueError("pick an amplitude grid and a structure grid")
+        amp = np.asarray(ga.z, float)
+        dep = B.on_grid(ga, gd)
+        thr = threshold if threshold is not None else 1.5 * float(np.nanmean(np.abs(amp)))
+        inside = np.isfinite(amp) & (np.abs(amp) > thr)
+        bg = np.isfinite(amp) & ~inside
+        res = V.assess_prospect(amp, np.where(np.isfinite(dep), dep, np.inf), inside, bg, manual=manual, weights=weights,
+                                threshold=thr)
+        res["name"] = name
+        if self.stack.project is not None:
+            self.stack.project.display.setdefault("dhi", {})[name] = {k: v for k, v in res.items()}
+        self.status.setText(f"DHI index {name}: {res['index']:.2f} - " + "; ".join(res["reasons"][:3]))
+        return res
+
+    def _dhi_dialog(self):
+        ch = self._grid_choices()
+        if len(ch) < 2:
+            self.status.setText("DHI checklist needs an amplitude grid and a structure grid")
+            return None
+        items = [f"{i}: {n}" for i, n in ch]
+        a, ok = QtWidgets.QInputDialog.getItem(self, "DHI checklist", "Amplitude grid", items, 0, False)
+        if not ok:
+            return None
+        d, ok = QtWidgets.QInputDialog.getItem(self, "DHI checklist", "Structure grid (time / depth)", items, 1, False)
+        if not ok:
+            return None
+        from ..avo import DHI_CHECKS
+        manual = {}
+        for k, (wgt, computed, desc) in DHI_CHECKS.items():
+            if computed:
+                continue
+            v, ok = QtWidgets.QInputDialog.getDouble(self, "DHI checklist", f"{desc} (0 = absent .. 1 = clear)", 0.5, 0, 1, 2)
+            if ok:
+                manual[k] = v
+        name, _ = QtWidgets.QInputDialog.getText(self, "DHI checklist", "Prospect name", text="Prospect")
+        return self.dhi(a.split(":")[0], d.split(":")[0], manual, name or "Prospect")
 
     def _grid_choices(self):
         return [(l["id"], l["name"]) for l in self.stack.ordered() if l["kind"] in ("grid", "horizon")]
