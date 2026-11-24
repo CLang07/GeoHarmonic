@@ -386,3 +386,8 @@ the 2D lines, Tui-1/Amokura-1 wells).
   stack risk (density error 2 stacks >= 3 >= 5 >= gather, halves when the far angle goes 35 -> 50 deg; MC confirms);
   DHI checklist with conformance (fitting anomaly 0.9+ vs cutting anomaly < 0.5) and weighted index; GUI: AVO volumes,
   angle-stack risk, DHI from the Map layers dock.
+- Item 26 done (Seismic v0.49.0): `structure.py` - phases in the age table + Wheeler colours, fault growth (synthetic
+  growth fault: EI 1.0 / 1.0 / 1.6 / 1.6 / 1.0 recovered, syn-rift proposed for the right two intervals), flattening
+  (horizon on the datum to 1 sample), decompacted paleo-depths (grains conserved to 1e-6), paleo animation GIF, block
+  restoration (30 ms throw recovered, restored section matches the unfaulted one to 5 % RMS, line length / area
+  unchanged); GUI: paleo animation of the current section.

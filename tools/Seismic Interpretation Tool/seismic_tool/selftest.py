@@ -191,6 +191,8 @@ def run():
         test_resolution.run_predictive(check, tmp)
         from . import test_avo
         test_avo.run(check, tmp)
+        from . import test_structure
+        test_structure.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -278,6 +280,8 @@ def run_gui():
         test_qgislink.run_gui(check, tmp)
         from . import test_blend
         test_blend.run_gui(check, tmp)
+        from . import test_structure
+        test_structure.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

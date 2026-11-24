@@ -699,3 +699,13 @@ Single-well inversion at a well with a known pay zone.
   are your scores; weighted DHI index with reasons, stored with the project for prospect risking (item 28).
 Test first: AVO volumes on a project with near / far stacks, then View the "[AVO anomaly]" volume on an inline over a
 known gas sand.
+
+## Structural timing, paleo-structure animation, restoration (PLAN item 26, Seismic v0.49.0)
+- Interpret > Paleo-structure animation of this section (GIF): the shown inline / crossline / 2D line flattened on each
+  visible horizon from the oldest to the youngest, younger data blanked - works on any volume you are displaying
+  (seismic, AI / Vp/Vs from the inversion, P(gas) ...).
+- In code for now (UI next): tectonic phase per age-table unit (pre- / syn- / post-rift, inversion) with Wheeler
+  colours; fault growth (throw per horizon, expansion index per interval) proposing the syn-rift interval;
+  decompacted paleo-depths of every horizon at the time of a younger one; block restoration of a fault on a section
+  (cut-offs extrapolated to the fault, one step per horizon) with line-length / area checks.
+Test first: show an inline with 3+ interpreted horizons, Interpret > Paleo-structure animation, open the GIF.

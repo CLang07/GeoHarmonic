@@ -400,6 +400,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `stack_consistency_score`, `dhi_index` (renormalised weights), `assess_prospect`. InversionDialog.avo_volumes
   (Intercept / Gradient / AVO anomaly / Fluid factor volumes, trend from the stronger half of the samples), stack_risk;
   LayersPanel.dhi (display["dhi"][name]). Tests `test_avo.py`, test_inversion GUI, test_blend GUI.
+- `structure.py` (26, v0.49): PHASES / PHASE_COLORS, `set_phase` (AgeTable entry key "phase" = unit below the
+  surface), `phase_intervals`, `phase_of_age`, `phase_colors_for_axis`; `throw_across`, `expansion_index`,
+  `propose_phases` (EI >= 1.1 -> syn-rift, older pre-, younger post-rift), `fault_growth(grids, fault_xl(i))`;
+  `flatten`, `paleo_depths` (Athy decompaction with basin.burial solid_thickness / base_for; grains conserved),
+  `paleo_frames` (flatten on each horizon oldest first, younger data blanked), `frames_to_rgba`, `export_gif` (PIL);
+  `cutoff_throw` (HW / FW cut-offs extrapolated linearly to the fault), `restore_fault` (vertical fault at trace j,
+  one step per horizon), `unfold_vertical_shear`, `line_length`, `area_between`. SectionPanel.section_horizons;
+  MainWindow.paleo_animation (Interpret menu). Tests `test_structure.py` (run, run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

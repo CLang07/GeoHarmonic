@@ -262,6 +262,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Compute &dip field (current 3D volume)...", self.compute_dip)
         self._act(m, "Compute attri&bute volume (current 3D volume)...", self.compute_attribute_volume)
         self._act(m, "Well seeds from tied tops (horizon seeds + RGT control)", lambda *_: self.well_seeds())
+        self._act(m, "Paleo-structure animation of this section (GIF)...", lambda *_: self._paleo_dialog())
         self._act(m, "Compute &RGT (current 3D volume)...", self.compute_rgt_3d)
         self._act(m, "Compute RGT (all &2D lines)...", self.compute_rgt_2d)
         self._act(m, "Build horizon &stack (3D)...", self.build_stack_3d)
@@ -974,6 +975,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self._horizons_changed()
         self.statusBar().showMessage(f"{len(hs)} seed horizon(s) from the wells: " + ", ".join(h.name for h in hs[:6]))
         return hs
+
+    def paleo_animation(self, path, duration_ms=800):
+        """PLAN 26b: the current section flattened on each visible horizon, oldest -> youngest, as an animated GIF."""
+        from .. import structure as S
+        hz_ = self.section.section_horizons()
+        if not hz_:
+            raise ValueError("show an inline / crossline / 2D line with interpreted horizons")
+        frames = S.paleo_frames(np.asarray(self.section._data, float), np.asarray(self.section._yaxis, float), hz_)
+        S.export_gif(S.frames_to_rgba(frames), path, duration_ms)
+        self.statusBar().showMessage(f"Paleo animation ({len(frames)} frames: {', '.join(n for n, _ in frames)}) -> {path}")
+        return [n for n, _ in frames]
+
+    def _paleo_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Paleo-structure animation", "paleo.gif", "GIF (*.gif)")
+        if path:
+            try:
+                self.paleo_animation(path)
+            except Exception as e:
+                self.statusBar().showMessage(f"Paleo animation: {e}")
 
     def compute_rgt_3d(self):
         src = self.section.source

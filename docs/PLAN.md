@@ -530,7 +530,7 @@ all consume their per-zone results. Design decisions (Chris can override):
    Tests: AVO class from known elastic contrasts, fizz vs commercial gas separated only by density, gather vs stack
    error ordering, conformance score on a synthetic anomaly that fits / does not fit a closure.
 
-26. **Structural timing, paleo-structure animations, structural reconstruction** - status: todo
+26. **Structural timing, paleo-structure animations, structural reconstruction** - status: done (run 5, Seismic v0.49.0; follow-ups: phase column + growth table in the basin / Wheeler window, paleo-depth map animation in the map hub, inclined-shear unfolding, restoration UI picking the fault on the section, MP4)
    26a. Wheeler with tectonic phases: tag each age interval pre-rift / syn-rift / post-rift (inversion, other) in the
         age table (18a); fault growth analysis (throw vs depth / time per fault from horizons + sticks, expansion
         index across faults) proposes the syn-rift interval; colour the Wheeler by phase.

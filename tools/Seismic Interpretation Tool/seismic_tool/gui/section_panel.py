@@ -1384,6 +1384,27 @@ class SectionPanel(QtWidgets.QWidget):
             self._hz_items.append(it)
 
     # ------------------------------------------------------------ for the basemap
+    def section_horizons(self):
+        """{name: t (n traces)} of the visible horizons on the current inline / crossline / 2D line, shallow first
+        (PLAN 26 paleo animation / restoration)."""
+        hs = self.hset()
+        if hs is None or not self.source or self._data is None or self.mode in ("Time slice", "Stratal slice"):
+            return {}
+        kind, name = self.source
+        surv = self.project.volume(name) if kind == "3D" else self.project.line(name)
+        key = self.section_key()
+        out = {}
+        for h in hs.items:
+            if not h.visible:
+                continue
+            c = hz.section_curve(h, key, surv, self.mode, self.number)
+            if c is None or not np.isfinite(c[1]).any():
+                continue
+            t = np.interp(np.asarray(self._xaxis, float), np.asarray(c[0], float), np.asarray(c[1], float),
+                          left=np.nan, right=np.nan)
+            out[h.name] = t
+        return dict(sorted(out.items(), key=lambda kv: float(np.nanmean(kv[1]))))
+
     # ------------------------------------------------------------ linked cursor (PLAN 23c)
     def linked_position(self, msg, tol=None):
         """Where a cursor message from another view falls on this section: (x axis value, y value or None) in the
