@@ -14,7 +14,10 @@ data/nz/        Maui field wells (offshore Taranaki NZ): wells/<Well>/las, check
                 main), dlis/ (PEX-DSI-HALS repeat pass, intermediate PEX-HRLA-DSI), mudlog/ gas chromatograph
                 CSV, samples/ cuttings metadata. Location from log header: NZMG E 2,531,255 N 6,196,747,
                 DF 25 m above LAT, water depth 123 m. Pateke-2/checkshot: 4 CSI DLIS files.
+tools/QGIS Plugin/geoharmonic_link/   QGIS plugin "GeoHarmonic Link" (21h): core.py (LinkClient, read_project, FileWatcher -
+                no QGIS imports), plugin.py (qgis.PyQt / qgis.core / qgis.gui). Zip: python dev/build_qgis_plugin.py
 dev/fakeqt/     Qt + pyqtgraph mock for testing GUI code without Qt
+dev/fakeqgis/   qgis mock (module __getattr__ -> fakeqt Anything; needs dev/fakeqt on the path)
 docs/           HANDOFF (this), PLAN (ordered work), RUNLOG (one entry per run)
 ```
 Chris runs each tool from its folder on Windows: `Install (run once).bat` creates `.venv` from
@@ -339,6 +342,17 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   locator box; export_map(graticule, locator, source, neatline), graticule_lines, save_template / load_template
   (display["map_templates"]). LayersPanel: add_vector, set_crs, export_gis, goto_legal, identify (Basemap.mapClicked),
   attribute_rows. Tests `test_gis.py` (run, run_export, run_gui).
+- `qgislink.py` (21h, v0.43): `shared_paths` (<project>_gis.gpkg + <project>_gis_grids/), `write_shared(project, stack)`
+  (wells + status + petro columns, tops (vertical approx.), faults + convex-hull footprints, every visible layer via
+  gis.export.layer_features, grids as GeoTIFF with overviews; editable tables prospects_edit / leases / section_lines kept
+  across rewrites; default styles in the GeoPackage `layer_styles` table (QML, useAsDefault); gh_meta + gh_rasters),
+  `read_user_edits(project, last hashes)` / `apply_user_edits(stack, changed)` (polygons tagged from gpkg | message),
+  `LinkEndpoint(role, port)` (JSON lines over 127.0.0.1, inbox queue, poll / send / wait, never raises), `handle(msg,
+  app)`. MainWindow: View > Live link with QGIS (`toggle_qgis`, 200 ms `qgis_tick`: messages + edits (first read = baseline
+  only)), Send map to QGIS (`send_map_to_qgis`), `send_current_section` on positionChanged, basemap.wellsSelected ->
+  select_wells (set_selected_wells(emit=False) for selections that came from QGIS), `open_arbitrary` ->
+  `gui/arbitrary_dialog.ArbitraryDialog` (Volume3D.arbitrary). Tests `test_qgislink.py` (run: GeoPackage, edits, plugin
+  core, two-process protocol; run_gui: plugin under dev/fakeqgis + main window server).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

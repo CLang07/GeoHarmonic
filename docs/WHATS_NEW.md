@@ -622,4 +622,16 @@ residual-corrected map; Send to Analytics hands the well table to the Analytics 
 - Go to legal description: "660 FNL 1980 FWL Sec 14 T12N R3W" in a loaded PLSS sections layer (CadNSDI fields).
 - Export for QGIS / ArcGIS: GeoTIFFs (with overviews), shapefiles, one GeoPackage and a KML of the visible layers.
 - Export map...: now with a locator inset (red extent box), lat / long graticule, neatline and saved templates.
+21h QGIS link (v0.43.0):
+- Seismic tool > View > Send map to QGIS: writes `<project>_gis.gpkg` (wells with status + petro values, tops, faults,
+  contours, prospects, 2D lines, 3D outline, vector layers - styled) and the grids as GeoTIFFs in `<project>_gis_grids/`.
+  Set the project coordinate system first (Map layers > Add... > Project coordinate system).
+- QGIS: run `python dev/build_qgis_plugin.py`, then Plugins > Manage and Install Plugins > Install from ZIP >
+  dev/geoharmonic_link.zip. Toolbar "GeoHarmonic Link": Open GeoHarmonic project (pick the _gis.gpkg) adds everything in a
+  "GeoHarmonic" group and reloads when GeoHarmonic rewrites it.
+- Live: Seismic tool > View > Live link with QGIS, then Connect to GeoHarmonic in QGIS. Selecting wells in either app
+  selects them in the other; the current seismic section shows as a line in QGIS; in QGIS select a line and press "Send
+  selected line(s) as seismic section" (opens an arbitrary section), select polygons and "Send ... as prospects".
+  Polygons / lines you digitise in the prospects_edit, leases or section_lines layers are picked up automatically.
+Test first: Send map to QGIS, open it in QGIS with the plugin, connect, select two wells in QGIS.
 

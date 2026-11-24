@@ -139,7 +139,8 @@ def _py(v):
     return v
 
 
-def write_layer(path, table, geoms, attrs=None, srs_id=-1, srs_wkt="undefined", srs_name="", description=""):
+def write_layer(path, table, geoms, attrs=None, srs_id=-1, srs_wkt="undefined", srs_name="", description="",
+                geometry_type=None):
     attrs = attrs or {}
     con = sqlite3.connect(path)
     try:
@@ -170,6 +171,8 @@ def write_layer(path, table, geoms, attrs=None, srs_id=-1, srs_wkt="undefined", 
         con.executemany(q, rows)
         gtype = {"Point": "POINT", "MultiPoint": "MULTIPOINT", "LineString": "GEOMETRY", "Polygon": "GEOMETRY"}.get(
             next((g["type"] for g in geoms if g), "Point"), "GEOMETRY")
+        if geometry_type:  # e.g. empty tables the user digitises into (QGIS needs the concrete type)
+            gtype = {"Point": "POINT", "LineString": "LINESTRING", "Polygon": "POLYGON"}.get(geometry_type, geometry_type)
         con.execute("INSERT INTO gpkg_contents (table_name, data_type, identifier, description, min_x, min_y, max_x, max_y, srs_id)"
                     " VALUES (?,?,?,?,?,?,?,?,?)", (table, "features", table, description,
                                                     *(float(v) if np.isfinite(v) else None for v in env), srs_id))

@@ -198,9 +198,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.section.cursorInfo.connect(lambda s: self.statusBar().showMessage(s))
         self.section.positionChanged.connect(lambda: self.basemap.show_current(self.section.current_trace_line()))
+        self.section.positionChanged.connect(lambda: self.send_current_section(self.section.current_trace_line()))
         self.basemap.openLine.connect(lambda n: self.section.show("2D", n))
         self.basemap.openInline.connect(lambda v, il, xl: self.section.show("3D", v, "Inline", il))
         self.basemap.wellClicked.connect(lambda n: self.well_clicked(n))
+        self.basemap.wellsSelected.connect(lambda names: self.qgis.send({"type": "select_wells", "wells": names})
+                                           if self.qgis is not None else None)
         self.basemap.mapClicked.connect(lambda x, y, t: self.layers_panel.identify(x, y, t) if self.layers_panel.stack else None)
         self._petro_strip = None
         self._hub_mtime = None
@@ -208,6 +211,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._hub_poll.setInterval(3000)
         self._hub_poll.timeout.connect(lambda *_: self.hub_tick())
         self._hub_poll.start()
+        # live link with QGIS (PLAN 21h): off until View > Live link with QGIS
+        self.qgis = None
+        self._qgis_edits = {}
+        self._qgis_poll = QtCore.QTimer(self)
+        self._qgis_poll.setInterval(200)
+        self._qgis_poll.timeout.connect(lambda *_: self.qgis_tick())
+        self._arbitrary = []
         self.tree.itemDoubleClicked.connect(self._tree_open)
         self.horizon_dock.changed.connect(self._horizons_changed)
         self.fault_dock.changed.connect(self._faults_changed)
@@ -274,6 +284,9 @@ class MainWindow(QtWidgets.QMainWindow):
         m.addAction(self.dock_horizons.toggleViewAction())
         m.addAction(self.dock_faults.toggleViewAction())
         m.addSeparator()
+        self.act_qgis = self._act(m, "Live link with &QGIS (localhost)", lambda *_: self.toggle_qgis())
+        self.act_qgis.setCheckable(True)
+        self._act(m, "Send map to QGIS (shared GeoPackage)", lambda *_: self.send_map_to_qgis())
         self.act_ddc = self._act(m, "&Auto-update depth model (dynamic depth conversion)", self.toggle_ddc)
         self.act_ddc.setCheckable(True)
         m = mb.addMenu("&Help")
@@ -419,6 +432,78 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(f"Map hub: {req.get('property')} {req.get('zone') or '(all zones)'} for "
                                      f"{len(req.get('wells') or [])} wells from the Well Correlation Tool", 10000)
         return lid
+
+    # ---------------------------------------------------------------- QGIS link (PLAN 21h)
+    def toggle_qgis(self, on=None, port=None):
+        from .. import qgislink as QL
+        on = (self.qgis is None) if on is None else on
+        if on and self.qgis is None:
+            ep = QL.LinkEndpoint("server", port or QL.DEFAULT_PORT)
+            if not ep.start():
+                self.statusBar().showMessage(f"QGIS link could not start: {ep.error}", 10000)
+                return False
+            self.qgis = ep
+            self._qgis_poll.start()
+            self.statusBar().showMessage(f"QGIS link listening on 127.0.0.1:{ep.port} - connect from the GeoHarmonic Link "
+                                         "plugin in QGIS", 10000)
+        elif not on and self.qgis is not None:
+            self.qgis.stop()
+            self.qgis = None
+            self._qgis_poll.stop()
+        return self.qgis is not None
+
+    def send_map_to_qgis(self):
+        from .. import qgislink as QL
+        if not self.project or not self.project.path or self.basemap.stack is None:
+            return None
+        out = QL.write_shared(self.project, self.basemap.stack)
+        if self.qgis is not None:
+            self.qgis.send({"type": "refresh", "gpkg": out["gpkg"]})
+        self.statusBar().showMessage(f"Shared GeoPackage written: {out['gpkg']} ({len(out['tables'])} layers, "
+                                     f"{len(out['rasters'])} grids)", 10000)
+        return out
+
+    def qgis_tick(self):
+        """Handle queued QGIS messages; send the current section line; pick up edits made in the shared GeoPackage."""
+        from .. import qgislink as QL
+        done = []
+        if self.qgis is not None:
+            for msg in self.qgis.poll():
+                done.append(QL.handle(msg, _LinkApp(self)))
+            if done:
+                self.statusBar().showMessage(done[-1], 5000)
+        if self.project and self.project.path and self.basemap.stack is not None:
+            first = not self._qgis_edits
+            changed, self._qgis_edits = QL.read_user_edits(self.project, self._qgis_edits)
+            if changed and not first:  # the first read only records the state of the tables
+                r = QL.apply_user_edits(self.basemap.stack, changed)
+                self.basemap.draw_layers()
+                self.layers_panel.refresh()
+                for name, xs, ys in r["section_lines"][-1:]:
+                    self.open_arbitrary(name, xs, ys)
+        return done
+
+    def send_current_section(self, xy):
+        if self.qgis is not None and xy is not None:
+            x, y = np.asarray(xy[0], float), np.asarray(xy[1], float)
+            k = max(1, len(x) // 50)
+            self.qgis.send({"type": "current_section", "xy": np.column_stack([x[::k], y[::k]]).tolist()})
+
+    def open_arbitrary(self, name, xs, ys):
+        from .arbitrary_dialog import ArbitraryDialog
+        if not self.project.volumes:
+            self.statusBar().showMessage("Arbitrary line: the project has no 3D volume", 8000)
+            return None
+        dlg = ArbitraryDialog(self.project, xs, ys, name, parent=self)
+        try:
+            dlg.compute()
+            dlg.show_section()
+        except Exception as e:
+            self.statusBar().showMessage(f"Arbitrary line failed: {e}", 8000)
+            return None
+        dlg.show()
+        self._arbitrary.append(dlg)
+        return dlg
 
     def _faults_changed(self):
         self.section.draw_faults()
@@ -1039,3 +1124,43 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 pass
         ev.accept()
+
+
+class _LinkApp:
+    """What a QGIS message can do in GeoHarmonic (qgislink.handle calls these)."""
+
+    def __init__(self, win):
+        self.w = win
+
+    def select_wells(self, names):
+        self.w.basemap.set_selected_wells(names, emit=False)
+
+    def zoom(self, bbox):
+        if bbox and len(bbox) == 4:
+            try:
+                self.w.basemap.plot.getPlotItem().getViewBox().setRange(xRange=(bbox[0], bbox[2]), yRange=(bbox[1], bbox[3]))
+            except Exception:
+                pass
+
+    def open_well(self, name):
+        self.w.well_clicked(name)
+
+    def section_line(self, name, xs, ys):
+        self.w.open_arbitrary(name, xs, ys)
+
+    def polygon(self, name, xs, ys):
+        st = self.w.basemap.stack
+        lay = next((l for l in st.layers if l["kind"] == "polygons" and l["name"] == "Prospects (QGIS)"), None)
+        if lay is None:
+            lid = st.add("polygons", "Prospects (QGIS)", src={"polygons": []})
+            lay = st.get(lid)
+        polys = [p for p in lay["src"]["polygons"] if p.get("name") != name]
+        polys.append({"name": name, "x": [float(v) for v in xs], "y": [float(v) for v in ys], "from": "message"})
+        lay["src"]["polygons"] = polys
+        st.save()
+        self.w.basemap.draw_layers()
+        self.w.layers_panel.refresh()
+
+    def refresh(self):
+        self.w.send_map_to_qgis()
+

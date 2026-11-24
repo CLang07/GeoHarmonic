@@ -19,6 +19,7 @@ class Basemap(QtWidgets.QWidget):
     wellClicked = QtCore.Signal(str)  # well name (map hub: petro strip)
     polygonDrawn = QtCore.Signal(object)  # (xs, ys) when a drawn polygon is finished
     mapClicked = QtCore.Signal(float, float, float)  # x, y, tolerance (map units) - identify vector features
+    wellsSelected = QtCore.Signal(object)  # [names] selected on the map (lasso) - sent to QGIS
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -423,8 +424,11 @@ class Basemap(QtWidgets.QWidget):
                                                                                          style=QtCore.Qt.DashLine))
             self.plot.addItem(self._poly_item)
 
-    def set_selected_wells(self, names):
-        """Highlight wells (rings) - e.g. the wells inside a lasso polygon."""
+    def set_selected_wells(self, names, emit=True):
+        """Highlight wells (rings) - e.g. the wells inside a lasso polygon.  emit=False when the selection came from
+        QGIS (no echo back)."""
+        if emit:
+            self.wellsSelected.emit(list(names or []))
         for it in self._sel_items:
             try:
                 self.plot.removeItem(it)

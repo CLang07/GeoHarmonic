@@ -358,4 +358,9 @@ the 2D lines, Tui-1/Amokura-1 wells).
   trip 0.000 mm over NZ), shapefile / GeoTIFF / GeoPackage / KML read + write (round trips exact), generic vector layers
   (filter, categorised / graduated styles, identify, Douglas-Peucker: 1M-vertex line simplified in ~1 s), PLSS legal
   description spotting, GIS export of the map, page layout with locator, graticule, neatline, templates.
+- 21h done (Seismic v0.43.0): `qgislink.py` (shared GeoPackage with QGIS default styles + grid GeoTIFFs with overviews,
+  user-edit tables read back with change detection, localhost JSON-lines link), QGIS plugin `tools/QGIS Plugin/
+  geoharmonic_link` (+ dev/build_qgis_plugin.py, dev/fakeqgis), arbitrary seismic section from a QGIS line, View menu
+  entries. Protocol tested between two processes (selection, polygon, section line, section cursor round trip). Item 21
+  done.
 

@@ -1,0 +1,10 @@
+[general]
+name=GeoHarmonic Link
+qgisMinimumVersion=3.16
+description=Live two-way link with the GeoHarmonic Geo Tool Kit (shared GeoPackage + localhost messages)
+about=Opens the GeoHarmonic shared GeoPackage (<project>_gis.gpkg) with styled layers and the grid GeoTIFFs, reloads them when GeoHarmonic rewrites them, and exchanges well selections, section lines, prospect polygons and the section cursor with GeoHarmonic over 127.0.0.1.
+version=0.1.0
+author=GeoHarmonic (Chris)
+email=none@example.com
+repository=https://github.com/CLang07/GeoHarmonic
+experimental=True

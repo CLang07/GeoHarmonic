@@ -181,6 +181,8 @@ def run():
         from . import test_gis
         test_gis.run(check, tmp)
         test_gis.run_export(check, tmp)
+        from . import test_qgislink
+        test_qgislink.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -264,6 +266,8 @@ def run_gui():
         test_crosscheck.run_gui(check, os.path.join(tmp, "ccgui"))
         from . import test_gis
         test_gis.run_gui(check, tmp)
+        from . import test_qgislink
+        test_qgislink.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")
