@@ -40,7 +40,9 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Horizon time map...", lambda *_: self._add_horizon_dialog()),
                          ("Petrophysics value per well...", lambda *_: self._add_petro_dialog()),
                          ("Mineral pies per well (mineral solver)...", lambda *_: self._add_pies_dialog()),
-                         ("Text...", lambda *_: self._add_text_dialog())):
+                         ("Text...", lambda *_: self._add_text_dialog()),
+                         ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
+                         ("Grid calculator...", lambda *_: self.grid_calc())):
             a = m.addAction(text)
             a.triggered.connect(fn)
         self.add_menu.setMenu(m)
@@ -258,6 +260,18 @@ class LayersPanel(QtWidgets.QWidget):
             self._xplot.redraw()
         self.status.setText(f"{len(inside)} wells inside: {', '.join(inside[:12])}{' ...' if len(inside) > 12 else ''}")
         return lid, inside
+
+    def prop_grid(self):
+        from .propgrid_dialog import PropGridDialog
+        dlg = PropGridDialog(self.stack, self, self)
+        dlg.show()
+        return dlg
+
+    def grid_calc(self):
+        from .propgrid_dialog import GridCalcDialog
+        dlg = GridCalcDialog(self.stack, self, self)
+        dlg.show()
+        return dlg
 
     def crossplot(self):
         from .petro_strip import PetroCrossplotDialog

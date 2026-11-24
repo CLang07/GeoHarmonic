@@ -337,4 +337,8 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - 21b done (Seismic v0.37.0): `maphub.py` + `gui/petro_strip.py` - mineral pies (well_correlation multimin now writes
   mm_summary.csv), petro bubbles per zone, "Show on map hub" watcher, click a well -> petro strip, draw a polygon ->
   wells inside selected -> linked cross-plot of zone values (or a grid at the wells).
+- 21c done (Seismic v0.38.0): `propgrid.py` + `gui/propgrid_dialog.py` - zone property gridding (IDW, TPS, kriging, KED,
+  collocated cokriging), correlation, leave-one-out table + residual map, grid calculator, mask by polygon. Checks:
+  cokriging with rho = 1 = the secondary trend (< 1e-6), rho = 0 = simple kriging; on a synthetic with a secondary-
+  driven trend LOO RMSE KED 0.085 / CCK 0.187 vs kriging 0.491 / IDW 0.750.
 

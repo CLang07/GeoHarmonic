@@ -291,6 +291,14 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   well_at. MainWindow: well_clicked -> `gui/petro_strip.PetroStripDialog` (when the well has summary rows or the strip
   is open; the click still opens the inline too), hub_tick (3 s QTimer poll of hub_request.json mtime; the first tick
   after opening only records the mtime). `gui/petro_strip.PetroCrossplotDialog` (compute / redraw).
+- `propgrid.py` (21c, v0.38): `target_grid` (secondary geometry or XY box, <= 250k nodes), `sample_grid` (vectorised
+  bilinear, ilxl via vol.ilxl_at arrays), `ked_fit` / `ked_eval` (universal kriging, drift [1, s], residual variogram),
+  `cck_estimate` (simple collocated cokriging MM1 in closed form per node; secondary standardised with its stats at the
+  wells so rho = 1 reproduces the secondary exactly; rho = 0 = vgrid simple kriging), `estimate(method, ...)`,
+  `grid_property`, `correlation`, `cross_validate` (LOO per method), `residual_map`, `calc(expr, {name: MapGrid})` (ast
+  whitelist; first grid in source order sets the geometry), `mask_polygon`. `gui/propgrid_dialog.PropGridDialog(stack,
+  panel)` (compute / cross_validate / add_layer / add_residual_layer) and `GridCalcDialog` (letters A, B ... = grid
+  layers; evaluate, mask); LayersPanel Add... menu entries. Tests `test_propgrid.py`.
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

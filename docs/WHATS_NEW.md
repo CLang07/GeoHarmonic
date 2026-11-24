@@ -589,4 +589,9 @@ Test first: open the Maui / NPRA project - the basemap should look as before; Ho
   BVW, Sw with tops) and its zone table.
 - Map layers > Draw polygon: click vertices, double-click to close; the wells inside are selected; Petro cross-plot...
   shows zone values per well (or the basemap grid at the wells vs a zone value) with the selection highlighted.
+21c Gridding zone properties + grid calculator (v0.38.0): Map layers > Add... > Grid a zone property: value + zone,
+method (inverse distance, thin-plate spline, kriging, kriging with external drift, collocated cokriging) and a grid
+layer as the secondary (e.g. an RMS amplitude or inversion map); shows the correlation at the wells; Cross-validate
+gives the leave-one-out RMSE / MAE / bias per method; Add residual map posts the LOO residuals. Grid calculator: grid
+layers are A, B, C ...; type e.g. "A - B" or "clip(A * 0.3048, 0, 500)".
 
