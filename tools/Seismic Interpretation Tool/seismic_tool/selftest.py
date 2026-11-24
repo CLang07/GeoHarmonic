@@ -172,6 +172,9 @@ def run():
         test_maplayers.run_hub(check, tmp)
         from . import test_propgrid
         test_propgrid.run(check, tmp)
+        from . import test_addwells
+        os.makedirs(os.path.join(tmp, "addwells"))
+        test_addwells.run(check, os.path.join(tmp, "addwells"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -247,6 +250,9 @@ def run_gui():
         test_maplayers.run_gui_hub(check, tmp)
         from . import test_propgrid
         test_propgrid.run_gui(check, tmp)
+        from . import test_addwells
+        os.makedirs(os.path.join(tmp, "addwellsgui"))
+        test_addwells.run_gui(check, os.path.join(tmp, "addwellsgui"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

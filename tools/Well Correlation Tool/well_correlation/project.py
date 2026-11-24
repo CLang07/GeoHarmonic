@@ -149,6 +149,18 @@ class Project:
                 progress(i + 1, len(names), name)
         return p
 
+    def add_from_folder(self, folder, progress=None):
+        """Add the wells of a data folder (same layout as from_folder) that are not in the project yet.
+        Returns the names added (existing wells are left untouched)."""
+        other = Project.from_folder(folder, progress)
+        added = []
+        for name, w in other.wells.items():
+            if name in self.wells:
+                continue
+            self.wells[name] = w
+            added.append(name)
+        return added
+
     # ------------------------------------------------------------ save / open
     def to_dict(self):
         return {

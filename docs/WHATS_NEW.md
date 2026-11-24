@@ -594,4 +594,9 @@ method (inverse distance, thin-plate spline, kriging, kriging with external drif
 layer as the secondary (e.g. an RMS amplitude or inversion map); shows the correlation at the wells; Cross-validate
 gives the leave-one-out RMSE / MAE / bias per method; Add residual map posts the LOO residuals. Grid calculator: grid
 layers are A, B, C ...; type e.g. "A - B" or "clip(A * 0.3048, 0, 500)".
+21d New wells (v0.39.0): Map layers > Add... > New wells: pick a folder in the usual layout (wells/<Well>/las|dlis +
+wells_header.csv). It imports the wells that are not in the well project yet, runs the petrophysics on them, checks the
+existing property maps at the new wells BEFORE re-gridding (the honest blind test: predicted vs actual table), re-grids
+the maps made with "Grid a zone property" (plus a change map), ties the new wells on the first 3D survey and rebuilds the
+depth model. Low-frequency models for inversion are only flagged - rebuild them in the Inversion window.
 

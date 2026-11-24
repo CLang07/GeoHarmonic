@@ -341,4 +341,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
   collocated cokriging), correlation, leave-one-out table + residual map, grid calculator, mask by polygon. Checks:
   cokriging with rho = 1 = the secondary trend (< 1e-6), rho = 0 = simple kriging; on a synthetic with a secondary-
   driven trend LOO RMSE KED 0.085 / CCK 0.187 vs kriging 0.491 / IDW 0.750.
+- 21d done (Seismic v0.39.0, well_correlation Project.add_from_folder): `addwells.py` "New wells" workflow - import, petro
+  batch, blind residuals of the old maps at the new wells, re-grid + change maps, batch tie, depth-model rebuild; LFM
+  only flagged. Synthetic check: E-1 SoPhiH 7.69 (true 7.70); re-gridded map at E-1 7.68.
 

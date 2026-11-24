@@ -299,6 +299,13 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   whitelist; first grid in source order sets the geometry), `mask_polygon`. `gui/propgrid_dialog.PropGridDialog(stack,
   panel)` (compute / cross_validate / add_layer / add_residual_layer) and `GridCalcDialog` (letters A, B ... = grid
   layers; evaluate, mask); LayersPanel Add... menu entries. Tests `test_propgrid.py`.
+- `addwells.py` (21d, v0.39): `add_wells(project, stack, folder, tie, change_layers)` -> report {added, steps, residuals
+  (old recipe-grid value at each new well vs its new petro value), regridded (max / rms change, optional change layer),
+  ties, errors, seconds}; `property_layers` (grid layers with src.recipe {prop, zone, method, secondary, cell}, written
+  by PropGridDialog.add_layer), `regrid_layer`, `report_text`. Uses well_correlation `Project.add_from_folder` (new in
+  wc v0.10) + petro interpret_project; tie via tie.batch_tie on the first volume; DynamicDepthModel rebuilt when
+  display["velocity_model"] exists; LFM volumes only flagged. LayersPanel.add_new_wells / _add_wells_dialog. Tests
+  `test_addwells.py` (run, run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

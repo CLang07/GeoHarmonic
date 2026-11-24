@@ -19,6 +19,7 @@ class LayersPanel(QtWidgets.QWidget):
         self.stack = None
         self._ids = []
         self._sel = None
+        self.last_report = ""
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(2, 2, 2, 2)
         self.list = QtWidgets.QListWidget()
@@ -42,7 +43,8 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Mineral pies per well (mineral solver)...", lambda *_: self._add_pies_dialog()),
                          ("Text...", lambda *_: self._add_text_dialog()),
                          ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
-                         ("Grid calculator...", lambda *_: self.grid_calc())):
+                         ("Grid calculator...", lambda *_: self.grid_calc()),
+                         ("New wells: import + petro + re-grid + tie...", lambda *_: self._add_wells_dialog())):
             a = m.addAction(text)
             a.triggered.connect(fn)
         self.add_menu.setMenu(m)
@@ -272,6 +274,33 @@ class LayersPanel(QtWidgets.QWidget):
         dlg = GridCalcDialog(self.stack, self, self)
         dlg.show()
         return dlg
+
+    def add_new_wells(self, folder, tie=True, change_layers=True):
+        """PLAN 21d: import new wells, petro batch, blind test of the old maps, re-grid, tie. Returns the report."""
+        from .. import addwells as AW
+        rep = AW.add_wells(self.stack.project, self.stack, folder, tie=tie, change_layers=change_layers)
+        self.last_report = AW.report_text(rep)
+        if self.basemap is not None:
+            self.basemap.redraw()
+        self._apply(f"{len(rep['added'])} new wells")
+        return rep
+
+    def _add_wells_dialog(self):
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Folder with the new wells (wells/<Well>/las ...)")
+        if not folder:
+            return
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        try:
+            self.add_new_wells(folder)
+        except Exception as e:
+            self.last_report = f"Add wells failed: {type(e).__name__}: {e}"
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle("New wells")
+        box.setText(self.last_report.split("\n")[0] if self.last_report else "done")
+        box.setDetailedText(self.last_report or "")
+        box.exec()
 
     def crossplot(self):
         from .petro_strip import PetroCrossplotDialog

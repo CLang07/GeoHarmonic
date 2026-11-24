@@ -124,6 +124,7 @@ class PropGridDialog(QtWidgets.QDialog):
         if self.grid is None:
             self.compute()
         lid, _ = self.stack.add_grid(self.grid, self.grid.label)
+        self.stack.get(lid)["src"]["recipe"] = dict(self.params)  # re-gridded by "Add new wells" (21d)
         self._after_add(f"added {self.grid.label}")
         return lid
 
