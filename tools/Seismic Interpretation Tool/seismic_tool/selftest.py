@@ -197,6 +197,8 @@ def run():
         test_migration.run(check, tmp)
         from . import test_prospect
         test_prospect.run(check, tmp)
+        from . import test_spacing
+        test_spacing.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -288,6 +290,8 @@ def run_gui():
         test_structure.run_gui(check, tmp)
         from . import test_migration
         test_migration.run_gui(check, tmp)
+        from . import test_spacing
+        test_spacing.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

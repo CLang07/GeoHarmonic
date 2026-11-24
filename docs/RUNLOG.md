@@ -399,3 +399,7 @@ the 2D lines, Tui-1/Amokura-1 wells).
   1 % of pi R^2 H / 3, area-depth integration check, deterministic + Monte-Carlo volumetrics, contact from the limiting
   column, Pg product, DHI revision (bounded, monotonic, neutral at 0.3), portfolio with shared source (P(any) 0.75 ->
   0.50, same risked volume), Rose-style CSV; LayersPanel.prospect on a trap of the map hub.
+- Item 29 done (Seismic v0.52.0): `spacing.py` - RRC / FracFocus CSV mapping, WSM SHmax (axial mean of 175 and 5 deg
+  = 0), distances on a known wine-rack pattern (200 m / 60 m vertical, 400 m same zone), parent / child / co-completed,
+  wells per section, ellipses along SHmax (major axis at 45.0 +- 3 deg), overlap areas, gun-barrel offsets exactly
+  200 m; dashboard Spacing + Gun barrel.

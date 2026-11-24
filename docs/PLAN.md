@@ -565,7 +565,7 @@ all consume their per-zone results. Design decisions (Chris can override):
         dependency between prospects; portfolio table, CSV export (Rose-compatible columns where known).
    Tests: lognormal maths and P-values, GRV of an analytic cone, Pg revision bounded and monotonic in the DHI index.
 
-29. **Reservoir engineering foundations: spacing, stress, drainage ellipses, gun barrel** - status: todo
+29. **Reservoir engineering foundations: spacing, stress, drainage ellipses, gun barrel** - status: done (run 5, Seismic v0.52.0; follow-ups: ellipses as a map-hub layer, SHmax grid input, DSU polygons from PLSS, gun-barrel with zone tops from the depth maps, real RRC / NDIC column check on Chris's exports)
    29a. Data: readers for Texas RRC, NDIC and FracFocus CSV exports + synthetic unconventional field generator (test
         time); stress: SHmax azimuth (user / World Stress Map CSV / map grid), magnitudes optional.
    29b. Spacing: 3D inter-well distances (horizontal + vertical offset in the same / adjacent zone), wells per

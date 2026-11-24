@@ -423,6 +423,13 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   (Bayes, LR = exp(4 q (index - 0.3))), `portfolio` (shared factors), ROSE_COLUMNS + `export_csv`, `prospect_row`.
   LayersPanel.prospect (trap number from the spill analysis -> closure mask, contact, GRV, MC, display["prospects"]).
   Tests `test_prospect.py` + test_migration GUI.
+- `spacing.py` (29, v0.52): ALIASES + `read_public_csv` (RRC / NDIC / FracFocus -> api, name, operator, first_prod
+  ISO, lat / lon / x / y, lateral, proppant, fluid, tvd, zone; header match ignores case / spaces / underscores),
+  `synthetic_field` (pads, wine-rack zones, parents then children), `shmax_from_wsm` (axial weighted mean, quality
+  filter), `lateral_segment`, `pair_distance`, `well_distances`, `nearest_neighbours`, `classify_parent_child`,
+  `wells_in_polygons` (maphub.point_in_polygon), `drainage_ellipse`, `ellipse_polygon`, `ellipse_overlap`, `gun_barrel`.
+  DashboardWindow.spacing (ellipses on its map, per-well nearest distance / class) and gun_barrel_view (dialog +
+  section line on the basemap). Tests `test_spacing.py` (run, run_gui).
 - `wellindex.WellIndex` (15a; sqlite3 stdlib): wells (name, api, x, y, elev, td, bucket bx/by, survey), tops,
   logs catalogue, meta(bucket); add_wells/add_tops/add_logs, from_wellset, in_box, nearest (ring growth with
   exactness bound), by_api, tops_of, wells_with_curve, headers, xy. `WellLayer(wells, max_labels=150,

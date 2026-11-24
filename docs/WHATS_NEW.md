@@ -726,3 +726,13 @@ Test first: a depth map with 2-3 closures, Add > Migration, check that the spill
   mean; Pg = source x reservoir x trap x seal x timing (prefilled from the critical moment, seal and DHI evidence),
   DHI revision of Pg, dependent-prospect portfolio (shared source), CSV with Rose-style columns.
 Test first: nothing to click yet beyond the API - check the numbers on a known prospect with python -c (see HANDOFF).
+
+## Spacing, drainage ellipses, gun barrel (PLAN item 29, Seismic v0.52.0)
+- Dashboard toolbar "Spacing + ellipses...": SHmax azimuth -> inter-well distances (horizontal along the overlapping
+  lateral length + vertical offset), nearest neighbour per well, parent / child / co-completed (when first-production
+  dates are loaded) and a drainage ellipse per lateral (frac half-length along SHmax) drawn on the dashboard map.
+- "Gun barrel": section across the laterals (offset vs TVD) with the wells and their drainage widths; the section line
+  is shown on the main basemap.
+- Readers for Texas RRC, NDIC and FracFocus CSV exports (column names mapped to one schema) and the World Stress Map
+  (SHmax from nearby A-C quality points) are in seismic_tool/spacing.py (UI hook-up next).
+Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellipses (your SHmax), then Gun barrel.

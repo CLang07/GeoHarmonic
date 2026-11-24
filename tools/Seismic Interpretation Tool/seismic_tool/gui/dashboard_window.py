@@ -69,7 +69,8 @@ class DashboardWindow(QtWidgets.QMainWindow):
                          ("Stage CSV...", self._stages_dialog), ("Lateral stats", self.add_lateral_stats), ("Well strip", lambda: self.open_strip()),
                          ("Send to Analytics", self.send_to_analytics), ("Filter by text...", self._text_filter_dialog), ("Clear filters", lambda: self.model.clear_filters()),
                          ("Save layout...", self._save_layout), ("Load layout...", self._load_layout),
-                         ("Export HTML...", self._export_dialog)):
+                         ("Export HTML...", self._export_dialog),
+                         ("Spacing + ellipses...", self._spacing_dialog), ("Gun barrel", lambda: self.gun_barrel_view())):
             a = tb.addAction(text)
             a.triggered.connect(lambda *_, fn=fn: fn())  # never pass 'checked' into optional parameters
         self.color_box.textActivated.connect(lambda s: s and self.color_by(s))  # also re-picking the shown entry
@@ -459,6 +460,74 @@ class DashboardWindow(QtWidgets.QMainWindow):
     def _table_selected(self):
         rows = sorted({i.row() for i in self.table.selectedIndexes()})
         self.model.select([self._table_rows[i] for i in rows if i < len(self._table_rows)])
+
+    # ------------------------------------------------------------ spacing / drainage / gun barrel (PLAN 29)
+    def spacing(self, shmax_az=None, half_length=150.0, width=50.0, zones=None, first_prod=None, draw=True):
+        """Inter-well distances (+ parent / child when first_prod {name: date} is given) and drainage ellipses along
+        SHmax (default: project display 'shmax_az' or 90) drawn on the dashboard map; the distance table is joined to
+        the well table (columns Nearest_m, Nearest_vert_m, Class)."""
+        from .. import spacing as SP
+        if shmax_az is None:
+            shmax_az = float((self.project.display.get("shmax_az") if self.project is not None else None) or 90.0)
+        rows = SP.well_distances(self.trajs, zones)
+        ell = [dict(SP.drainage_ellipse(t, shmax_az, half_length, width), name=t.name) for t in self.trajs]
+        cls = SP.classify_parent_child(first_prod, rows) if first_prod else {}
+        per = {}
+        for t in self.trajs:
+            nb = SP.nearest_neighbours(rows, t.name)
+            per[t.name] = {"Nearest_m": nb[0][1] if nb else float("nan"), "Nearest_vert_m": nb[0][2] if nb else float("nan"),
+                           "Class": cls.get(t.name, "")}
+        self.spacing_result = {"rows": rows, "ellipses": ell, "per_well": per, "shmax_az": shmax_az}
+        if draw:
+            for it in getattr(self, "_ellipse_items", []):
+                try:
+                    self.map.removeItem(it)
+                except Exception:
+                    pass
+            self._ellipse_items = []
+            for e in ell:
+                xs, ys = SP.ellipse_polygon(e)
+                it = pg.PlotCurveItem(xs, ys, pen=pg.mkPen((200, 120, 0), width=1))
+                self.map.addItem(it)
+                self._ellipse_items.append(it)
+        self.status.setText(f"{len(rows)} well pairs; SHmax {shmax_az:.0f} deg; ellipses drawn")
+        return self.spacing_result
+
+    def _spacing_dialog(self):
+        az, ok = QtWidgets.QInputDialog.getDouble(self, "Spacing", "SHmax azimuth (deg)", 90.0, 0.0, 180.0, 0)
+        if ok:
+            self.spacing(az)
+
+    def gun_barrel_view(self, names=None):
+        """Gun-barrel window of the (selected or all) laterals with their ellipse widths."""
+        from .. import spacing as SP
+        trajs = [t for t in self.trajs if names is None or t.name in names]
+        ell = (getattr(self, "spacing_result", None) or {}).get("ellipses")
+        gb = SP.gun_barrel(trajs, ellipses=[e for e in (ell or []) if e["name"] in {t.name for t in trajs}])
+        win = QtWidgets.QDialog(self)
+        win.setWindowTitle("Gun barrel")
+        lay = QtWidgets.QVBoxLayout(win)
+        pw = pg.PlotWidget()
+        pw.setBackground("w")
+        pw.invertY(True)
+        pw.setLabel("bottom", "Offset across the laterals (m)")
+        pw.setLabel("left", "TVD (m)")
+        pw.addItem(pg.ScatterPlotItem([w["offset"] for w in gb["wells"]], [w["tvd"] for w in gb["wells"]], size=10,
+                                      brush=pg.mkBrush(30, 30, 30)))
+        for e in gb["ellipses"]:
+            pw.addItem(pg.PlotCurveItem([e["offset"] - e["half_width"], e["offset"] + e["half_width"]],
+                                        [e["tvd"], e["tvd"]], pen=pg.mkPen((200, 120, 0), width=3)))
+        for w in gb["wells"]:
+            t = pg.TextItem(w["name"], color=(0, 0, 0), anchor=(0.5, 1.2))
+            t.setPos(w["offset"], w["tvd"])
+            pw.addItem(t)
+        lay.addWidget(pw)
+        win.resize(800, 450)
+        win.show()
+        self._gun_barrel = (win, gb)
+        if self.basemap is not None and hasattr(self.basemap, "show_current"):
+            self.basemap.show_current(gb["line"])  # the section line on the main map
+        return gb
 
     def show_cursor(self, msg):
         """Linked cursor (23c): red cross on the dashboard map + nearest wellbore in the status bar."""
