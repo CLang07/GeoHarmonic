@@ -17,6 +17,7 @@ class MistieDialog(QtWidgets.QDialog):
         self.max_lag = 40.0
         self.robust = True
         self.ties, self.sol = [], {}
+        self.on_residuals = None  # callable(ties, sol): the main window publishes them on the map bus (PLAN 31e)
         lay = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
         self.t0 = QtWidgets.QDoubleSpinBox()
@@ -187,6 +188,11 @@ class MistieDialog(QtWidgets.QDialog):
 
     def show_residuals(self):
         MI.tie_positions(self.project, self.ties)
+        if self.on_residuals is not None:
+            try:
+                self.on_residuals(self.ties, self.sol)
+            except Exception:
+                pass
         if self.basemap is not None:
             return self.basemap.show_ties(self.ties)
         return [t.get("xy") for t in self.ties]

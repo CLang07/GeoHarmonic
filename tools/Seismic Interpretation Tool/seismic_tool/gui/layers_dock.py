@@ -52,7 +52,9 @@ class LayersPanel(QtWidgets.QWidget):
                          ("Grid a zone property (IDW / kriging / KED / cokriging)...", lambda *_: self.prop_grid()),
                          ("Grid calculator...", lambda *_: self.grid_calc()),
                          ("Cross-check petrophysics vs maps (+ predicted maps, Analytics)...", lambda *_: self.cross_check()),
-                         ("Vector layer (shapefile / GeoPackage / KML / CSV)...", lambda *_: self._add_vector_dialog()),
+                         ("Add shapefile / culture layer (leases, PLSS, pipelines, no-go)...",
+                          lambda *_: self._add_shapefile_dialog()),
+                         ("Vector layer (shapefile / GeoPackage / KML / GeoJSON / CSV)...", lambda *_: self._add_vector_dialog()),
                          ("Project coordinate system (EPSG)...", lambda *_: self._crs_dialog()),
                          ("Export for QGIS / ArcGIS (GeoTIFF, shapefile, GeoPackage, KML)...", lambda *_: self._export_gis_dialog()),
                          ("Go to legal description (PLSS)...", lambda *_: self._legal_dialog()),
@@ -552,16 +554,23 @@ class LayersPanel(QtWidgets.QWidget):
             self.status.setText(f"export failed: {e}")
 
     # ------------------------------------------------------------------ GIS (21g)
-    def add_vector(self, path, name=None, style=None, table=None):
+    def add_vector(self, path, name=None, style=None, table=None, preset=None):
+        """Add a vector / culture layer (.shp .gpkg .kml .geojson .csv).  preset = a gis.vector.CULTURE_PRESETS name
+        (leases own / competitor / open, PLSS, pipelines, facilities, roads, no-go areas, coastline)."""
         lid = self.stack.add("vector", name or os.path.splitext(os.path.basename(path))[0],
                              src={"file": os.path.abspath(path), "table": table}, style=style)
-        from ..gis.vector import layer_of
+        from ..gis.vector import layer_of, culture_style
         vl = layer_of(self.stack, self.stack.get(lid))
+        if preset and vl is not None:
+            self.stack.set_style(lid, **culture_style(preset, vl))
+            self.stack.get(lid)["src"]["preset"] = preset
         msg = f"{len(vl)} features" if vl is not None else "could not read the file"
         if vl is not None and vl.crs is None:
             msg += " (no .prj: assumed in the project CRS)"
         if self.stack.get(lid)["src"].get("approx_datum"):
             msg += " - NAD27 -> NAD83 shift is approximate (no NADCON grids)"
+        if self.stack.get(lid)["src"].get("crs_warning") and vl is not None and vl.crs is not None:
+            msg += " - WARNING: " + self.stack.get(lid)["src"]["crs_warning"]
         self._apply(msg)
         return lid
 
@@ -630,12 +639,28 @@ class LayersPanel(QtWidgets.QWidget):
         return vl.fields(), [vl.row(i) for i in idx]
 
     def _add_vector_dialog(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Vector layer", "", "Vector (*.shp *.gpkg *.kml *.csv);;All (*)")
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Vector layer", "",
+                                                        "Vector (*.shp *.gpkg *.kml *.geojson *.json *.csv);;All (*)")
         if path:
             try:
                 self.add_vector(path)
             except Exception as e:
                 self.status.setText(f"could not add {path}: {e}")
+
+    def _add_shapefile_dialog(self):
+        """'Add shapefile...' (Live Map 31c): file + culture preset."""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Add shapefile / culture layer", "",
+                                                        "Shapefile / GeoJSON (*.shp *.geojson *.json *.gpkg *.kml);;All (*)")
+        if not path:
+            return None
+        from ..gis.vector import CULTURE_PRESETS
+        names = ["(plain)"] + list(CULTURE_PRESETS)
+        preset, ok = QtWidgets.QInputDialog.getItem(self, "Culture style", "Style as:", names, 0, False)
+        try:
+            return self.add_vector(path, preset=None if not ok or preset == "(plain)" else preset)
+        except Exception as e:
+            self.status.setText(f"could not add {path}: {e}")
+            return None
 
     def _crs_dialog(self):
         cur = (self.stack.project.display.get("crs_epsg") if self.stack.project is not None else None) or 2193

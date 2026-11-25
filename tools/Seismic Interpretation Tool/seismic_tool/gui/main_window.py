@@ -206,6 +206,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                            if self.qgis is not None else None)
         self.basemap.mapClicked.connect(lambda x, y, t: self.layers_panel.identify(x, y, t) if self.layers_panel.stack else None)
         self._petro_strip = None
+        self._live_map = None
         # live-linked cursor (PLAN 23c): section <-> basemap, dashboard, petro strip
         from ..linking import CursorBus
         self.cursor_bus = CursorBus(min_interval=0.03)
@@ -294,6 +295,8 @@ class MainWindow(QtWidgets.QMainWindow):
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
         m = mb.addMenu("&View")
+        self._act(m, "Live &Map (styled wells, filters, linked table + crossplot)...", lambda *_: self.live_map(),
+                  "Ctrl+Shift+M")
         self._act(m, "Next line / slice (PgDown)", lambda: self.section.step(1))
         self._act(m, "Previous line / slice (PgUp)", lambda: self.section.step(-1))
         m.addSeparator()
@@ -433,6 +436,21 @@ class MainWindow(QtWidgets.QMainWindow):
             self.maplink.attach(p)
         except Exception as e:
             self.statusBar().showMessage(f"Map bus not connected: {e}", 8000)
+
+    def live_map(self):
+        """Open (or raise) the Live Map window on the shared map bus (PLAN 31)."""
+        from .live_map import LiveMapWindow
+        lm = self._live_map
+        if lm is None or lm.project is not self.project:
+            lm = LiveMapWindow(self.project, self.mapbus, self,
+                               open_section=lambda kind, name, mode=None, number=None: self.section.show(kind, name,
+                                                                                                         mode, number),
+                               open_arbitrary=lambda name, xs, ys: self.open_arbitrary(name, xs, ys),
+                               depth_model_fn=lambda: self.section.depth_model())
+            self._live_map = lm
+        lm.show()
+        lm.raise_()
+        return lm
 
     def bus_tick(self):
         """Deliver map bus events from the other tools (polled every 300 ms)."""
@@ -1152,6 +1170,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def basin_model(self):
         from .basin_dialog import BasinDialog
         dlg = BasinDialog(self.project, self.basemap, self, self.section, self.run_job)
+        dlg.on_wheeler = lambda prop: self.maplink.publish_current_section("Basin / Wheeler sections",
+                                                                           wheeler=True, prop=prop)
         dlg.show()
         self._basin_dialog = dlg
         return dlg
@@ -1186,6 +1206,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.maplink.misties_changed(sorted((self.project.display.get("mistie") or {}).keys()))
 
         dlg = MistieDialog(self.project, self, refreshed, self.basemap)
+        dlg.on_residuals = lambda ties, sol: self.maplink.misties_changed(
+            [k for k in sol if not str(k).startswith("3D:")], sol, ties)
         dlg.show()
         self._mistie_dialog = dlg
         return dlg

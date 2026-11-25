@@ -745,3 +745,48 @@ Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellip
   with end of linear flow (rate-only proxy flagged), frac complexity index (fluid type, volumes, cluster spacing,
   stress anisotropy, brittleness) -> drainage shape, type curves P10 / P50 / P90, monthly cash flow / NPV10, PDP + PUD
   inventory and a one-page HTML area summary.
+
+## Live Map + map bus (PLAN item 31, Seismic v0.54.0, Well Correlation v0.13.0, Mistie Tool 2.1.0 - run 6, 25 Nov 2026)
+- **Map bus** (every tool): selection, filters, the active inline / crossline / 2D line / well / section, and
+  "data changed" events (picks, tops, faults, misties, velocities, grids, layers) are shared between the Seismic tool,
+  the Well Correlation Tool and the Mistie Tool - also across their separate windows / processes, through a small
+  folder next to the well project (`<well project>_mapbus`: events.jsonl, state.json, welltable.csv). A well clicked
+  in one tool is selected in the others; a 2D line picked in the Mistie Tool opens in the seismic window; an inline
+  chosen anywhere follows. The shared **WellTable** is a column store every tool writes its own columns to (X / Y,
+  `Top <formation>` in TVDSS from the correlation window, misties, petro values ...). The Mistie Tool joins when its
+  project config has `"well_project": "<path to .wcproj.json>"` (or `"mapbus_folder": "<folder>"`).
+- **Live Map window** (Seismic tool, View > Live Map, Ctrl+Shift+M; dark theme): the item-21 map hub layers on the
+  left, map in the middle (scale bar, north arrow from the project CRS, X / Y / lat-lon / IL-XL readout), Well style +
+  Filters on the right, well table + crossplot + histogram at the bottom - all linked (Spotfire style).
+  - Well style: colour fixed / continuous ramp / categorical / **rules** (`Mistie_ms > 10 = red; [Net pay] > 5 =
+    green`), size by column (bubbles), shape and label by column, pies, deviated well paths.
+  - Filters: range or category per WellTable column, wells hidden instantly in the map, table and crossplot.
+  - Lasso select, click / Ctrl+click wells, table-row selection; all go to the bus.
+  - Seismic: current inline / line drawn live (yellow dashed), click a line to open it, **Arbitrary line** tool,
+    shotpoint annotation, mistie residual markers (green < 2 ms, orange < 5, red) from the seismic Mistie analysis or
+    the Mistie Tool.
+  - **Well section** tool: draw a line (or use the selected wells) -> a cross section "Live Map" opens in the Well
+    Correlation Tool; its section line is drawn in cyan. Picked tops arrive in the WellTable and recolour the map.
+  - **Live grid...**: grid a tops column or a horizon - coarse grid at once while you pick, full grid after a pause,
+    fault polygons as barriers; **Live depth maps** follow the dynamic depth model.
+  - Basin / Wheeler section locations (Basin dialog > colour the Wheeler) appear as clickable cyan lines.
+  - Add > **Add shapefile / culture layer** with presets: leases own / competitor / open, PLSS, pipelines (dashed),
+    facilities, roads, no-go areas (hatched), coastline; GeoJSON read + write; CRS mismatch warning.
+  - Export map (PNG / PDF with title block, legend incl. the well colours) and Export GIS (shapefiles + GeoJSON +
+    GeoPackage + KML, grids as GeoTIFF + **ZMAP+**, wells_table with every column, section lines, 2D picks).
+
+### Test this first (Live Map)
+1. `Run all tests.bat` - Seismic, Well Correlation and Mistie self-tests + GUI tests (real Qt offscreen).
+2. Seismic tool, F3 project: View > Live Map. Pan / zoom: scale bar + north arrow stay in the corners, the readout
+   shows X / Y / IL-XL. Set the CRS first if lat/lon is missing (Map layers > Add > Project coordinate system, 23031).
+3. Click wells, lasso a few, Ctrl+click: the seismic basemap rings and the Live Map table follow. Clear selection.
+4. Well style: Colour by > continuous > a column; Rules with `Top Truncation > 1000 = red`; Size by; Apply.
+   Filters: Add filter on a column, narrow the range - wells disappear from map, table and crossplot.
+5. Open the Well Correlation Tool on the F3 well project at the same time: select a well there -> selected in both
+   seismic windows within ~0.3 s; move a top -> the Live Map recolours if styled by that Top column.
+6. Live Map > Well section: draw a line across 3 wells, double-click -> section "Live Map" in the correlation window.
+7. Live Map > Arbitrary line across the F3 cube -> arbitrary section window; current inline shows as yellow dashes.
+8. Live grid... > Column: Top <horizon> -> grid + contours; move a top in the correlation window: coarse grid at
+   once, full grid ~1.5 s later.
+9. Add > Add shapefile / culture layer: any lease / pipeline shapefile you have with the matching preset.
+10. Export map (PDF) and Export GIS to a folder; open the folder in QGIS / the .zmap in Petrel or Kingdom.

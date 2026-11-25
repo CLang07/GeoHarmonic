@@ -55,6 +55,11 @@ def layer_features(stack, lay):
             {"well": [q[0] for q in vals], prop: [q[3] for q in vals]}
     if k == "polygons":
         polys = lay["src"].get("polygons", [])
+        lines = [q for q in polys if q.get("open")]
+        if lines and len(lines) == len(polys):  # registered section lines (Live Map 31h): polylines
+            return "LineString", [{"type": "LineString", "parts": [np.column_stack([q["x"], q["y"]])]} for q in lines], \
+                {"name": [q.get("name", "") for q in lines]}
+        polys = [q for q in polys if not q.get("open")]
         return "Polygon", [{"type": "Polygon", "parts": [np.column_stack([q["x"], q["y"]])]} for q in polys], \
             {"name": [q.get("name", "") for q in polys]}
     if k == "contours" and lay["src"].get("grid"):
@@ -107,7 +112,8 @@ def layer_features(stack, lay):
     return None
 
 
-def export_stack(stack, folder, epsg=None, wkt=None, visible_only=True, kml=True, overviews=(2, 4, 8)):
+def export_stack(stack, folder, epsg=None, wkt=None, visible_only=True, kml=True, overviews=(2, 4, 8), geojson=False,
+                 zmap=False):
     os.makedirs(folder, exist_ok=True)
     c = CRS.from_epsg(epsg) if epsg else (CRS.from_wkt(wkt) if wkt else project_crs(stack.project))
     if c is not None and epsg:
@@ -134,6 +140,9 @@ def export_stack(stack, folder, epsg=None, wkt=None, visible_only=True, kml=True
             geotiff.write(path, gx.z, gx.x0, gx.y0, gx.dx, gx.dy, epsg=c.get("epsg") if c else None, wkt=prj,
                           overviews=overviews)
             out["files"].append(path)
+            if zmap:  # Live Map 31i: ZMAP+ for Petrel / Kingdom / GeoGraphix
+                from .zmap import write_zmap
+                out["files"].append(write_zmap(os.path.join(folder, name + ".zmap"), gx, lay["name"]))
             continue
         feats = layer_features(stack, lay)
         if not feats or not feats[1]:
@@ -141,6 +150,10 @@ def export_stack(stack, folder, epsg=None, wkt=None, visible_only=True, kml=True
         gtype, geoms, attrs = feats
         path = shapefile.write(os.path.join(folder, name + ".shp"), geoms, attrs, prj, gtype)
         out["files"].append(path)
+        if geojson:  # Live Map 31i
+            from .geojson import write_geojson
+            out["files"].append(write_geojson(os.path.join(folder, name + ".geojson"), geoms, attrs,
+                                              epsg=(c or {}).get("epsg")))
         gpkg.write_layer(gp, name, geoms, attrs, srs_id, prj or "undefined", c["name"] if c else "")
         out["gpkg"] = gp
         if kml and c is not None:

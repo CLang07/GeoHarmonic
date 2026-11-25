@@ -106,8 +106,16 @@ class MistieMapLink:
         if sig == self._last_sig:
             return None
         self._last_sig = sig
+        ties = []
+        for t in getattr(session.P, "ties", []) or []:
+            try:
+                ties.append({"a": t["a"], "b": t["b"], "x": float(t["x"]), "y": float(t["y"]),
+                             "shift_ms": round(float(t.get("shift", 0.0)), 3),
+                             "res_shift_ms": round(float(t.get("res_shift", 0.0)), 3)})
+            except (KeyError, TypeError, ValueError):
+                continue
         return self.bus.notify("misties", ids=sorted(lines), source=ROLE, solution=lines, summary=summ,
-                               reference=getattr(session.P, "ref", None))
+                               reference=getattr(session.P, "ref", None), ties=ties)
 
     # ------------------------------------------------------------------ in
     def _on_event(self, ev):

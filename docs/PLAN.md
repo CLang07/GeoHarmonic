@@ -608,7 +608,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
   connected components: numpy (no scipy, gstools, GemPy). Rendering logic is tested without a GPU: mesh/slice/colour
   building is pure numpy; only the draw calls touch OpenGL.
 
-31. **Live Map (Kingdom-style live base map, Spotfire-style styling, map bus)** - status: partial (run 6, 2026-11-25: 31a map bus + retrofit done - `mapbus.py`, `gui/maplink.py`, well_correlation `maplink.py`, mistie_tool `maplink.py`; 31b/31d logic in `livemap.py` in progress)
+31. **Live Map (Kingdom-style live base map, Spotfire-style styling, map bus)** - status: done (run 6, 2026-11-25, Seismic v0.54.0 / Well Correlation v0.13.0 / Mistie 2.1.0: `mapbus.py`, `livemap.py`, `livegrid.py`, `gui/live_map.py`, `gui/maplink.py`, gis `geojson.py` + `zmap.py`, well_correlation + mistie_tool `maplink.py`. Follow-ups: first real-Qt check on the PC; polygon fills ignore holes; the Dashboard window keeps its own selection model (not yet on the bus); inversion / attribute maps are added through Map layers / Horizon maps, not auto-published; QGIS live link does not carry the Live Map well styling)
    31a. Map bus / shared project services (build first): SelectionService (wells/lines/points), FilterService,
         ActiveObject (current inline/crossline/2D line/well/horizon), DataChanged events (picks, tops, grids, misties,
         velocities), project WellTable (column store any tool can add columns to). Pure Python, unit-tested without

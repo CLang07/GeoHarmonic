@@ -454,8 +454,311 @@ def filter_widget_spec(table, column, max_categories=40):
         if not fin.size:
             return None
         cats = np.unique(fin)
-        if len(cats) <= 6 and np.all(cats == np.round(cats)):
+        if len(cats) <= 2 and set(cats.tolist()) <= {0.0, 1.0}:  # flag columns (0 / 1): checkboxes
             return ("values", [f"{c:g}" for c in cats])
         return ("range", float(fin.min()), float(fin.max()))
     cats = table.categories(column)
     return ("values", cats[:max_categories])
+
+
+# ====================================================================== 31e seismic layers
+MISTIE_COLORS = ((2.0, (0, 170, 0)), (5.0, (240, 150, 0)), (float("inf"), (220, 0, 0)))
+
+
+def mistie_markers(event, use_residual=True, limits=(2.0, 5.0)):
+    """Tie markers of a 'misties' DataChanged event: {x, y, rgba (n,4), label [n], value} coloured by |residual|
+    (green < 2 ms, orange < 5 ms, red above - the item-10 basemap convention).  None when the event has no ties."""
+    ties = (event or {}).get("ties") or []
+    if not ties:
+        return None
+    key = "res_shift_ms" if use_residual else "shift_ms"
+    v = np.array([abs(float(t.get(key) or 0.0)) for t in ties])
+    cols = np.array([(0, 170, 0, 255) if a < limits[0] else (240, 150, 0, 255) if a < limits[1] else (220, 0, 0, 255)
+                     for a in v], np.uint8).reshape(-1, 4)
+    return {"x": np.array([t["x"] for t in ties], float), "y": np.array([t["y"] for t in ties], float), "rgba": cols,
+            "label": [f"{t['a']} x {t['b']}: {float(t.get(key) or 0):+.1f} ms" for t in ties], "value": v,
+            "source": event.get("role") or event.get("source")}
+
+
+def shotpoint_marks(x, y, cdp, every=100):
+    """Annotation every `every` CDPs / shotpoints: (indices, labels) - first and last trace always included."""
+    cdp = np.asarray(cdp)
+    n = len(cdp)
+    if n == 0:
+        return [], []
+    every = max(1, int(every))
+    idx = np.flatnonzero(np.asarray(cdp, float) % every == 0).tolist()
+    for k in (0, n - 1):
+        if k not in idx:
+            idx.append(k)
+    idx = sorted(set(idx))
+    return idx, [f"{float(cdp[k]):g}" for k in idx]
+
+
+# ====================================================================== 31f well sections
+def wells_along_line(table, xs, ys, buffer=None, visible=None):
+    """Wells within `buffer` map units of the polyline, ordered along it: [(id, distance along, offset)].
+    buffer None = 5 % of the line length."""
+    px, py = np.asarray(xs, float), np.asarray(ys, float)
+    if len(px) < 2:
+        return []
+    seg = np.hypot(np.diff(px), np.diff(py))
+    cum = np.r_[0.0, np.cumsum(seg)]
+    if buffer is None:
+        buffer = 0.05 * cum[-1]
+    x, y = table.xy()
+    out = []
+    for k, i in enumerate(table.ids):
+        if not (np.isfinite(x[k]) and np.isfinite(y[k])) or (visible is not None and not visible[k]):
+            continue
+        best = None
+        for j in range(len(seg)):
+            if seg[j] <= 0:
+                continue
+            ux, uy = (px[j + 1] - px[j]) / seg[j], (py[j + 1] - py[j]) / seg[j]
+            t = np.clip((x[k] - px[j]) * ux + (y[k] - py[j]) * uy, 0.0, seg[j])
+            d = math.hypot(x[k] - (px[j] + t * ux), y[k] - (py[j] + t * uy))
+            if best is None or d < best[1]:
+                best = (cum[j] + t, d)
+        if best is not None and best[1] <= buffer:
+            out.append((i, float(best[0]), float(best[1])))
+    out.sort(key=lambda r: r[1])
+    return out
+
+
+def section_xy(table, wells):
+    """Map trace [[x, y], ...] through the wells (those with coordinates) in the given order."""
+    x, y = table.xy()
+    out = []
+    for w in wells:
+        k = table.index(w)
+        if k is not None and np.isfinite(x[k]) and np.isfinite(y[k]):
+            out.append([round(float(x[k]), 2), round(float(y[k]), 2)])
+    return out
+
+
+# ====================================================================== 31h layers from other modules
+def layer_request(name, kind="lines", items=None, owner="", style=None, file=None):
+    """What a tool publishes (bus.notify('layers', layer=...)) to put something on the Live Map:
+    kind 'lines' (items [{name, x, y, action}] - e.g. basin / Wheeler section locations; action = what a click opens:
+    {kind 2D | 3D, name, mode, number}), 'polygons'
+    (items [{name, x, y}]), 'points' (items [{x, y, text}]) or 'grid' (file = CPS-3 / ZMAP+ / .npz MapGrid)."""
+    return {"name": str(name), "kind": kind, "items": list(items or []), "owner": str(owner), "style": dict(style or {}),
+            "file": file}
+
+
+def apply_layer_request(stack, req):
+    """Add or replace (by name) the requested layer in the hub stack.  Returns the layer id."""
+    name = req.get("name") or "layer"
+    kind = req.get("kind", "lines")
+    style = dict(req.get("style") or {})
+    if kind == "grid":
+        g = read_grid_file(req["file"])
+        lay = next((l for l in stack.layers if l["kind"] == "grid" and l["name"] == name), None)
+        if lay is None:
+            lid, _ = stack.add_grid(g, name, style=style or None, contours=True)
+        else:
+            lid = lay["id"]
+            stack._grids[lid] = g
+            if stack.project is not None and getattr(stack.project, "path", None):
+                from .maplayers import save_grid
+                lay["src"]["file"] = save_grid(stack.project, g, lid)
+        stack.get(lid)["src"]["registered"] = {"owner": req.get("owner"), "file": req["file"]}
+        return lid
+    lk = {"lines": "polygons", "polygons": "polygons", "points": "text"}[kind]
+    if kind == "points":
+        src = {"items": [{"x": float(i["x"]), "y": float(i["y"]), "text": str(i.get("text", ""))}
+                         for i in req.get("items") or []]}
+    else:
+        src = {"polygons": [dict(i, x=[float(v) for v in i["x"]], y=[float(v) for v in i["y"]],
+                                 open=(kind == "lines")) for i in req.get("items") or []]}
+    src["registered"] = {"owner": req.get("owner"), "kind": kind}
+    lay = next((l for l in stack.layers if l["kind"] == lk and l["name"] == name), None)
+    if lay is None:
+        if kind == "lines":
+            style = dict({"color": (0, 200, 230), "width": 2.5, "fill": None}, **style)
+        lid = stack.add(lk, name, src=src, style=style or None)
+    else:
+        lid = lay["id"]
+        lay["src"] = src
+        if style:
+            lay["style"].update(style)
+    return lid
+
+
+def read_grid_file(path):
+    """MapGrid from a CPS-3 / ZMAP+ grid file or an npz written by maplayers.save_grid."""
+    import os
+    from .maps import MapGrid, read_cps3
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".npz":
+        with np.load(path, allow_pickle=False) as z:
+            x0, y0, dx, dy = (float(v) for v in z["geo"])
+            return MapGrid(z["z"].astype(np.float64), "xy", str(z["unit"]), str(z["label"]), None, x0, y0, dx, dy)
+    if ext in (".zmap", ".zmp", ".dat"):
+        from .gis.zmap import read_zmap
+        return read_zmap(path)
+    return read_cps3(path)
+
+
+def section_hit(stack, x, y, tol):
+    """The registered section line (kind 'lines' layers) nearest to (x, y) within tol: (layer id, item) or None."""
+    best = None
+    for l in stack.layers:
+        if l["kind"] != "polygons" or not l.get("visible", True):
+            continue
+        for it in l["src"].get("polygons", []):
+            if not it.get("open"):
+                continue
+            px, py = np.asarray(it["x"], float), np.asarray(it["y"], float)
+            for k in range(len(px) - 1):
+                ex, ey = px[k + 1] - px[k], py[k + 1] - py[k]
+                L2 = ex * ex + ey * ey
+                t = 0.0 if L2 == 0 else min(1.0, max(0.0, ((x - px[k]) * ex + (y - py[k]) * ey) / L2))
+                d = math.hypot(x - (px[k] + t * ex), y - (py[k] + t * ey))
+                if d <= tol and (best is None or d < best[0]):
+                    best = (d, l["id"], it)
+    return None if best is None else (best[1], best[2])
+
+
+# ====================================================================== 31i output
+def styled_primitives(styled, max_labels=300):
+    """Hub render primitives of the Live Map's styled wells (for the PNG / PDF export)."""
+    if styled is None:
+        return []
+    vis = np.flatnonzero(styled["visible"])
+    if not len(vis):
+        return []
+    prim = [("points", "livemap-wells", styled["x"][vis], styled["y"][vis],
+             [tuple(int(v) for v in styled["rgba"][k]) for k in vis], styled["size"][vis], "o")]
+    if len(vis) <= max_labels:
+        for k in vis:
+            if styled["label"][k]:
+                prim.append(("text", "livemap-wells", float(styled["x"][k]), float(styled["y"][k]),
+                             str(styled["label"][k]), (30, 30, 30, 255), 7))
+    return prim
+
+
+def export_map(stack, styled, path, title="Live Map", **kw):
+    """PNG / PDF with title block, legend, scale, north arrow (item-21f layout) + the styled wells."""
+    from .mapexport import export_map as _export
+    hidden = [l for l in stack.layers if l["kind"] == "wells" and l["visible"]]
+    for l in hidden:  # the Live Map draws its own wells
+        l["visible"] = False
+    try:
+        leg = list((styled or {}).get("legend", {}).get("color") or []) if styled else []
+        return _export(stack, path, title=title, extra_prims=styled_primitives(styled), extra_legend=leg,
+                       symbols=False, **kw)
+    finally:
+        for l in hidden:
+            l["visible"] = True
+
+
+def export_gis(stack, table, folder, styled=None, sections=None, picks=None, epsg=None):
+    """Everything on the Live Map for QGIS / ArcGIS / Petrel: the hub layers (shapefile + GeoJSON + GeoPackage + KML,
+    grids as GeoTIFF + ZMAP+), the wells with every WellTable column (wells_table.geojson / .shp), section lines
+    ({name: [[x, y], ...]}) and 2D picks ({horizon: (x, y, t)}) as GeoJSON."""
+    import os
+    from .gis.export import export_stack, project_crs
+    from .gis.geojson import write_geojson
+    from .gis import shapefile as SHP
+    out = export_stack(stack, folder, epsg=epsg, geojson=True, zmap=True)
+    c = project_crs(stack.project) if stack.project is not None else None
+    code = epsg or (c or {}).get("epsg")
+    x, y = table.xy()
+    ok = np.isfinite(x) & np.isfinite(y)
+    if styled is not None:
+        ok &= styled["visible"]
+    idx = np.flatnonzero(ok)
+    if len(idx):
+        geoms = [{"type": "Point", "parts": [np.array([[x[k], y[k]]])]} for k in idx]
+        attrs = {"well": [table.ids[k] for k in idx]}
+        for col in table.cols:
+            if col in ("X", "Y"):
+                continue
+            v = table.cols[col]
+            attrs[col] = [(float(v[k]) if np.isfinite(v[k]) else None) if table.meta[col]["kind"] == "numeric" else v[k]
+                          for k in idx]
+        out["files"].append(write_geojson(os.path.join(folder, "wells_table.geojson"), geoms, attrs, epsg=code))
+        try:  # dBASE field names: 10 characters
+            short = {}
+            for k_ in attrs:
+                s = "".join(ch for ch in k_ if ch.isalnum() or ch == "_")[:10] or "f"
+                while s in short.values():
+                    s = s[:8] + f"{len(short) % 100:02d}"
+                short[k_] = s
+            SHP.write(os.path.join(folder, "wells_table.shp"), geoms,
+                      {short[k_]: [("" if v is None else v) for v in vals] for k_, vals in attrs.items()}, None, "Point")
+            out["files"].append(os.path.join(folder, "wells_table.shp"))
+        except Exception as e:
+            out["warnings"].append(f"wells_table.shp: {e}")
+    if sections:
+        names = [n for n, xy in sections.items() if xy and len(xy) >= 2]
+        if names:
+            out["files"].append(write_geojson(os.path.join(folder, "section_lines.geojson"),
+                                              [{"type": "LineString", "parts": [np.asarray(sections[n], float)]}
+                                               for n in names], {"name": names}, epsg=code))
+    if picks:
+        geoms, hn, tv = [], [], []
+        for h, (px, py, pt) in picks.items():
+            for a, b, t in zip(px, py, pt):
+                if np.isfinite(t):
+                    geoms.append({"type": "Point", "parts": [np.array([[a, b]], float)]})
+                    hn.append(h)
+                    tv.append(float(t))
+        if geoms:
+            out["files"].append(write_geojson(os.path.join(folder, "picks.geojson"), geoms,
+                                              {"horizon": hn, "twt_ms": tv}, epsg=code))
+    return out
+
+
+def picks_2d(project, max_per_line=2000):
+    """{horizon: (x, y, t)} of the 2D-line picks (decimated per line) for export_gis."""
+    out = {}
+    for h in getattr(project.horizons, "items", []) if project is not None else []:
+        xs, ys, ts = [], [], []
+        for k, a in h.data.items():
+            if not k.startswith("2D:"):
+                continue
+            try:
+                line = project.line(k[3:])
+            except Exception:
+                continue
+            if not line.has_coords:
+                continue
+            a = np.asarray(a, float)
+            ok = np.flatnonzero(np.isfinite(a))
+            ok = ok[:: max(1, len(ok) // max_per_line)]
+            xs.append(np.asarray(line.x, float)[ok])
+            ys.append(np.asarray(line.y, float)[ok])
+            ts.append(a[ok])
+        if xs:
+            out[h.name] = (np.concatenate(xs), np.concatenate(ys), np.concatenate(ts))
+    return out
+
+
+# ====================================================================== 31d deviated well paths
+def path_polylines(trajectories, min_offset=5.0, max_points=200):
+    """{well: (x, y)} map traces of deviated wells (horizontal offset > min_offset m); vertical wells are left out
+    (their symbol is the path).  Each trace decimated to <= max_points vertices."""
+    out = {}
+    for t in trajectories or []:
+        x, y = np.asarray(t.x, float), np.asarray(t.y, float)
+        if len(x) < 2:
+            continue
+        off = np.hypot(x - x[0], y - y[0])
+        if not np.isfinite(off).any() or np.nanmax(off) <= min_offset:
+            continue
+        k = max(1, int(np.ceil(len(x) / max_points)))
+        idx = np.unique(np.r_[np.arange(0, len(x), k), len(x) - 1])
+        out[t.name] = (x[idx], y[idx])
+    return out
+
+
+def well_paths(project):
+    """Deviated well paths of the project's wells (survey files of the linked well project)."""
+    try:
+        from .laterals import trajectories_from_wellset
+        return path_polylines(trajectories_from_wellset(project.wellset()))
+    except Exception:
+        return {}

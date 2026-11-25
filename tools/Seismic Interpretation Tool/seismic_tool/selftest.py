@@ -205,6 +205,13 @@ def run():
         test_mapbus.run(check, tmp)
         from . import test_livemap
         test_livemap.run(check, tmp)
+        test_livemap.run_culture(check, tmp)
+        test_livemap.run_seismic(check, tmp)
+        test_livemap.run_wellsection(check, tmp)
+        test_livemap.run_livegrid(check, tmp)
+        test_livemap.run_livedepth(check, os.path.join(tmp, "livedepth"))
+        test_livemap.run_output(check, tmp)
+        test_livemap.run_paths(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -300,6 +307,13 @@ def run_gui():
         test_spacing.run_gui(check, tmp)
         from . import test_mapbus
         test_mapbus.run_gui(check, tmp)
+        from . import test_livemap
+        test_livemap.run_gui(check, tmp)
+        test_livemap.run_gui_culture(check, tmp)
+        test_livemap.run_gui_seismic(check, tmp)
+        test_livemap.run_gui_wellsection(check, tmp)
+        test_livemap.run_gui_livegrid(check, tmp)
+        test_livemap.run_gui_output(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

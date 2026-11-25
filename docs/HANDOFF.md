@@ -461,6 +461,56 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
 - `selftest.write_segy(path, traces, headers{byte: int array}, dt_us, fmt)` makes synthetic SEG-Y (IBM or
   IEEE) - reuse it for new tests.
 
+- Live Map + map bus (item 31, v0.54): `mapbus.py` (stdlib + numpy; imported by the sibling tools from the Seismic
+  folder): `MapBus` (subscribe(name, fn, topics), publish(topic, source, **payload) -> event {seq, topic, source, origin,
+  time}; never delivered to its source name; broken subscribers recorded in `errors`), services updated BEFORE delivery:
+  `SelectionService` (sets per kind, select(kind, ids, mode replace|add|remove|toggle), norm_id case/space-insensitive,
+  publishes the full id list only on change), `FilterService` (filters {column: {min,max} | {values} | {rule}}, mask(table,
+  exclude=col), visible_ids), `ActiveObject` (state[kind] = {value, ...extras}; set() is a no-op when value + extras are
+  unchanged -> no echo loops), `notify(kind, ids, source, **info)` = DataChanged; `WellTable` (ids + columns numeric
+  (float NaN) / text, meta {owner, unit, kind}; set_column from {id: v} or aligned list; save(path, owner) =
+  read-merge-write of that owner's columns, atomic replace with retries; reload); rules `eval_rule` (safe ast: names or
+  [Bracketed Name], and/or/not, chained comparisons, in (...), + - * /, abs, isnan, contains); `bus_folder(seis, wcproj)`
+  (`<wcproj stem>_mapbus` else `<seisproj>_seismic/mapbus`); `FileBridge(bus, folder, role)`: local events (origin ==
+  bus.origin) appended to events.jsonl (first line {"journal": id}; restarted above max_bytes, readers re-read from 0
+  when the id changes), poll() delivers other processes' events (half-written last line waits), state.json snapshot for
+  late joiners (catch_up), save_table(owner) + DataChanged 'welltable'. Retrofit: `gui/maplink.SeismicMapLink` (main
+  window: wellsSelected, positionChanged -> active inline/crossline/timeslice/line + 'section' xy, horizons/faults
+  changed, ddc_tick -> 'velocities', mistie dialog on_residuals -> 'misties' with tie xy; follows selection, active line /
+  inline / well from other origins; 300 ms bus_tick), well_correlation `maplink.WellCorrMapLink` (select_well, section
+  wells -> active 'well_section', _after_edit -> push_tops = 'Top <fm>' TVDSS columns + 'tops'; follows selection,
+  active well, 'well_section' -> section named after it), mistie_tool `maplink.MistieMapLink` (config well_project /
+  mapbus_folder; tie select -> selected lines + active line; solution_changed after every refresh with per-line
+  shift/phase/gain + tie x/y/residuals; follows active line -> worst tie on it). Tests: `test_mapbus.py` (incl. a real
+  second process), well_correlation `test_maplink.py`, Mistie selftest `_maplink_check`.
+  `livemap.py` (Qt-free): nice_scale / scale_bar_geometry / north_angle (numerical grid convergence from the project
+  CRS) / north_arrow_geometry / cursor_text; `MapState` (display["live_map"]: view, well_style, filter_columns,
+  crossplot, histogram, panels); styling `style_wells(table, style, filters, selection)` -> ids, x, y, rgba, size,
+  symbol, label, visible, selected, legend, pies (colour modes fixed / continuous ramp / categorical / rules (first
+  match wins); bubble size ~ sqrt); `labels_in_view`, `lasso_select` / `box_select`, `histogram_data` (ignores its own
+  filter), `crossplot_data`, `table_rows`, `filter_widget_spec`; 31e `mistie_markers`, `shotpoint_marks` (lines2d style
+  shotpoints=N); 31f `wells_along_line`, `section_xy`; 31h `layer_request` / `apply_layer_request` (lines = open
+  polygons items with an 'action' {kind, name, mode, number} for clicks; polygons; points; grid file CPS-3 / ZMAP+ /
+  npz), `section_hit`; 31i `styled_primitives`, `export_map` (mapexport.export_map extra_prims / extra_legend),
+  `export_gis` (export_stack geojson + zmap, wells_table.geojson/.shp, section_lines, picks), `picks_2d`; 31d
+  `path_polylines` / `well_paths`. `livegrid.py`: `LiveGridder(stack, table, project, pause, coarse_factor, clock,
+  threaded)` add_source(column | horizon), changed / changed_column / changed_horizon -> coarse job now, tick() -> full
+  after the pause, worker thread with generation counter (stale results dropped), barriers = polygons layers with
+  style fault + vector layers named *fault* via carto.grid_by_blocks, results replace the 'Live: <name>' grid layer in
+  place; `depth_grids(stack, DynamicDepthModel | VelocityModel)` ('Live depth: <h>' layers), `isochore`. `gis/geojson.py`
+  (read / write, RFC 7946 ring order, legacy crs member), `gis/zmap.py` (ZMAP+ read / write), gis/vector.py:
+  .geojson load, `crs_warning`, `CULTURE_PRESETS` + `culture_style` + `category_colors` (style categories / dash / hatch).
+  Basemap: `skip_kinds`, `min_poly_points`, dashed curve primitives (8th element {"dash"}); maplayers polygons items
+  with "open" = polylines. `gui/live_map.LiveMapWindow(project, bus, parent, open_section, open_arbitrary,
+  depth_model_fn)` with `LiveMapCanvas(Basemap)` (styled wells, paths, pies, rings, labels in view, scale bar, north
+  arrow, section (yellow) / well-section (cyan) lines, mistie markers). MainWindow.live_map() (View menu, Ctrl+Shift+M).
+  Tests: `test_livemap.py` (run, run_culture, run_seismic, run_wellsection, run_livegrid, run_livedepth, run_output,
+  run_paths + GUI run_gui*).
+  **Opening the Live Map on Windows**: start `Seismic Interpretation Tool.bat`, open the project, View > Live Map
+  (Ctrl+Shift+M). For live links start the Well Correlation Tool on the project's linked .wcproj.json (and the Mistie
+  Tool with "well_project" in its config); nothing else to configure - the shared folder is created next to the well
+  project.
+
 ## Well Correlation Tool (v0.4.0, stable - Chris uses it)
 las.py (LAS reader), curves.py (alias families GR/RDEEP/RSHAL/RHOB/NPHI/DT/PE/SP/CALI, compositing,
 flatline removal), geo.py (NZTM2000 projection, min curvature), project.py (Project.open, wells, tops,

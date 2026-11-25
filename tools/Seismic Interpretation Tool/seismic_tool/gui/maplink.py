@@ -20,6 +20,7 @@ class SeismicMapLink:
         self.bus = bus or MB.MapBus()
         self.bridge = None
         self.messages = []  # what the link did for the user (status bar), newest last
+        self._registered = {}  # layer group -> registered section items (31h)
         self.bus.subscribe(ROLE, self._on_event)
 
     # ------------------------------------------------------------------ project
@@ -108,12 +109,45 @@ class SeismicMapLink:
         return self.bus.notify("velocities", ids=list(rep.get("changes") or [])[:50], source=ROLE,
                                message=str(rep.get("message", "")), layers=list(rep.get("layers") or []))
 
-    def misties_changed(self, lines=None, solution=None):
+    def misties_changed(self, lines=None, solution=None, ties=None):
+        """Mistie solution (+ tie positions / residuals for the Live Map residual markers, PLAN 31e)."""
         info = {}
         if solution:
             info["solution"] = {str(k): {kk: _num(vv) for kk, vv in (v or {}).items() if _scalar(vv)}
                                 for k, v in solution.items()}
+        if ties:
+            info["ties"] = [{"a": str(t.get("a")), "b": str(t.get("b")), "x": float(t["xy"][0]), "y": float(t["xy"][1]),
+                             "shift_ms": _num(t.get("shift_ms", 0.0)), "res_shift_ms": _num(t.get("res_shift_ms", 0.0))}
+                            for t in ties if t.get("xy")]
         return self.bus.notify("misties", ids=list(lines or []), source=ROLE, **info)
+
+    def publish_layer(self, name, kind="lines", items=None, style=None, file=None):
+        """Register a layer on the Live Map (PLAN 31h) - any tool, any process."""
+        from ..livemap import layer_request
+        return self.bus.notify("layers", ids=[name], source=ROLE, layer=layer_request(name, kind, items, ROLE, style,
+                                                                                         file))
+
+    def publish_current_section(self, group, label=None, **extra):
+        """The section shown in the panel as a clickable line in layer `group` (e.g. basin / Wheeler sections)."""
+        sec = self.win.section
+        src = getattr(sec, "source", None)
+        try:
+            xy = sec.current_trace_line()
+        except Exception:
+            xy = None
+        if not src or xy is None or not len(xy[0]):
+            return None
+        x, y = np.asarray(xy[0], float), np.asarray(xy[1], float)
+        k = max(1, len(x) // 100)
+        idx = np.unique(np.r_[np.arange(0, len(x), k), len(x) - 1])
+        name = label or (src[1] if src[0] == "2D" else f"{src[1]} {sec.mode} {sec.number}")
+        op = {"kind": src[0], "name": src[1], "mode": None if src[0] == "2D" else sec.mode,
+              "number": None if src[0] == "2D" else _num(sec.number), "kind2": group}
+        op.update(extra)
+        items = [it for it in self._registered.get(group, []) if it["name"] != name]
+        items.append({"name": name, "x": x[idx].round(2).tolist(), "y": y[idx].round(2).tolist(), "action": op})
+        self._registered[group] = items
+        return self.publish_layer(group, "lines", items)
 
     # ------------------------------------------------------------------ in
     def _on_event(self, ev):

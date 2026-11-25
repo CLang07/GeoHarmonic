@@ -62,8 +62,15 @@ class VectorLayer:
             crs = CRS.from_epsg(4326)
         elif ext in (".csv", ".txt"):
             geoms, attrs = read_csv(path, x_field, y_field)
+        elif ext in (".geojson", ".json"):
+            from .geojson import read_geojson
+            geoms, attrs, epsg = read_geojson(path)
+            try:
+                crs = CRS.from_epsg(epsg)
+            except Exception:
+                crs = None
         else:
-            raise ValueError(f"unsupported vector format {ext} (.shp, .gpkg, .kml, .csv)")
+            raise ValueError(f"unsupported vector format {ext} (.shp, .gpkg, .kml, .geojson, .csv)")
         vl = cls(geoms, attrs, crs, name)
         vl.source = path
         return vl
@@ -408,8 +415,76 @@ def layer_of(stack, lay):
     dst = project_crs(stack.project) if stack.project is not None else None
     if dst is not None and vl.crs is not None:
         lay["src"]["approx_datum"] = bool(vl.reproject(dst))
+    lay["src"]["crs_warning"] = crs_warning(vl, dst, stack)
     _CACHE[key] = vl
     return vl
+
+
+def crs_warning(vl, dst, stack=None):
+    """Text when the layer probably does not overlay the project (31c), else ''."""
+    if dst is None and vl.crs is not None and vl.crs.get("kind") == "geographic":
+        b = vl.bounds() if len(vl) else None
+        wells = []
+        try:
+            wells = stack.project.wells() if stack is not None and stack.project is not None else []
+        except Exception:
+            wells = []
+        if b is not None and wells and max(abs(w[1]) for w in wells) > 360:
+            return ("layer is in latitude / longitude but the project CRS is not set - set it in Map layers > Add > "
+                    "Project coordinate system so the layer is reprojected")
+    if dst is not None and vl.crs is None:
+        return "no CRS in the file: assumed to be in the project CRS"
+    return ""
+
+
+CULTURE_PRESETS = {
+    # name: style dict for a map-hub 'vector' layer; 'by' fields are guessed from the attribute names
+    "Leases / permits (own / competitor / open)": {
+        "fill": 70, "width": 1.2, "mode": "categorized", "by_guess": ("STATUS", "OWNER", "OPERATOR", "LESSEE"),
+        "categories": {"own": (46, 160, 67), "ours": (46, 160, 67), "competitor": (214, 39, 40),
+                       "open": (190, 190, 190), "available": (190, 190, 190), "expired": (150, 150, 150)},
+        "labels_guess": ("LEASE", "BLOCK", "NAME")},
+    "Township & Range (PLSS)": {"color": (120, 120, 120), "width": 0.6, "fill": False,
+                                "labels_guess": ("SECTION", "SEC", "FRSTDIVNO", "LABEL")},
+    "Pipelines": {"color": (230, 120, 20), "width": 1.6, "dash": True, "mode": "categorized",
+                  "by_guess": ("COMMODITY", "PRODUCT", "TYPE", "OPERATOR"),
+                  "categories": {"gas": (220, 50, 50), "oil": (40, 140, 40), "condensate": (230, 120, 20),
+                                 "water": (40, 110, 200), "co2": (120, 120, 120), "ngl": (150, 80, 180)}},
+    "Plants / platforms / facilities": {"color": (90, 90, 220), "size": 9, "symbol": "s",
+                                        "labels_guess": ("NAME", "FACILITY")},
+    "Roads": {"color": (160, 160, 160), "width": 0.8},
+    "No-go / conservation areas": {"color": (200, 30, 30), "width": 1.4, "fill": 50, "hatch": True},
+    "Coastline": {"color": (40, 110, 200), "width": 1.4, "fill": False},
+}
+
+
+def culture_style(preset, vl=None):
+    """Style dict for a culture preset; 'by' / 'labels' fields matched against the layer's attribute names."""
+    st = dict(CULTURE_PRESETS[preset])
+    fields = {f.upper(): f for f in (vl.fields() if vl is not None else [])}
+    for key, guess in (("by", st.pop("by_guess", None)), ("labels", st.pop("labels_guess", None))):
+        if guess:
+            hit = next((fields[g] for g in guess if g in fields), None)
+            if hit:
+                st[key] = hit
+    if "categories" in st:
+        st["categories"] = {k: list(v) for k, v in st["categories"].items()}
+    return st
+
+
+def category_colors(vl, field, given=None):
+    """Categorized colours with user-given colours per value (case-insensitive), palette for the rest."""
+    vals = [str(v) for v in vl.attrs[field]]
+    cats = list(dict.fromkeys(vals))
+    g = {str(k).lower(): tuple(v) for k, v in (given or {}).items()}
+    cmap, k = {}, 0
+    for c in cats:
+        if c.lower() in g:
+            cmap[c] = g[c.lower()]
+        else:
+            cmap[c] = PALETTE[k % len(PALETTE)]
+            k += 1
+    return [cmap[v] for v in vals], cmap
 
 
 def cache_path(path):
@@ -428,8 +503,12 @@ def vector_primitives(stack, lay, view=None, pixel=None):
     if view is not None:
         idx = np.intersect1d(idx, vl.in_view(*view))
     if st.get("by") and st["by"] in vl.attrs:
-        cols = vl.graduated(st["by"], int(st.get("classes") or 5))[0] if st.get("mode") == "graduated" else \
-            vl.categorized(st["by"])[0]
+        if st.get("mode") == "graduated":
+            cols = vl.graduated(st["by"], int(st.get("classes") or 5))[0]
+        elif st.get("categories"):
+            cols = category_colors(vl, st["by"], st["categories"])[0]
+        else:
+            cols = vl.categorized(st["by"])[0]
     else:
         cols = [tuple(st.get("color") or (80, 80, 80))] * len(vl)
     geoms = vl.simplified(pixel) if pixel else vl.geoms
@@ -452,11 +531,14 @@ def vector_primitives(stack, lay, view=None, pixel=None):
             falpha = int((60 if fill is True else int(fill or 0)) * a)
             for p in g["parts"]:
                 if fill and len(p) >= 3:
-                    prim.append(("polygon", lid, p[:, 0], p[:, 1], (c[0], c[1], c[2], falpha), None))
-                prim.append(("curve", lid, p[:, 0], p[:, 1], (c[0], c[1], c[2], int(255 * a)), st.get("width", 1.0), "all"))
+                    prim.append(("polygon", lid, p[:, 0], p[:, 1], (c[0], c[1], c[2], falpha), None,
+                                 {"hatch": bool(st.get("hatch"))}))
+                prim.append(("curve", lid, p[:, 0], p[:, 1], (c[0], c[1], c[2], int(255 * a)), st.get("width", 1.0), "all",
+                             {"dash": bool(st.get("dash"))}))
         else:
             for p in g["parts"]:
-                prim.append(("curve", lid, p[:, 0], p[:, 1], (c[0], c[1], c[2], int(255 * a)), st.get("width", 1.0), "all"))
+                prim.append(("curve", lid, p[:, 0], p[:, 1], (c[0], c[1], c[2], int(255 * a)), st.get("width", 1.0), "all",
+                             {"dash": bool(st.get("dash"))}))
         if st.get("labels") and st["labels"] in vl.attrs:
             p = np.concatenate(g["parts"])
             prim.append(("text", lid, float(p[:, 0].mean()), float(p[:, 1].mean()), str(vl.attrs[st["labels"]][i]),

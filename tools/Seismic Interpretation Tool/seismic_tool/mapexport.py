@@ -138,7 +138,7 @@ def _draw_symbol(ax, x, y, kind, r, transform=None, color="k"):
 
 def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape", dpi=300, crs="",
                ref_latlon=None, lon0=None, contour_interval=None, symbols=True, graticule=True, locator=True,
-               source="", neatline=True):
+               source="", neatline=True, extra_prims=None, extra_legend=None):
     """Draw the visible layers + furniture to PNG / PDF.  Returns {"path", "legend", "boxes"}."""
     import matplotlib
     matplotlib.use("Agg")
@@ -154,7 +154,7 @@ def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape
     B = layout_boxes(page)
     ax = fig.add_axes(B["map"])
     bx, by = [], []
-    prims = render(stack)
+    prims = list(render(stack)) + list(extra_prims or [])  # Live Map: its styled wells (31i)
     wells_lids = {l["id"] for l in stack.layers if l["kind"] == "wells" and l["visible"]}
     kinds = well_status(stack.project) if symbols else {}
     for q in prims:
@@ -178,7 +178,8 @@ def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape
                 segs = np.stack([np.column_stack([xs[0:n:2], ys[0:n:2]]), np.column_stack([xs[1:n:2], ys[1:n:2]])], 1)
                 ax.add_collection(LineCollection(segs, colors=[c], linewidths=q[5] * 0.45, zorder=3))
             else:
-                ax.plot(xs, ys, color=c, lw=q[5] * 0.45, zorder=3)
+                ax.plot(xs, ys, color=c, lw=q[5] * 0.45, zorder=3,
+                        ls="--" if len(q) > 7 and (q[7] or {}).get("dash") else "-")
         elif kind == "polygon":
             hatch = len(q) > 6 and (q[6] or {}).get("hatch")
             fc = np.array(q[4], float) / 255.0
@@ -310,6 +311,8 @@ def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape
             break
         if e["symbol"] == "ramp" and e.get("colorbar"):
             from .maplayers import _ramp_or_lut
+            if yy < 0.89:
+                yy -= 0.03  # the ramp title sits above yy: keep it clear of the entry above
             lay = stack.get(e["id"])
             lut = _ramp_or_lut(lay["style"], e["colorbar"])
             cb = e["colorbar"]
@@ -338,6 +341,12 @@ def export_map(stack, path, title="", subtitle="", author="", page="A4 landscape
             lg.plot([0.05, 0.14], [yy - 0.012, yy - 0.012], color=c, lw=1.5, transform=lg.transAxes)
             lg.text(0.18, yy - 0.012, e["name"], fontsize=5.5, va="center", transform=lg.transAxes)
             yy -= 0.04
+    for label, c in (extra_legend or []):  # Live Map well styling (colour legend)
+        if yy < 0.05:
+            break
+        lg.scatter([0.095], [yy - 0.012], s=18, color=np.array(c, float)[:3] / 255.0, transform=lg.transAxes)
+        lg.text(0.18, yy - 0.012, str(label), fontsize=5.5, va="center", transform=lg.transAxes)
+        yy -= 0.04
     # scale bar (in map units, drawn in the panel at the map's scale)
     sa = fig.add_axes(B["scale"])
     sa.axis("off")

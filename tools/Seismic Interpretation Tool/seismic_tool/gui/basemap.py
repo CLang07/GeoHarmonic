@@ -55,6 +55,8 @@ class Basemap(QtWidgets.QWidget):
         self.selected_wells = []
         self._sel_items = []
         self.stack = None  # maplayers.LayerStack: when set, the map is drawn from the layer stack (PLAN 21a)
+        self.skip_kinds = ()  # layer kinds another view draws itself (the Live Map draws its own styled wells)
+        self.min_poly_points = 3  # 2 while drawing an arbitrary line on the Live Map
         self._layer_items = []
         self.layer_errors = []
         self._label_timer = QtCore.QTimer(self)
@@ -96,14 +98,19 @@ class Basemap(QtWidgets.QWidget):
         prims = render(self.stack)
         self.layer_errors = [q for q in prims if q[0] == "error"]
         order = {l["id"]: k for k, l in enumerate(self.stack.ordered())}
+        skip = {l["id"] for l in self.stack.layers if l["kind"] in (self.skip_kinds or ())}
         for q in prims:
             kind, lid = q[0], q[1]
+            if lid in skip:
+                continue
             zval = -100 + order.get(lid, 0)  # all layers below the overlays (horizon map, grid, ties, current line)
             if kind == "image":
                 it = pg.ImageItem(q[2])
                 it.setTransform(QtGui.QTransform(*q[3]))
             elif kind == "curve":
-                it = pg.PlotCurveItem(q[2], q[3], connect=q[6], pen=pg.mkPen(q[4], width=q[5]))
+                dash = len(q) > 7 and (q[7] or {}).get("dash")
+                pen = pg.mkPen(q[4], width=q[5], style=QtCore.Qt.DashLine) if dash else pg.mkPen(q[4], width=q[5])
+                it = pg.PlotCurveItem(q[2], q[3], connect=q[6], pen=pen)
             elif kind == "points":
                 br = [pg.mkBrush(*c) for c in q[4]] if isinstance(q[4], list) else pg.mkBrush(*q[4])
                 sz = list(np.asarray(q[5], float)) if np.ndim(q[5]) else q[5]
@@ -431,7 +438,7 @@ class Basemap(QtWidgets.QWidget):
     def finish_polygon(self):
         pts, self._poly = self._poly, None
         self._draw_poly()
-        if pts and len(pts) >= 3:
+        if pts and len(pts) >= self.min_poly_points:
             xs, ys = [p_[0] for p_ in pts], [p_[1] for p_ in pts]
             self.polygonDrawn.emit((xs, ys))
             return xs, ys

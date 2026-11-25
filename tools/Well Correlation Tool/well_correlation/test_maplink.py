@@ -55,7 +55,7 @@ def run(check, tmp):
     win.select_well("Beta-1")
     link.section_changed("Section 1", ["Alpha-1", "Beta-1"])
     br.poll()
-    sec = seis.active.info("section")
+    sec = seis.active.info("well_section")
     check(seis.selection.get("wells") == ["Beta-1"] and seis.active.get("well") == "Beta-1"
           and sec.get("wells") == ["Alpha-1", "Beta-1"] and sec.get("xy") == [[1000.0, 2000.0], [1500.0, 2600.0]],
           "map bus: selected well + section wells / trace published")
@@ -81,6 +81,11 @@ def run(check, tmp):
     seis.active.set("well", "Alpha-1", source="map")
     link.poll()
     check(win.selected[-1] == "Alpha-1", "map bus: active well from another tool selected here")
+    # a section built on the Live Map opens here as its own section (user sections untouched)
+    seis.active.set("well_section", "Live Map", source="livemap", wells=["Gamma-1", "Nope", "Alpha-1"], xy=[])
+    link.poll()
+    check(p.sections.get("Live Map") == ["Gamma-1", "Alpha-1"] and p.current_section == "Live Map"
+          and p.sections["Section 1"] == ["Alpha-1", "Beta-1"], "map bus: Live Map cross section followed")
     link.close()
     br.close()
     # no project path -> off, no crash
@@ -111,6 +116,10 @@ def run_gui(check, tmp):
     br.poll()
     check(seis.table.value("Beta-1", "Top Shale B") == 1640.0 and seis.last("data", "tops") is not None,
           "map bus GUI: top edit pushed to the WellTable (TVDSS)")
+    seis.active.set("well_section", "Live Map", source="livemap", wells=["Beta-1", "Alpha-1"], xy=[])
+    win.bus_tick()
+    check(win.project.current_section == "Live Map" and win.project.section_wells() == ["Beta-1", "Alpha-1"],
+          "map bus GUI: cross section drawn on the Live Map opens in the correlation window")
     win.dirty = False
     win.maplink.close()
     br.close()

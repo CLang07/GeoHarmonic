@@ -30,6 +30,7 @@ class BasinDialog(QtWidgets.QDialog):
         self.table = C.AgeTable.load(project)
         self.s = BM.settings(project)
         self.well_result = None
+        self.on_wheeler = None  # callable(prop): the main window registers the section on the Live Map (31h)
         self.fit = None
         self.map_result = None
         self._map_args = None
@@ -489,6 +490,11 @@ class BasinDialog(QtWidgets.QDialog):
         sp.redraw()
         if sp._age is None:
             raise RuntimeError("the section could not be shown on the age axis - see the status message")
+        if self.on_wheeler is not None:  # Live Map: Wheeler / basin section location, clickable (PLAN 31h)
+            try:
+                self.on_wheeler(prop)
+            except Exception:
+                pass
         return sp._data
 
     def event_chart(self, source_surface, trap=None, path=None, well=None):

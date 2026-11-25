@@ -495,6 +495,14 @@ def render(stack, wells=None):
                     prim.append(("curve", lid, x, y, col(st["color"]), st["width"], "all"))
                     if st.get("labels", True):
                         prim.append(("text", lid, float(x[0]), float(y[0]), l["name"], col((60, 60, 60)), 8))
+                    if st.get("shotpoints"):  # Live Map 31e: CDP / shotpoint annotation every N
+                        from .livemap import shotpoint_marks
+                        idx, labs = shotpoint_marks(line.x, line.y, line.cdp, int(st["shotpoints"]))
+                        if idx:
+                            prim.append(("points", lid, np.asarray(line.x, float)[idx], np.asarray(line.y, float)[idx],
+                                         col(st["color"]), 4, "o"))
+                            for k, lb in zip(idx, labs):
+                                prim.append(("text", lid, float(line.x[k]), float(line.y[k]), lb, col((90, 90, 90)), 7))
             elif kind == "wells":
                 ws = wells if wells is not None else (p.wells() if p is not None else [])
                 if ws and st.get("symbols"):
@@ -589,6 +597,11 @@ def render(stack, wells=None):
                     x = np.asarray(poly["x"], float)
                     y = np.asarray(poly["y"], float)
                     if len(x) < 2:
+                        continue
+                    if poly.get("open"):  # a polyline (section location registered through the map bus, 31h)
+                        prim.append(("curve", lid, x, y, col(poly.get("color") or st["color"]), st["width"], "all"))
+                        if st.get("labels", True) and poly.get("name"):
+                            prim.append(("text", lid, float(x[0]), float(y[0]), str(poly["name"]), col(st["color"]), 8))
                         continue
                     xc, yc = np.append(x, x[0]), np.append(y, y[0])
                     if st.get("fault") and len(x) >= 3:  # fault heave polygon: hatched + downthrown ticks
@@ -703,7 +716,7 @@ def render_png(stack, path, title="", size=(8, 7), dpi=110):
                 from matplotlib.collections import LineCollection
                 ax.add_collection(LineCollection(segs, colors=[c], linewidths=q[5] * 0.6))
             else:
-                ax.plot(xs, ys, color=c, lw=q[5] * 0.6)
+                ax.plot(xs, ys, color=c, lw=q[5] * 0.6, ls="--" if len(q) > 7 and (q[7] or {}).get("dash") else "-")
         elif kind == "points":
             bx.extend(np.asarray(q[2], float).tolist())
             by.extend(np.asarray(q[3], float).tolist())

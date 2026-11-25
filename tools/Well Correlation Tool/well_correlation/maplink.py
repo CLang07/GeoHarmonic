@@ -100,8 +100,9 @@ class WellCorrMapLink:
             w = p.wells.get(n)
             if w is not None and w.x is not None and w.y is not None:
                 xy.append([round(float(w.x), 2), round(float(w.y), 2)])
-        return self.bus.active.set("section", name or "", source=ROLE, wells=list(wells or []), xy=xy,
-                                   kind2="well section")
+        if self._following:
+            return None
+        return self.bus.active.set("well_section", name or "", source=ROLE, wells=list(wells or []), xy=xy)
 
     def push_tops(self, wells=None, formation=None, notify=True):
         """Write the 'Top <fm>' columns (TVDSS) for every well into the WellTable and tell the other tools."""
@@ -143,6 +144,33 @@ class WellCorrMapLink:
         elif ev["topic"] == "active" and ev.get("kind") == "well":
             if w.project is not None and ev.get("value") in w.project.wells:
                 self._follow(ev["value"])
+        elif ev["topic"] == "active" and ev.get("kind") == "well_section":
+            self.follow_section(ev.get("value") or "Live Map", ev.get("wells") or [])
+
+    def follow_section(self, name, wells):
+        """A cross section built on the Live Map (click wells / draw a line): open it here as its own section."""
+        p = self.win.project
+        if p is None:
+            return None
+        names = [n for n in wells if n in p.wells]
+        if not names:
+            return None
+        name = str(name or "Live Map")
+        if p.sections.get(name) == names and p.current_section == name:
+            return names
+        self._following = True
+        try:
+            p.sections[name] = names
+            p.current_section = name
+            for fn in ("_refresh_section_combo", "_apply_section"):
+                f = getattr(self.win, fn, None)
+                if callable(f):
+                    f()
+            self.win.dirty = True
+        finally:
+            self._following = False
+        self.messages.append(f"Section '{name}' from the Live Map: {', '.join(names)}")
+        return names
 
     def _follow(self, name):
         self._following = True
