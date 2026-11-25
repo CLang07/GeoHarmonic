@@ -595,5 +595,112 @@ all consume their per-zone results. Design decisions (Chris can override):
    Tests: depletion factor on a synthetic parent-child pair, RF = EUR / OOIP on a hand case, RTA linear-flow slope on
    a synthetic analytic linear-flow well, economics against a hand-computed cash flow.
 
+## Phase 3 - Live Map + 3D module (added 2026-11-24, interactive session)
+Chris asked for these on 2026-11-24. Order: 31 (Live Map) first, then the 3D module 32 -> 33 -> 34 -> 35. Full design
+notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D Module plan item".
+- The Live Map EXTENDS the item-21 Map hub (layers, gridding, cartography, GIS package, QGIS link already exist) - do
+  not rebuild what item 21 has; add the shared map bus and the missing interaction.
+- Standing rule: every tool integrates with the Live Map through the shared map bus (selection, filters, active
+  line/well/horizon, data-changed events). The 3D window follows the same rule.
+- 3D rendering without new dependencies (CLAUDE.md rule 4): PySide6's own QtOpenGL (QOpenGLWidget + shaders via
+  QOpenGLFunctions). pyqtgraph.opengl / PyOpenGL / pyvista only as optional extras behind try/except, installed by an
+  optional `Install 3D extras (optional).bat` (same pattern as the analytics extras). Kriging, SGS, SIS, geobodies,
+  connected components: numpy (no scipy, gstools, GemPy). Rendering logic is tested without a GPU: mesh/slice/colour
+  building is pure numpy; only the draw calls touch OpenGL.
+
+31. **Live Map (Kingdom-style live base map, Spotfire-style styling, map bus)** - status: todo
+   31a. Map bus / shared project services (build first): SelectionService (wells/lines/points), FilterService,
+        ActiveObject (current inline/crossline/2D line/well/horizon), DataChanged events (picks, tops, grids, misties,
+        velocities), project WellTable (column store any tool can add columns to). Pure Python, unit-tested without
+        Qt. Retrofit the mistie tool, well correlation, seismic viewer and depth conversion to publish/subscribe
+        (cross-tool via the existing linked-file + watcher pattern from 17c / 21).
+   31b. Map window core on the item-21 hub: project CRS, cursor X/Y readout, scale bar, north arrow, layer tree
+        (visibility/order/opacity), map state saved in the project.
+   31c. Culture / shapefile layers: pure-Python .shp/.shx/.dbf/.prj reader (point, polyline, polygon, multipart) if
+        item 21g does not already cover it, plus GeoJSON and CSV X/Y; attribute table per layer; style by attribute
+        (fill, outline, dash, hatch, labels). Lease/permit blocks (own / competitor / open), Township & Range (PLSS),
+        infrastructure, no-go areas, coastline. CRS mismatch warning (pyproj optional). "Add shapefile..." button.
+   31d. Well layer with Spotfire-style styling: colour by any WellTable column (continuous, categorical, rule-based
+        e.g. "mistie > 10 ms = red"), size by column (bubbles), pie symbols, shape/label by column; Filters panel
+        (range sliders, category checkboxes) hides wells instantly; deviated well paths; linked click/lasso selection
+        shared with a well table and a crossplot/histogram panel.
+   31e. Seismic layers linked to the viewer: 3D outline, 2D lines with shotpoints, live indicator of the current
+        inline/crossline/2D line; click a line to open it; draw an arbitrary line -> arbitrary section; misties drawn.
+   31f. Well correlation integration: click wells or draw a line to build a cross section; section line on the map;
+        selection syncs both ways; picked tops push to the WellTable and map instantly.
+   31g. Live gridding and depth: picks and tops feed a background gridding worker (coarse while picking, full on
+        pause) with contours and colour fill; fault polygons as barriers; DDC (item 17) updates the depth map live;
+        grid math (isochore, add/subtract, clip by polygon).
+   31h. Links to other modules: basin model / Wheeler section locations clickable; inversion and attribute
+        extractions as map layers; any future tool registers its layers and selection through the map bus.
+   31i. Output: PNG/PDF with title block and legend; picks, polygons, section lines to shapefile/GeoJSON; grids to
+        ZMAP+ (GeoTIFF where item 21 already writes it).
+   Tests: map bus, shapefile reader (tiny .shp built in tests), styling rules, filters, gridding; GUI wiring under
+   dev/fakeqt; HANDOFF + WHATS_NEW note on opening the Live Map on Windows (step-by-step).
+
+32. **3D viewer (Petrel-style 3D window)** - status: todo
+   32a. 3D window core: QOpenGLWidget canvas (orbit / pan / zoom, vertical exaggeration slider, axis box with
+        IL/XL/time labels, background + lighting, saved camera views), object tree (visibility, opacity, colour bar per
+        object), window state saved in the project. Clear message + 2D fallback if OpenGL context creation fails.
+   32b. Seismic slices: inline, crossline and time-slice planes draggable through the volume, read on demand from the
+        existing store (inline store / crossline copy from item 15), decimated while dragging, full resolution on
+        release; colour tables and clip shared with the 2D viewer; 2D lines as vertical curtains along navigation.
+        F3 Netherlands (~651 x 951 x 462, ~1 GB float32) is the test volume - never load it whole.
+   32c. Interpretation objects: horizons as triangulated surfaces coloured by time/depth or any attribute; fault
+        sticks + fault surfaces (item 2); well paths (vertical + deviated, laterals.py) with logs as tubes/ribbons and
+        tops as discs; culture layers and grids draped on a surface or at a chosen level.
+   32d. Map bus links: active inline/crossline in the seismic viewer moves the 3D plane and vice versa; Live Map
+        selection highlights wells in 3D; DataChanged updates 3D objects immediately; plane positions on the Live Map.
+   32e. Output: screenshot PNG with legend; turntable GIF (PIL), MP4 only if ffmpeg exists.
+   Tests: slice extraction vs store, surface triangulation (NaN holes, faults), tube mesh along a deviated well,
+   camera math; GUI wiring under dev/fakeqt with OpenGL calls mocked.
+
+33. **3D interpretation (picking, autotracking, volume rendering, geobodies)** - status: todo
+   33a. Pick horizon points and fault sticks directly on 3D planes (ray-plane intersection); picks go to the same
+        horizon/fault objects as the 2D viewer (item 1/2), undo shared.
+   33b. Seeded autotracking from the 3D window using the item-1 tracker, in a background worker with progress and
+        Cancel; tracked area grows live in 3D and on the Live Map; undo per tracking run.
+   33c. Volume rendering: opacity-curve rendering of amplitude / attribute / RGT volumes on a decimated or user-boxed
+        sub-volume (3D texture, GPU-memory check); warning on integrated graphics.
+   33d. Geobody extraction: threshold an amplitude/attribute volume, numpy connected-component labelling (chunked,
+        out-of-core), body list with volume + cell count, display as surfaces (marching cubes in numpy), outlines to
+        the Live Map as polygons.
+   33e. Inversion (item 19), attribute (item 11) and RGT / stratal-slice (item 5) volumes load as 3D volumes/slices;
+        horizon attribute extractions shown on 3D surfaces.
+   Tests: ray-plane pick maps to the right il/xl/sample; geobody labelling on a synthetic with two known bodies
+   (counts + volumes exact); marching-cubes closed surface for a sphere; tracking from 3D seeds = item-1 result.
+
+34. **Structural framework + 3D grid** - status: todo
+   34a. Fault modeling: fault surfaces from sticks (interpolated triangulated surfaces) with editing (add/remove
+        sticks, smooth); fault polygons per horizon from fault-horizon intersections, shared with Live Map gridding.
+   34b. Horizon modeling: grid horizons per fault block (reuse item-21/31g gridding with faults as barriers),
+        truncate against faults, conformable / erosional rules between horizons, consistency checks (no crossings).
+   34c. Framework in time or depth; depth version from the item-17 DDC model, rebuilt when the velocity model
+        changes (DataChanged).
+   34d. 3D grid: stair-stepped fault grid between depth-converted horizons - areal cell size + rotation, zones between
+        horizons, layering per zone (proportional, follow top, follow base, constant thickness), fault-block and zone
+        index per cell; quality report (cell volumes, zero/negative-thickness cells). Full corner-point grid with
+        complex fault juxtaposition is OUT of scope.
+   34e. Output: grid + zones to Eclipse GRDECL (runs in the free OPM Flow simulator); surfaces to ZMAP+/XYZ.
+   Tests: synthetic faulted layer-cake -> grid cell counts, zone thicknesses and fault-block throw correct; GRDECL
+   round-trip; no crossing horizons after truncation.
+
+35. **Property modeling + volumetrics** - status: todo
+   35a. Log upscaling to the cells each well passes through (arithmetic / harmonic / geometric / most-of), using the
+        item-20 petrophysics curves; QC plot raw vs upscaled.
+   35b. Data analysis per zone: experimental variograms (major / minor / vertical), interactive model fit,
+        histograms, trends (reuse item-17b variogram code).
+   35c. Facies modeling: sequential indicator simulation + indicator kriging per zone; optional seismic attribute /
+        inversion volume as a soft trend.
+   35d. Petrophysical modeling: kriging and sequential Gaussian simulation (numpy), conditioned to facies; multiple
+        realizations with fixed seeds.
+   35e. Volumetrics: GRV, NTG, porosity, Sw, Bo/Bg with OWC/GOC per zone and fault block; P90/P50/P10 from
+        realizations; link to item-28 prospect volumetrics; per-block values on the Live Map; WellTable/report output.
+   35f. Output: property grids to GRDECL; volumetrics to CSV.
+   Tests: upscaling on a hand case; kriging exact at data points; SGS reproduces the input histogram and variogram
+   within tolerance; volumetrics vs a hand-computed box reservoir.
+   Run end: HANDOFF + WHATS_NEW "3D module" section with step-by-step Windows instructions (open the 3D window, load
+   F3, add horizons and wells, build the grid).
+
 Later (Chris back): run `dev/bench.py --gb 5..20` on the PC and fix what it shows (overview volume only if zoomed-out display is slow); Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.
