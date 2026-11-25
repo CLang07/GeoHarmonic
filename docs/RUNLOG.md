@@ -560,3 +560,5 @@ those additions were skipped). It is finished; no todo / partial items are left.
 
 ## Run 8 - 2026-11-25 (scheduled, started 20:21 UTC) - IN PROGRESS
 - Added PLAN items 39 Glow / Halo, 40 Aesthetics, 41 Seismic Conditioning, 42 Survey horizon blending. Building 39 first.
+- 39 Glow / Halo DONE (Seismic v0.62.0) - selftest PASSED (1083), guitest (Qt mock) PASSED, WC selftest + guitest
+  PASSED, Mistie selftest PASSED. Next: 40 Aesthetics.

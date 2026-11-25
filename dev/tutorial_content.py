@@ -420,6 +420,45 @@ to software rendering when OpenGL cannot start (it says so in the title).""",
         trouble=["Title says *software rendering*: OpenGL could not start (remote desktop / driver). Update the "
                  "NVIDIA driver; the reason is in the status bar."],
     ),
+    # ------------------------------------------------------------------------------------------------ glow
+    dict(
+        id="glow", title="14b. Glow / Halo on horizons, faults and wells",
+        purpose="""\
+A PowerPoint-style glow (or a solid contrasting halo) under interpretation lines so horizons, faults and wells stand
+out on busy seismic - in the section, the Live Map and the 3D Viewer. The active / selected object glows stronger;
+selecting a horizon, fault or well in any window makes it glow in every window (map bus). Kingdom and Petrel have no
+equivalent; it is closest to Petrel's "highlight selected object".""",
+        shots=["glow_off", "glow_on", "glow_halo"],
+        steps=[
+            "Seismic tool: press **G** (or **Display > Glow on/off**) to switch glow on / off everywhere.",
+            "**Display > Glow settings (mode, width, intensity, colour)...**: *Mode* Glow / Halo / Off, *Width* "
+            "(pixels), *Intensity*, *Falloff layers* 1-4, *Glow colour* (match the object / white / black / custom), "
+            "*Halo colour* (Auto picks black or white against the current colour table), *Glow only the active / "
+            "selected object*, *Hover highlight*, *Exports include glow*. **Apply** or **OK**; saved with the project "
+            "(**Ctrl+S**).",
+            "Quick switches: **Display > Glow mode: Glow**, **Display > Glow mode: Halo**, **Display > Glow only the "
+            "active / selected object**.",
+            "Per object: right-click a horizon in the *Horizons* panel or a fault in the *Faults* panel (or an object "
+            "in the 3D Viewer's *Objects* tree) > **Glow** > *On* / *Off* / *Use global* / *Colour...*.",
+            "Move the mouse over a horizon or fault on the section: it highlights (hover).",
+            "**File > Export section image (PNG / PDF / SVG)...** (**Ctrl+E**): choose *With glow (as shown)* or "
+            "*Export without glow*. The 3D Viewer's **Screenshot...** asks the same; **Turntable GIF** follows the "
+            "*Exports include glow* setting.",
+            "3D Viewer: **Glow (G)** in the toolbar; surfaces get an outline glow, the active / selected one also a "
+            "soft shell; wells a wider transparent tube; the three plane outlines glow.",
+        ],
+        results="The pictures above are the tool's own section export (before / Glow / Halo). The tests check:",
+        results_re=[r"^PASS 39[a-i]"],
+        limits=["Pictures here are on the small demo cube; on F3 open an inline with your horizons and a fault and "
+                "press G to compare.",
+                "Wide glow lines in 3D depend on the graphics driver; when it cannot draw them the glow is 1 px wide "
+                "or off, with a one-line note in the 3D status bar (never a crash).",
+                "More than 2,000 glowing objects (e.g. thousands of fault sticks): glow switches to the active / "
+                "selected objects only and the status bar says so."],
+        trouble=["*Nothing glows*: press **G** once (glow may be off), check **Display > Glow only the active / "
+                 "selected object** is unticked, and that the object has no per-object *Off*.",
+                 "*Glow looks too heavy*: Glow settings > Width 3-4 px, Intensity 50 %, or switch to Halo."],
+    ),
     # ------------------------------------------------------------------------------------------------ 3D interp
     dict(
         id="interp3d", title="15. 3D interpretation (picking, tracking, volume rendering, geobodies)",

@@ -242,6 +242,8 @@ def run():
         from . import test_pcfixes
         _guarded(check, 'test_pcfixes.run(check, tmp)', lambda: test_pcfixes.run(check, tmp))
         _guarded(check, 'test_pcfixes.run_tutorial(check, tmp)', lambda: test_pcfixes.run_tutorial(check, tmp))
+        from . import test_glow
+        _guarded(check, 'test_glow.run(check, tmp)', lambda: test_glow.run(check, os.path.join(tmp, "glow")))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -356,6 +358,8 @@ def run_gui():
         _guarded(check, 'test_framework.run_gui(check, tmp)', lambda: test_framework.run_gui(check, tmp))
         from . import test_propmodel
         _guarded(check, 'test_propmodel.run_gui(check, tmp)', lambda: test_propmodel.run_gui(check, tmp))
+        from . import test_glow
+        _guarded(check, 'test_glow.run_gui(check, tmp)', lambda: test_glow.run_gui(check, os.path.join(tmp, "glowgui")))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

@@ -440,6 +440,13 @@ class Scene:
         self.views = {}
         self._n = 0
         self.background = (0.09, 0.10, 0.12)
+        self.glow = None  # glow.GlowSettings (PLAN 39d); None = no glow
+        self.glow_emphasis = None  # callable(SceneObject) -> emphasis ('active' / 'selected' / ...) or None
+        self.glow_scale = None  # world units per screen pixel (None = from the camera distance)
+        self.glow_notice = ""
+        self.glow_suppressed = False  # "Export without glow" while a screenshot is taken
+        self.glow_export = None  # None = settings['export_glow']; True / False = this export's checkbox
+        self._glow_cache = {}
 
     def add(self, kind, name, meshes, **kw):
         self._n += 1
@@ -494,6 +501,36 @@ class Scene:
         out = [(m, o.opacity) for o in self.objects if o.visible for m in o.meshes if len(m)]
         return sorted(out, key=lambda q: q[1] < 0.999)
 
+    def glow_list(self, export=False):
+        """Glow / halo underlay meshes of the visible objects (PLAN 39d), drawn before the objects with depth-write
+        off.  Cached per object version + emphasis + settings; [] when glow is off (or export without glow)."""
+        st = self.glow
+        want = st["export_glow"] if (st is not None and self.glow_export is None) else self.glow_export
+        if st is None or self.glow_suppressed or (export and not want):
+            return []
+        from . import glow as G
+        vis = [o for o in self.objects if o.visible and o.kind not in ("box", "volume", "culture")]
+        limited = G.auto_limit(sum(len(o.meshes) for o in vis), st)
+        self.glow_notice = G.limit_note(sum(len(o.meshes) for o in vis), st)
+        scale = self.glow_scale or max(1e-6, self.camera.distance * 0.0009)
+        key_s = repr(sorted(st.d.items())) + repr(sorted(st.overrides.items()))
+        out, cache = [], {}
+        for o in vis:
+            e = self.glow_emphasis(o) if self.glow_emphasis else None
+            if limited and e is None:
+                continue
+            k = (o.id, o.version, e, key_s, round(scale, 6))
+            ms = self._glow_cache.get(k)
+            if ms is None:
+                try:
+                    ms = G.glow_meshes(o, st, e, scale, background=self.background)
+                except Exception:  # never break the 3D view for a decoration
+                    ms = []
+            cache[k] = ms
+            out.extend((m, o.opacity) for m in ms)
+        self._glow_cache = cache
+        return out
+
     def save_view(self, name):
         self.views[str(name)] = self.camera.to_dict()
         return sorted(self.views)
@@ -536,6 +573,23 @@ class Scene:
         ax.axis("off")
         fig.patch.set_facecolor(self.background)
         polys, cols, depth = [], [], []
+        for m, op in self.glow_list(export=True):  # glow underlays first, wide + soft (PLAN 39d / 39g)
+            P = self.camera.project(m.pos, w, h)
+            wpx = float(m.meta.get("width_px", 4.0))
+            if m.kind == "lines":
+                P = P.reshape(-1, 2, 3)
+                ok = np.all(np.abs(P[:, :, 2]) <= 1.0, axis=1)
+                C = m.rgba[::2][ok].copy()
+                C[:, 3] *= op
+                ax.add_collection(LineCollection(P[ok][:, :, :2], colors=np.clip(C, 0, 1), linewidths=wpx * 72 / dpi,
+                                                 capstyle="round", joinstyle="round", zorder=1.5))
+            else:
+                P = P.reshape(-1, 3, 3)
+                ok = np.all(np.abs(P[:, :, 2]) <= 1.0, axis=1)
+                C = m.rgba.reshape(-1, 3, 4).mean(axis=1)[ok]
+                C[:, 3] *= op
+                ax.add_collection(PolyCollection(P[ok][:, :, :2], facecolors=np.clip(C, 0, 1), edgecolors="none",
+                                                 zorder=1.5))
         for m, op in self.draw_list():
             if m.kind == "triangles":
                 n = len(m.pos) // 3

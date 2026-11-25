@@ -203,8 +203,10 @@ def run_gl_real(check, mw, vol):
         errors.append(f"{type(e).__name__}: {e}")
     check(not errors and cv.program is not None,
           "38a: real OpenGL - initializeGL, paintGL x2, resize, paintGL" + (f" ({errors[0]})" if errors else ""))
-    check(len(cv.buffers) == len(g.scene.draw_list()) and n1 > 0 if not errors else False,
-          "38a: real OpenGL - one GL buffer per mesh after a plane change")
+    n_gl = len(g.scene.draw_list()) + (0 if cv.glow_failed else len(g.scene.glow_list()))
+    check(len(cv.buffers) == n_gl and n1 > 0 if not errors else False,
+          "38a / 39d: real OpenGL - one GL buffer per mesh (incl. glow pass) after a plane change"
+          + (f"; glow pass off: {cv.glow_failed}" if cv.glow_failed else ""))
     try:
         img = cv.grabFramebuffer()
         ok = not img.isNull() and img.width() > 0
@@ -286,12 +288,19 @@ def run_gui(check, tmp):
                 cv.program = V3.QOpenGLShaderProgram()
             cv.paintGL()
             n_buf = len(cv.buffers)
-            check(n_buf == len(g.scene.draw_list()), f"33a GUI: OpenGL draw path uploads one buffer per mesh ({n_buf})")
+            nm = lambda: len(g.scene.draw_list()) + len(g.scene.glow_list())  # + glow underlays (PLAN 39d)
+            check(n_buf == nm() and len(g.scene.glow_list()) > 0,
+                  f"33a / 39d GUI: OpenGL draw path uploads one buffer per mesh incl. the glow pass ({n_buf})")
             g.set_plane("Inline", int(vol.inlines[3]))
             cv.paintGL()
-            check(len(cv.buffers) == len(g.scene.draw_list()), "33a GUI: replaced meshes release their GL buffers")
+            check(len(cv.buffers) == nm(), "33a GUI: replaced meshes release their GL buffers")
             cv.resizeGL(640, 480)
             cv.paintGL()
-            check(len(cv.buffers) == len(g.scene.draw_list()), "38a: resizeGL + paintGL again (mock)")
+            check(len(cv.buffers) == nm(), "38a: resizeGL + paintGL again (mock)")
+            cv.glow_failed = "test driver"
+            cv.paintGL()
+            check(len(cv.buffers) == len(g.scene.draw_list()) and "Glow off" in g.glow_notice(),
+                  "39d GUI: driver without glow support -> no glow pass + one-line notice, no crash")
+            cv.glow_failed = ""
             g.bus.unsubscribe("view3d")
     mw.maplink.close()

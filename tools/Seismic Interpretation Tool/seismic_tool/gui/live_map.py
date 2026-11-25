@@ -49,6 +49,8 @@ class LiveMapCanvas(Basemap):
         self.styled = None
         self.crs = None
         self.view_override = None  # (x0, x1, y0, y1) for tests / saved view before the first paint
+        from .glow import GlowManager  # PLAN 39e: selected wells, current section, misties (QC) glow
+        self.glow = GlowManager(self.plot, background_fn=lambda: (21, 24, 29) if self.dark else (255, 255, 255))
         try:
             self.plot.setBackground("#15181d")
             self.plot.showGrid(x=False, y=False)
@@ -68,6 +70,7 @@ class LiveMapCanvas(Basemap):
     # ---------------------------------------------------------------- wells
     def draw_wells(self, styled):
         """Styled well symbols + selection rings + labels in view (styled = livemap.style_wells output)."""
+        self.glow.clear("well")
         for it in self._overlay:
             try:
                 self.plot.removeItem(it)
@@ -95,6 +98,8 @@ class LiveMapCanvas(Basemap):
             it.setZValue(55)
             self.plot.addItem(it)
             self._overlay.append(it)
+            self.glow.attach(it, "well", "selection", SEL_PEN,
+                             symbol_size=float(np.mean([styled["size"][k] for k in sel])) + 10, emphasis="selected")
         idx = {i: k for k, i in enumerate(styled["ids"])}
         for w, (px, py) in (self.paths or {}).items():  # deviated paths: thin line in the well colour, toe tick
             k = idx.get(w)
@@ -196,6 +201,7 @@ class LiveMapCanvas(Basemap):
                 pass
         self._mistie_items = []
         self.misties = markers
+        self.glow.clear("mistie")
         if not markers or not len(markers["x"]):
             return 0
         it = pg.ScatterPlotItem(markers["x"], markers["y"], size=12, symbol="d",
@@ -204,6 +210,14 @@ class LiveMapCanvas(Basemap):
         it.setZValue(70)
         self.plot.addItem(it)
         self._mistie_items.append(it)
+        hot = np.flatnonzero(np.asarray(markers.get("value", np.zeros(len(markers["x"]))), float) >= 5.0)
+        if len(hot):  # PLAN 39e: QC flags glow red (mistie hotspots)
+            hs = pg.ScatterPlotItem(np.asarray(markers["x"])[hot], np.asarray(markers["y"])[hot], size=12, symbol="d",
+                                    brush=pg.mkBrush(220, 0, 0), pen=pg.mkPen((10, 10, 10)))
+            hs.setZValue(71)
+            self.plot.addItem(hs)
+            self._mistie_items.append(hs)
+            self.glow.attach(hs, "mistie", "hotspots", (220, 0, 0), symbol_size=12, emphasis="qc")
         return len(markers["x"])
 
     def show_section(self, xy):
@@ -211,6 +225,7 @@ class LiveMapCanvas(Basemap):
             self._section_item = pg.PlotCurveItem([], [], pen=pg.mkPen(SECTION_PEN, width=3, style=QtCore.Qt.DashLine))
             self._section_item.setZValue(80)
             self.plot.addItem(self._section_item)
+            self.glow.attach(self._section_item, "current_line", "section", SECTION_PEN, 3)
         if not xy:
             self._section_item.setData([], [])
             return 0
@@ -224,6 +239,7 @@ class LiveMapCanvas(Basemap):
             self._well_section_item = pg.PlotCurveItem([], [], pen=pg.mkPen(WELL_SECTION_PEN, width=3))
             self._well_section_item.setZValue(81)
             self.plot.addItem(self._well_section_item)
+            self.glow.attach(self._well_section_item, "section_line", "well section", WELL_SECTION_PEN, 3)
         if not xy:
             self._well_section_item.setData([], [])
             return 0
@@ -232,6 +248,8 @@ class LiveMapCanvas(Basemap):
         return len(a)
 
     def redraw(self):
+        if getattr(self, "glow", None) is not None:
+            self.glow.clear()
         super().redraw()
         self._overlay, self._decor, self._section_item, self._well_section_item = [], [], None, None
         self._mistie_items = []
@@ -267,6 +285,9 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         self.setStyleSheet(DARK_QSS)
         self.canvas = LiveMapCanvas()
         self.setCentralWidget(self.canvas)
+        from .. import glow as GLW  # PLAN 39f: glow settings + selection emphasis shared over the bus
+        self.glow_state = GLW.GlowState(self.bus, GLW.GlowSettings.load(project), name="livemap-glow")
+        self.canvas.glow.set_state(self.glow_state)
         try:
             from ..gis.export import project_crs
             self.canvas.crs = project_crs(project)
@@ -1017,6 +1038,10 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
         self.bus.unsubscribe("livemap")
+        try:
+            self.glow_state.close()
+        except Exception:
+            pass
         try:
             self._grid_timer.stop()
         except Exception:

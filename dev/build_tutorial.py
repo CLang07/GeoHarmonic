@@ -355,7 +355,61 @@ def exp_wc_section(ctx, path):
         "the Well Correlation Tool's own section export (File > Export section image) on the bundled NZ wells"
 
 
-EXPORTS = {"view3d": exp_view3d, "fix_after": exp_view3d, "livemap": exp_livemap, "horizon_map": exp_horizon_map,
+def _glow_section(ctx, path, mode, with_glow=True):
+    """Glow / Halo (PLAN 39): the Seismic tool's own section export (File > Export section image, the function
+    behind it: seismic_tool.glow.export_section_png) on the demo inline with both horizons and a fault."""
+    import numpy as np
+    from seismic_tool import faults as flt
+    from seismic_tool import glow as G
+    from seismic_tool.gui.colormaps import lut
+    proj = ctx.project()
+    vol = proj.volume("Synth")
+    i = len(vol.inlines) // 2
+    il = int(vol.inlines[i])
+    if proj.faults.get("Fault A") is None:  # one fault crossing the demo inline, picked with the tool's own API
+        f = proj.faults.new("Fault A", color=(230, 30, 30))
+        for k in (i - 5, i + 5):
+            a = vol.xy(float(vol.inlines[k]), float(vol.xlines[len(vol.xlines) // 2 - 3]))
+            b = vol.xy(float(vol.inlines[k]), float(vol.xlines[len(vol.xlines) // 2 + 3]))
+            f.add_stick(np.array([[a[0], a[1], float(vol.times[5])], [b[0], b[1], float(vol.times[-5])]]))
+    data = np.asarray(vol.inline(il), float)
+    curves = []
+    for name, col in (("Top", (255, 220, 0)), ("Deep", (0, 230, 90))):
+        h = proj.horizons.get(name)
+        z = h.data.get("3D:Synth") if h is not None else None
+        if z is not None:
+            curves.append({"x": np.asarray(vol.xlines, float), "y": np.asarray(z, float)[i], "colour": col,
+                           "width": 2, "kind": "horizon", "name": name, "label": name})
+    seg = flt.section_segments_3d(proj.faults.get("Fault A"), vol, "Inline", il)
+    if seg is not None and len(seg[0]):
+        xs = np.insert(np.c_[seg[0], seg[2]], 2, np.nan, axis=1).ravel()
+        ts = np.insert(np.c_[seg[1], seg[3]], 2, np.nan, axis=1).ravel()
+        curves.append({"x": xs, "y": ts, "colour": (230, 30, 30), "width": 2, "kind": "fault", "name": "Fault A",
+                       "label": "Fault A"})
+    st = G.GlowSettings(mode=mode if mode != "off" else "glow")
+    G.export_section_png(path, data, vol.xlines, vol.times, curves, lut=lut("Seismic (red-white-blue)"), settings=st,
+                         with_glow=with_glow and mode != "off", title=f"Inline {il} - "
+                         + {"glow": "Glow", "halo": "Halo", "off": "no glow (before)"}[mode],
+                         xlabel="Crossline", dpi=100, size=(11.0, 5.2))
+    return [(0.5, 0.5, "Horizons Top / Deep with their glow" if mode == "glow" else
+             "Horizons Top / Deep with a black halo" if mode == "halo" else "Horizons Top / Deep, plain lines"),
+            (0.43, 0.16, "Fault A")], \
+        "the Seismic tool's own section export (File > Export section image) on the demo inline - glow as on screen"
+
+
+def exp_glow_off(ctx, path):
+    return _glow_section(ctx, path, "off")
+
+
+def exp_glow_on(ctx, path):
+    return _glow_section(ctx, path, "glow")
+
+
+def exp_glow_halo(ctx, path):
+    return _glow_section(ctx, path, "halo")
+
+
+EXPORTS = {"glow_off": exp_glow_off, "glow_on": exp_glow_on, "glow_halo": exp_glow_halo, "view3d": exp_view3d, "fix_after": exp_view3d, "livemap": exp_livemap, "horizon_map": exp_horizon_map,
            "seis_section": exp_seis_section, "wc_section": exp_wc_section}
 
 
@@ -415,7 +469,8 @@ TITLES = {
     "faultmap": "Automated fault mapping dialog", "framework": "Structural framework + 3D grid dialog",
     "propmodel": "Property modelling + volumetrics dialog", "mistie": "Mistie analysis dialog",
     "basin": "Basin model dialog", "inversion": "Seismic inversion dialog", "analytics": "Analytics window",
-    "dashboard": "Dashboard window",
+    "dashboard": "Dashboard window", "glow_off": "Before: horizons and a fault without glow",
+    "glow_on": "After: Glow mode", "glow_halo": "After: Halo mode",
 }
 
 

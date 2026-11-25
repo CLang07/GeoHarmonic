@@ -17,6 +17,7 @@ Events are dicts {seq, topic, source, origin, time, ...}:
     active     {kind, value, ...extras}    current inline / crossline / timeslice / line / well / horizon / section
     data       {kind, ids, ...info}        DataChanged: picks, tops, grids, misties, velocities, wells, faults,
                                            horizons, layers, welltable
+    display    {kind, ...}                 display settings (kind 'glow': settings; 'hover': object) - PLAN 39f
 
 Cross-tool (separate processes): `FileBridge(bus, folder, role)` appends local events to `<folder>/events.jsonl` and
 `poll()` re-publishes other processes' events into the local bus; `state.json` keeps the last selection / filters /
@@ -34,7 +35,7 @@ import uuid
 
 import numpy as np
 
-TOPICS = ("selection", "filter", "active", "data")
+TOPICS = ("selection", "filter", "active", "data", "display")
 SELECTION_KINDS = ("wells", "lines", "points", "polygons", "faults", "horizons")
 ACTIVE_KINDS = ("volume", "inline", "crossline", "timeslice", "line", "well", "horizon", "section", "fault")
 DATA_KINDS = ("picks", "tops", "grids", "misties", "velocities", "wells", "faults", "horizons", "layers",
@@ -690,6 +691,8 @@ class FileBridge:
     def _on_local(self, ev):
         if ev.get("origin") != self.bus.origin:
             return  # only this process's own events go out (incl. ones its windows publish in reaction to others)
+        if ev.get("local"):
+            return  # in-process only (glow hover highlight - too chatty for the cross-tool journal)
         rec = {k: v for k, v in ev.items() if not k.startswith("_")}
         rec["role"] = self.role
         try:

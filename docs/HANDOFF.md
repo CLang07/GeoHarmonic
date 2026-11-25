@@ -721,6 +721,20 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   Pressures / Contact_TVDSS). Section TRACKS FAC (FACIES) and DTP (DT_PRED + P10 / P90). PetroDialog: run_predict,
   run_facies, import_report. Tests `run_ml_reports` (+ 22 GUI check in run_gui).
 
+## Glow / Halo (PLAN 39)
+- `glow.py` (pure): `GlowSettings` (project.display['glow']: settings + per-object overrides 'kind:name' ->
+  on/off/global + colour), `effective(kind, name, emphasis, limited)` -> 'glow' | 'halo' | None, `strokes()` ->
+  [(width_px, rgba)] outermost first, `contrast_colour(lut)` (halo auto black / white), `GlowState(bus)` (emphasis from
+  SelectionService / ActiveObject, hover, QC, tracking; `broadcast()` = bus 'display' event kind 'glow'; hover events
+  carry local=True so FileBridge does not journal them), `export_section_png` (matplotlib path effects),
+  `glow_meshes` (3D: outline lines, shell, tubes, plane outlines).
+- `gui/glow.py` `GlowManager(plot)`: `attach(item, kind, name, colour, width | symbol_size, emphasis=)` makes
+  non-interactive cosmetic-pen underlays one z-step below, wraps the parent's setData, follows visibleChanged;
+  call `clear()` before `plot.clear()`. Section panel: horizons / faults / wells attach in their draw_*; Live Map
+  canvas: selection ring, section lines, mistie hotspots; 3D: `Scene.glow_list()` drawn first with depth-write off
+  (GLCanvas pass 1, `glow_failed` = driver notice), software renderer draws it too.
+- Mapbus TOPICS gained "display". MainWindow publishes the active horizon / fault (`_publish_active`).
+
 ## Illustrated tutorial (PLAN 38d/e)
 - `python3 dev/build_tutorial.py` -> docs/TUTORIAL.md, docs/TUTORIAL.html (self-contained, base64 images),
   docs/tutorial/*.png. Text: `dev/tutorial_content.py` (one dict per chapter: purpose, shots, steps, results_re =

@@ -234,6 +234,14 @@ class MainWindow(QtWidgets.QMainWindow):
         from .maplink import SeismicMapLink
         self.maplink = SeismicMapLink(self)
         self.mapbus = self.maplink.bus
+        # Glow / Halo (PLAN 39): one GlowState on the bus - selection / active / hover glow in every window
+        from .. import glow as GLW
+        self.glow_state = GLW.GlowState(self.mapbus, GLW.GlowSettings.load(self.project), name="glow")
+        self.section.set_glow_state(self.glow_state)
+        from .glow import install_list_menu
+        for dock, kind in ((self.horizon_dock, "horizon"), (self.fault_dock, "fault")):
+            install_list_menu(dock.list, lambda: self.glow_state.settings, kind,
+                              lambda: (self.store_glow_settings(), self.glow_state.broadcast()))
         self.basemap.wellsSelected.connect(lambda names: self.maplink.wells_selected(names))
         self.section.positionChanged.connect(lambda: self.maplink.position_changed())
         self._bus_poll = QtCore.QTimer(self)
@@ -257,6 +265,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&New project...", self.new_project, "Ctrl+N")
         self._act(m, "&Open project...", self.open_dialog, "Ctrl+O")
         self._act(m, "&Save project", self.save, "Ctrl+S")
+        m.addSeparator()
+        self._act(m, "Export section &image (PNG / PDF / SVG)...", lambda *_: self.export_section_dialog(), "Ctrl+E")
         m.addSeparator()
         self._act(m, "Import &3D SEG-Y...", self.import_3d_dialog, "Ctrl+3")
         self._act(m, "Add &2D SEG-Y lines...", self.add_2d_dialog, "Ctrl+2")
@@ -335,6 +345,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Send map to QGIS (shared GeoPackage)", lambda *_: self.send_map_to_qgis())
         self.act_ddc = self._act(m, "&Auto-update depth model (dynamic depth conversion)", self.toggle_ddc)
         self.act_ddc.setCheckable(True)
+        m = mb.addMenu("&Display")
+        self.act_glow = self._act(m, "&Glow on/off", lambda *_: self.toggle_glow(), "G")
+        self.act_glow.setCheckable(True)
+        self.act_glow.setChecked(bool(self.glow_state.settings["enabled"]))
+        self._act(m, "Glow &settings (mode, width, intensity, colour)...", lambda *_: self.glow_dialog())
+        for label, mode in (("Glow mode: &Glow", "glow"), ("Glow mode: &Halo", "halo")):
+            self._act(m, label, lambda mode=mode: self.set_glow(mode=mode, enabled=True))
+        self.act_glow_active = self._act(m, "Glow only the &active / selected object",
+                                         lambda *_: self.set_glow(active_only=self.act_glow_active.isChecked()))
+        self.act_glow_active.setCheckable(True)
+        self.act_glow_active.setChecked(bool(self.glow_state.settings["active_only"]))
         m = mb.addMenu("&Help")
         self._act(m, "About", lambda: QtWidgets.QMessageBox.information(
             self, "Seismic Interpretation Tool",
@@ -423,6 +444,7 @@ class MainWindow(QtWidgets.QMainWindow):
     # ------------------------------------------------------------ project
     def _refresh(self):
         p = self.project
+        self.load_glow_settings()
         self._ddc_watch_paths()
         self.setWindowTitle(f"Seismic Interpretation Tool - {p.name}" + (f"  [{p.path}]" if p.path else ""))
         self.tree.clear()
@@ -717,7 +739,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._arbitrary.append(dlg)
         return dlg
 
+    def _publish_active(self, kind, name):
+        """Active horizon / fault on the map bus (glow emphasis in every window, PLAN 39f)."""
+        bus = getattr(self, "mapbus", None)
+        if bus is None or bus.active.get(kind) == name:
+            return False
+        bus.active.set(kind, name, source="seismic")
+        return True
+
     def _faults_changed(self):
+        self._publish_active("fault", getattr(self.section, "active_fault", None))
         self.section.draw_faults()
         self.basemap.draw_faults()
         if getattr(self, "maplink", None) is not None:
@@ -726,6 +757,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _horizons_changed(self):
         if self.ddc_auto:
             self._ddc_debounce.start()
+        self._publish_active("horizon", self.section.active_horizon)
         self.section.draw_horizons()
         self.basemap.show_horizon(self.horizon_dock.active() if self.horizon_dock.map_chk.isChecked() else None)
         self.basemap.show_current(self.section.current_trace_line())
@@ -784,15 +816,75 @@ class MainWindow(QtWidgets.QMainWindow):
     def save(self):
         if not self.project.path:
             return self.save_as()
+        self.store_glow_settings()
         self.project.save()
         self.statusBar().showMessage(f"Saved {self.project.path}", 4000)
         return True
+
+    # ------------------------------------------------------------ glow (PLAN 39)
+    def load_glow_settings(self):
+        from .. import glow as GLW
+        st = getattr(self, "glow_state", None)
+        if st is None:
+            return None
+        new = GLW.GlowSettings.load(self.project)
+        st.settings.d.update(new.d)
+        st.settings.overrides = new.overrides
+        st._changed()
+        return st.settings
+
+    def store_glow_settings(self):
+        st = getattr(self, "glow_state", None)
+        if st is not None and self.project is not None:
+            st.settings.save(self.project)
+
+    def set_glow(self, **kw):
+        """Change glow settings, redraw every view, tell the other windows / tools (display event)."""
+        self.glow_state.settings.update(**kw)
+        self.store_glow_settings()
+        self.glow_state.broadcast()
+        try:
+            self.act_glow.setChecked(bool(self.glow_state.settings["enabled"]))
+        except Exception:
+            pass
+        return self.glow_state.settings
+
+    def toggle_glow(self):
+        """G: glow on / off globally."""
+        st = self.set_glow(enabled=not self.glow_state.settings["enabled"])
+        self.statusBar().showMessage("Glow on" if st["enabled"] else "Glow off", 2500)
+        return st["enabled"]
+
+    def glow_dialog(self):
+        from .glow import GlowSettingsDialog
+        dlg = GlowSettingsDialog(self.glow_state.settings, self,
+                                 on_apply=lambda: (self.store_glow_settings(), self.glow_state.broadcast()))
+        dlg.exec()
+        return dlg
+
+    def export_section_dialog(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export section image", "",
+                                                        "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")
+        if not path:
+            return None
+        choice, ok = QtWidgets.QInputDialog.getItem(self, "Export section image", "Glow:",
+                                                    ["With glow (as shown)", "Export without glow"], 0, False)
+        if not ok:
+            return None
+        try:
+            self.section.export_figure(path, with_glow=not str(choice).startswith("Export without"))
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Export section image", str(e))
+            return None
+        self.statusBar().showMessage(f"Saved {path}", 5000)
+        return path
 
     def save_as(self):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save seismic project", os.path.expanduser("~/Documents"),
                                                         f"Seismic project (*{EXT})")
         if not path:
             return False
+        self.store_glow_settings()
         self.project.save(path)
         if self.project.name == "Untitled":
             self.project.name = os.path.basename(self.project.path)[:-len(EXT)]

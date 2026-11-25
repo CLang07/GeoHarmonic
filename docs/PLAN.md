@@ -829,7 +829,7 @@ is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built ag
 (custom QOpenGL view + software renderer). There is no VTK/PyVista in the stack, so every VTK path is optional
 (try/except) and the numpy/QOpenGL path is the tested one.
 
-39. **Glow / Halo display effects** - status: todo
+39. **Glow / Halo display effects** - status: done (run 8, 2026-11-25, Seismic v0.62.0: `glow.py`, `gui/glow.py`, Display menu + G, per-object Glow menu, File > Export section image, 3D two-pass glow + software renderer, mapbus "display" topic, test_glow.py. Follow-ups: real-Qt check on the PC (wide GL lines depend on the driver; frame-time target <= 15% not measured here - no GPU); hover highlight on the Live Map + 3D (section only); glow in the Well Correlation tool (it does not use the bus glow state yet); F3 before/after screenshots (tutorial uses the demo cube))
    PowerPoint-style glow on interpretation objects (horizons and faults are a must). Stack: PySide6 + pyqtgraph for
    2D, gui/view3d.py for 3D; no new required dependencies. 3D part (d) uses the item-33 viewer.
    39a. Glow renderer (2D): shared helper (gui/glow.py + pure-numpy `glow.py` for styles/maths) drawing an object's

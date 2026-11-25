@@ -126,6 +126,9 @@ class SectionPanel(QtWidgets.QWidget):
         self._stratal_surface = None
         self.modeChanged = []  # callbacks(mode) when pick/fault/rgt mode switches
         self._flt_items = []
+        self.glow = None  # GlowManager (PLAN 39), made once the plot exists
+        self._hover_t = 0.0  # hover highlight throttle (initialised here: getattr on a mocked QWidget lies)
+        self._hover_hit = None
 
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -181,6 +184,9 @@ class SectionPanel(QtWidgets.QWidget):
         self.plot.showGrid(x=False, y=True, alpha=0.2)
         lay.addWidget(self.plot, 1)
         self.plot.scene().sigMouseMoved.connect(self._mouse_moved)
+        from .glow import GlowManager
+        self.glow = GlowManager(self.plot, lut_fn=self._glow_lut,
+                                status=lambda m: self.cursorInfo.emit(m))
 
         self.src_combo.currentIndexChanged.connect(self._source_changed)
         self.mode_combo.currentTextChanged.connect(self._mode_changed)
@@ -357,6 +363,8 @@ class SectionPanel(QtWidgets.QWidget):
             except Exception as e:
                 self.cursorInfo.emit(f"Co-blend not shown: {e}")
         view = None if reset_view else self.vb.viewRange()
+        if self.glow is not None:
+            self.glow.clear()  # plot.clear() removes the underlays too
         self.plot.clear()
         self._link_items = []
         # autoDownsample: big sections (long 2D lines, large time slices) render at screen resolution when zoomed out
@@ -792,10 +800,102 @@ class SectionPanel(QtWidgets.QWidget):
             self.project.display.update(cmap_name=str(self.cmap_combo.currentText()), clip=float(self.clip_spin.value()),
                                         reverse=bool(self.rev_chk.isChecked()))
 
+    # ------------------------------------------------------------ glow (PLAN 39)
+    def _glow_lut(self):
+        try:
+            return colormaps.lut(self.cmap_combo.currentText(), self.rev_chk.isChecked())
+        except Exception:
+            return None
+
+    def set_glow_state(self, state):
+        """Share the main window's GlowState (map bus selection / active emphasis, settings)."""
+        if self.glow is not None:
+            self.glow.set_state(state)
+
+    def glow_curves(self):
+        """Interpretation on the current section for the figure export: [{x, y, colour, width, kind, name}]."""
+        out = []
+        for e in (self.glow.entries.values() if self.glow is not None else []):
+            try:
+                d = e.parent.getData()
+                x, y = np.asarray(d[0], float), np.asarray(d[1], float)
+            except Exception:
+                continue
+            if e.connect == "pairs":  # fault cuts: segment pairs -> NaN-separated polyline
+                n = len(x) // 2 * 2
+                x = np.insert(x[:n].reshape(-1, 2), 2, np.nan, axis=1).ravel()
+                y = np.insert(y[:n].reshape(-1, 2), 2, np.nan, axis=1).ravel()
+            out.append({"x": x, "y": y, "colour": e.colour, "width": e.width, "kind": e.kind, "name": e.name,
+                        "points": e.symbol_size is not None})
+        return out
+
+    def export_figure(self, path, with_glow=True, title=None):
+        """File > Export section image: PNG / PDF / SVG of the section with horizons, faults and wells as on screen,
+        glow included unless "Export without glow" (PLAN 39g)."""
+        from .. import glow as G
+        if self._data is None:
+            raise RuntimeError("no section shown")
+        st = self.glow.settings if self.glow is not None else G.GlowSettings()
+        emph = {}
+        if self.glow is not None:
+            for e in self.glow.entries.values():
+                emph[(e.kind, e.name)] = self.glow.state.emphasis(e.kind, e.name)
+        x = np.asarray(self._xaxis, float)
+        y = np.asarray(self._yaxis, float)
+        return G.export_section_png(path, np.asarray(self._data, float).T, x, y, self.glow_curves(),
+                                    lut=self._glow_lut(), clip=float(self.clip_spin.value() or 99.0), settings=st,
+                                    with_glow=with_glow, title=title if title is not None else self._title_text(),
+                                    xlabel="Trace", ylabel="TWT (ms)", emphasis=emph)
+
+    def hover_at(self, xv, yv, tol_px=6.0, now=None):
+        """Hover highlight (PLAN 39e): the horizon / fault curve under the cursor glows (throttled; off in the
+        settings).  Returns (kind, name) or None."""
+        import time as _time
+        if self.glow is None or not self.glow.settings["hover"] or not self.glow.settings["enabled"]:
+            return None
+        now = _time.time() if now is None else now
+        if now - self._hover_t < self.glow.settings["hover_ms"] / 1000.0:
+            return self._hover_hit
+        self._hover_t = now
+        try:
+            px = self.vb.viewPixelSize()
+            tol = float(tol_px) * abs(float(px[1])) if px is not None else 1.0
+        except Exception:
+            tol = 1.0
+        best, hit = tol if tol > 0 else 1.0, None
+        for e in self.glow.entries.values():
+            if e.kind not in ("horizon", "fault") or e.symbol_size is not None:
+                continue
+            try:
+                d = e.parent.getData()
+                xs, ys = np.asarray(d[0], float), np.asarray(d[1], float)
+            except Exception:
+                continue
+            ok = np.isfinite(xs) & np.isfinite(ys)
+            if ok.sum() < 2:
+                continue
+            xs, ys = xs[ok], ys[ok]
+            o = np.argsort(xs)
+            if not (xs[o][0] <= xv <= xs[o][-1]):
+                continue
+            dy = abs(float(np.interp(xv, xs[o], ys[o])) - yv)
+            if dy <= best:
+                best, hit = dy, (e.kind, e.name)
+        self._hover_hit = hit
+        if hit != self.glow.state.hover:
+            self.glow.state.set_hover(*(hit or (None, None)))
+        return hit
+
+    def _title_text(self):
+        if not self.source:
+            return ""
+        return f"{self.source[1]} - {self.mode} {self.number if self.number is not None else ''}".strip()
+
     def _mouse_moved(self, pos):
         if self._data is None or not self.vb.sceneBoundingRect().contains(pos):
             return
         pt = self.vb.mapSceneToView(pos)
+        self.hover_at(pt.x(), pt.y())
         x, y = self._xaxis, self._yaxis
         j = int(np.clip(np.searchsorted(x, pt.x()), 0, len(x) - 1))
         i = int(np.clip(np.searchsorted(y, pt.y()), 0, len(y) - 1))
@@ -1018,6 +1118,9 @@ class SectionPanel(QtWidgets.QWidget):
         return out
 
     def draw_wells(self):
+        if self.glow is not None:
+            self.glow.clear("well")
+            self.glow.clear("well_top")
         for it in self._well_items:
             try:
                 self.plot.removeItem(it)
@@ -1049,6 +1152,13 @@ class SectionPanel(QtWidgets.QWidget):
             for it in items:
                 self.plot.addItem(it, ignoreBounds=True) if isinstance(it, pg.TextItem) else self.plot.addItem(it)
                 self._well_items.append(it)
+            if self.glow is not None:  # PLAN 39e: wells on seismic glow (path + tops)
+                if slice_view:
+                    self.glow.attach(items[0], "well", w["name"], (0, 0, 0), symbol_size=10)
+                else:
+                    self.glow.attach(items[0], "well", w["name"], (0, 0, 0), 2)
+                    for it, (fm, tw, col) in zip([i for i in items[2:] if not isinstance(i, pg.TextItem)], w["tops"]):
+                        self.glow.attach(it, "well_top", f"{w['name']}:{fm}", col, 3)
 
     # ------------------------------------------------------------ RGT editing + contours
     def rgt_editor(self):
@@ -1297,6 +1407,8 @@ class SectionPanel(QtWidgets.QWidget):
         return out
 
     def draw_faults(self):
+        if self.glow is not None:
+            self.glow.clear("fault")
         for it in self._flt_items:
             try:
                 self.plot.removeItem(it)
@@ -1318,8 +1430,13 @@ class SectionPanel(QtWidgets.QWidget):
             _click_through(it)
             self.plot.addItem(it)
             self._flt_items.append(it)
+            if self.glow is not None:  # PLAN 39: faults are a must
+                self.glow.attach(it, "fault", fname, c, 3 if kind == "stick" else 2,
+                                 connect="pairs" if kind == "cut" else "finite")
 
     def draw_horizons(self):
+        if self.glow is not None:
+            self.glow.clear("horizon")
         for it in self._hz_items:
             try:
                 self.plot.removeItem(it)
@@ -1364,6 +1481,11 @@ class SectionPanel(QtWidgets.QWidget):
                                       pen=pg.mkPen(h.color, width=width))
             self.plot.addItem(it)
             self._hz_items.append(it)
+            if self.glow is not None:  # PLAN 39: horizons glow; the active horizon stronger
+                if kind == "3D" and self.mode == "Time slice":
+                    self.glow.attach(it, "horizon", h.name, h.color, symbol_size=4)
+                else:
+                    self.glow.attach(it, "horizon", h.name, h.color, width)
         for k, i, j in self.seeds:
             if k != key or (kind == "3D" and self.mode == "Time slice") or wh:
                 continue

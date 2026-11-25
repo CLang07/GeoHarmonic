@@ -79,6 +79,8 @@ class GLCanvas(QOpenGLWidget):
         self._buttons = None
         self.on_release = None  # callable(): the window re-reads planes at full resolution after a drag
         self.on_click = None  # callable(px, py, w, h): a click without dragging (3D picking, item 34)
+        self.glow_failed = ""  # PLAN 39d: set when the driver cannot draw the glow pass (notice, no crash)
+        self.max_line_width = 16.0
 
     # ---------------------------------------------------------------- GL
     def _funcs(self):
@@ -154,6 +156,41 @@ class GLCanvas(QOpenGLWidget):
         p.bind()
         p.setUniformValue("mvp", QtGui.QMatrix4x4(*[float(v) for v in mvp.ravel()]))
         live = set()
+        # pass 1 (PLAN 39d): glow / halo underlays - wide lines + transparent shells, depth test on, depth write off
+        glow = []
+        if not self.glow_failed:
+            try:
+                glow = self.scene.glow_list()
+            except Exception as e:
+                self.glow_failed, glow = str(e) or "glow failed", []
+        if glow:
+            try:
+                f.glDepthMask(False)
+                for mesh, op in glow:
+                    b = self._buffer(mesh)
+                    live.add(id(mesh))
+                    b.bind()
+                    p.enableAttributeArray(0)
+                    p.setAttributeBuffer(0, GL_FLOAT, 0, 3, 28)
+                    p.enableAttributeArray(1)
+                    p.setAttributeBuffer(1, GL_FLOAT, 12, 4, 28)
+                    p.setUniformValue1f("opacity", float(op))
+                    if mesh.kind == "lines":
+                        try:  # wide lines are optional in core profiles / some drivers: 1 px glow then
+                            f.glLineWidth(float(max(1.0, min(mesh.meta.get("width_px", 1.0), self.max_line_width))))
+                        except Exception:
+                            self.max_line_width = 1.0
+                    f.glDrawArrays(GL_TRIANGLES if mesh.kind == "triangles" else GL_LINES, 0, len(mesh))
+                    b.release()
+                f.glLineWidth(1.0)
+            except Exception as e:  # unsupported GPU / driver: no glow + one-line notice, never crash
+                self.glow_failed = str(e) or "glow not supported by this OpenGL driver"
+            finally:
+                try:
+                    f.glDepthMask(True)
+                except Exception:
+                    pass
+        # pass 2: the objects themselves
         for mesh, op in self.scene.draw_list():
             b = self._buffer(mesh)
             live.add(id(mesh))
@@ -294,6 +331,12 @@ class Viewer3D(QtWidgets.QMainWindow):
         self._build_tree()
         self._build_toolbar()
         self.bus.subscribe("view3d", self._on_event)
+        # Glow / Halo (PLAN 39d-f): same settings as the seismic window, emphasis from the map bus selection
+        from .. import glow as GL
+        self.glow_state = GL.GlowState(self.bus, GL.GlowSettings.load(project), name="view3d-glow")
+        self.glow_state.listeners.append(lambda: self.redraw())
+        self.scene.glow = self.glow_state.settings
+        self.scene.glow_emphasis = self._glow_emphasis
         self.resize(1300, 850)
         if not self.software:  # an OpenGL context that fails to initialise -> software fallback with a message
             QtCore.QTimer.singleShot(800, lambda: self._check_gl())
@@ -357,6 +400,25 @@ class Viewer3D(QtWidgets.QMainWindow):
             a = QtGui.QAction(text, self)
             a.triggered.connect(fn)
             tb.addAction(a)
+        self.act_glow = QtGui.QAction("Glow (G)", self)  # PLAN 39c: G toggles glow globally
+        self.act_glow.setShortcut(QtGui.QKeySequence("G"))
+        self.act_glow.triggered.connect(lambda *_: self.toggle_glow())
+        tb.addAction(self.act_glow)
+        self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(lambda pos: self._tree_menu(pos))
+
+    def _tree_menu(self, pos):
+        it = self.tree.itemAt(pos)
+        oid = it.data(0, QtCore.Qt.UserRole) if it is not None else None
+        o = self.scene.get(oid) if isinstance(oid, str) else None
+        if o is None:
+            return
+        from .glow import add_glow_menu
+        from .. import glow as GL
+        m = QtWidgets.QMenu(self)
+        add_glow_menu(m, self.glow_state.settings, GL.KIND_3D.get(o.kind, o.kind), o.name,
+                      lambda: (self.glow_state.broadcast(), self.redraw()))
+        m.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _refresh_tree(self):
         self.tree.blockSignals(True)
@@ -746,9 +808,11 @@ class Viewer3D(QtWidgets.QMainWindow):
             return result["n"]
 
         def done():
+            self.glow_state.set_tracking(name, False)
             self.add_horizons()
             self.bus.notify("picks", ids=[name], source="view3d")
             self.redraw()
+        self.glow_state.set_tracking(name, True)  # PLAN 39e: the horizon being tracked glows while the worker runs
         if threaded and run_job is not None:
             run_job(f"Track {name}", fn, done)
             return None
@@ -833,7 +897,19 @@ class Viewer3D(QtWidgets.QMainWindow):
         self.redraw()
 
     # ---------------------------------------------------------------- output (33e)
-    def screenshot(self, path):
+    def screenshot(self, path, with_glow=None):
+        """PNG of the view.  with_glow False = "Export without glow" (PLAN 39g); None = the export_glow setting."""
+        keep = self.scene.glow_suppressed, self.scene.glow_export
+        if with_glow is not None:
+            self.scene.glow_suppressed, self.scene.glow_export = (not with_glow), bool(with_glow)
+            self.redraw()
+        try:
+            return self._screenshot(path)
+        finally:
+            self.scene.glow_suppressed, self.scene.glow_export = keep
+            self.redraw()
+
+    def _screenshot(self, path):
         if not self.software and hasattr(self.canvas, "grabFramebuffer"):
             try:
                 img = self.canvas.grabFramebuffer()
@@ -844,8 +920,15 @@ class Viewer3D(QtWidgets.QMainWindow):
         legend = [(o.name, (0.9, 0.9, 0.9)) for o in self.scene.objects if o.visible and o.kind in ("horizon", "fault")]
         return self.scene.render_png(path, (1200, 900), title=f"{self.project.name} - {self.vol_name}", legend=legend)
 
-    def turntable(self, path, frames=36):
-        return self.scene.turntable(path, frames)
+    def turntable(self, path, frames=36, with_glow=None):
+        """Turntable GIF; glow as shown unless with_glow=False ("Export without glow", PLAN 39g)."""
+        keep = self.scene.glow_export
+        if with_glow is not None:
+            self.scene.glow_export = bool(with_glow)
+        try:
+            return self.scene.turntable(path, frames)
+        finally:
+            self.scene.glow_export = keep
 
     def save_state(self):
         self.scene.save(self.project)
@@ -865,7 +948,10 @@ class Viewer3D(QtWidgets.QMainWindow):
     def _screenshot_dialog(self):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Screenshot", "", "PNG (*.png)")
         if path:
-            self._say(f"Saved {self.screenshot(path)}")
+            choice, ok = QtWidgets.QInputDialog.getItem(self, "Screenshot", "Glow:",
+                                                        ["With glow (as shown)", "Export without glow"], 0, False)
+            if ok:
+                self._say(f"Saved {self.screenshot(path, with_glow=not str(choice).startswith('Export without'))}")
 
     def _turntable_dialog(self):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Turntable animation", "", "GIF (*.gif)")
@@ -894,10 +980,39 @@ class Viewer3D(QtWidgets.QMainWindow):
             self.add_culture()
             self.redraw()
 
+    # ---------------------------------------------------------------- glow (PLAN 39d)
+    def _glow_emphasis(self, obj):
+        from .. import glow as GL
+        kind = {"horizon": "horizon", "fault": "fault", "well": "well", "line2d": "line"}.get(obj.kind)
+        if obj.kind == "well" and obj.name in (self.highlight or []):
+            return "selected"
+        if obj.kind == "geobody" and self.bodies:
+            return None
+        if kind is None:
+            return None
+        return self.glow_state.emphasis(kind, obj.name)
+
+    def glow_notice(self):
+        """One-line status: auto-limit or 'glow not supported by this driver'."""
+        f = getattr(self.canvas, "glow_failed", "")
+        if isinstance(f, str) and f:
+            return f"Glow off: {f}"
+        return self.scene.glow_notice
+
+    def toggle_glow(self):
+        self.glow_state.settings.toggle()
+        self.glow_state.broadcast()
+        self.redraw()
+        return self.glow_state.settings["enabled"]
+
     def closeEvent(self, ev):
         try:
             self.save_state()
         except Exception:
             pass
         self.bus.unsubscribe("view3d")
+        try:
+            self.glow_state.close()
+        except Exception:
+            pass
         ev.accept()

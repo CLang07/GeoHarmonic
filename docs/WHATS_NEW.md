@@ -918,3 +918,30 @@ Fixes from your first install (25 Nov): the Seismic GUI test FAILED at the 3D Vi
    (title without "software rendering").
 4. Desktop shortcut **GeoHarmonic - Tutorial**: real screenshots of every window; tell Claude about any chapter whose
    picture says "not captured".
+
+## Glow / Halo display effects (PLAN item 39, Seismic v0.62.0 - run 8, 25 Nov 2026)
+- **G** (or **Display > Glow on/off**) switches a PowerPoint-style glow under horizons, faults (cuts + sticks) and
+  wells (path + tops) on the seismic section, the Live Map (selected wells, current section line, well-section line,
+  red glow on mistie hotspots >= 5 ms) and the 3D Viewer (outline glow on horizons / fault surfaces / geobodies, a
+  soft shell on the active / selected one, fatter transparent well tubes, glowing plane outlines).
+- **Display > Glow settings...**: Glow / Halo / Off, width (px), intensity, falloff layers 1-4, colour (match / white /
+  black / custom), halo colour (Auto = black or white against the current colour table), "Glow only the active /
+  selected object", hover highlight, "Exports include glow". Saved in the project (`display.glow`).
+- Per object: right-click in the Horizons / Faults panel or the 3D Objects tree > **Glow** > On / Off / Use global /
+  Colour... (beats the global switch).
+- The active horizon / fault and anything selected glows stronger in every window (map bus: the active horizon and
+  fault are now published as ActiveObject; settings changes go out as a new `display` bus event).
+- **File > Export section image (PNG / PDF / SVG)... (Ctrl+E)** - new section figure export, asks *With glow* /
+  *Export without glow*; the 3D Screenshot asks the same, the Turntable GIF follows the setting.
+- More than 2,000 glowing objects -> active / selected only + status-bar note. Underlays are decimated while dragging.
+- Files: `seismic_tool/glow.py` (logic), `gui/glow.py` (pyqtgraph underlays, settings dialog, right-click menu),
+  section_panel / main_window / live_map / view3d / scene3d / mapbus (display topic), `test_glow.py`.
+
+### Test this first (glow)
+1. Seismic tool on F3: open an inline with your horizons and Fault A, press **G** twice - glow off / on, nothing else
+   changes (picking with P / F still works: click on a glowing line must pick, not select the glow).
+2. Display > Glow settings: Halo, then Width 3 / Intensity 50 %; right-click a horizon in the Horizons panel >
+   Glow > Off.
+3. View > 3D Viewer: horizons and planes have glowing outlines; if the status bar says "Glow off: ..." the driver
+   cannot draw wide lines - tell Claude the text. Check the frame rate when orbiting (target: hardly slower).
+4. File > Export section image > *With glow* and again *Export without glow*; compare the two PNGs.
