@@ -821,3 +821,206 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
 
 Later (Chris back): run `dev/bench.py --gb 5..20` on the PC and fix what it shows (overview volume only if zoomed-out display is slow); Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.
+
+## Phase 4 - Display effects, aesthetics, conditioning, survey blending (added 2026-11-25 afternoon)
+Chris asked for these on 2026-11-25 (project docs "GeoHarmonic Glow Effects / Aesthetics / Seismic Conditioning /
+Survey Horizon Blending plan item"). Build order: 39 -> 40 -> 41 -> 42. 3D Viewer (item 33) exists and its PC crash
+is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built against `scene3d.py` / `gui/view3d.py`
+(custom QOpenGL view + software renderer). There is no VTK/PyVista in the stack, so every VTK path is optional
+(try/except) and the numpy/QOpenGL path is the tested one.
+
+39. **Glow / Halo display effects** - status: todo
+   PowerPoint-style glow on interpretation objects (horizons and faults are a must). Stack: PySide6 + pyqtgraph for
+   2D, gui/view3d.py for 3D; no new required dependencies. 3D part (d) uses the item-33 viewer.
+   39a. Glow renderer (2D): shared helper (gui/glow.py + pure-numpy `glow.py` for styles/maths) drawing an object's
+        path as 2-3 stacked underlay strokes (wider + more transparent outward, round caps/joins) then the normal
+        crisp line. Works for PlotCurveItem/PlotDataItem, QGraphicsPathItem and scatter markers (soft larger symbol
+        underneath). Underlays are separate lower-z items, non-interactive (ignore mouse/picking), kept in sync with
+        the parent's data, visibility and pen; cosmetic pens so widths are screen pixels.
+   39b. Modes: Glow (underlay = object or user colour, additive-looking falloff), Halo (solid contrasting outline,
+        black/white chosen automatically against the current seismic colour table (gui/colormaps.py) or user-set), Off.
+   39c. Settings: Display > Glow settings panel (global on/off, mode, width px, intensity, falloff layers 1-4, colour
+        match/white/black/custom); per-object override in the object tree (right-click > Glow > On/Off/Use global +
+        colour); saved in the project; shortcut G toggles glow globally.
+   39d. 3D glow: underlay tube/line for lines, fault sticks, well paths; for surfaces (horizons, fault surfaces,
+        geobodies) vtkOutlineGlowPass only where VTK exists (not in the stack), otherwise an enlarged back-face-culled
+        transparent shell or edge outline; in the custom QOpenGL view (gui/view3d.py) a two-pass draw (thick alpha
+        pass with depth-write off, then normal pass); software renderer (scene3d) gets the same shell. Unsupported
+        GPU/driver -> no glow + one-line notice; never crash.
+   39e. What glows by default: horizons and faults (sticks, polygons, surfaces) in seismic, 3D and maps; the
+        active/selected object glows stronger ("glow only the active object" option, on by default for dense
+        projects); the autotracker front while the worker runs; wells on seismic and in 3D (path, tops,
+        synthetic/log ribbons); Live Map selected wells/bubbles, current inline/crossline, section/correlation lines,
+        3D plane outlines; QC flags in red (mistie hotspots, wells that don't tie, the blending seam in preview, grid
+        quality problems); geobodies and their outlines; hover highlight (throttled, can be switched off).
+   39f. Map bus: selection/hover/active glow state comes from mapbus SelectionService/ActiveObject (item 31a, covered
+        by 31 for the services themselves) so selecting in any window glows in all; settings changes broadcast as a
+        display event.
+   39g. Export: PNG, section/correlation figure exports and the 3D turntable (scene3d turntable GIF, item 33e) include
+        glow as shown, with an "Export without glow" checkbox.
+   39h. Performance: glow only visible items; above a threshold (e.g. >2,000 fault sticks) automatically
+        active/selected-only with a status-bar note; underlays decimated with the parent while dragging, full
+        resolution on release; target <= 15% frame-time increase on F3.
+   39i. Tests: underlay created/removed/synced on data/colour/visibility/delete; never picked or hit-tested;
+        Glow/Halo/Off switch; per-object override beats global; selection in one window glows in others via the bus;
+        auto-limit above threshold; export with and without glow; 3D glow falls back cleanly offscreen/software GL.
+        fakeqt + real-Qt offscreen.
+   39j. Docs: WHATS_NEW, test checklist, tutorial section with before/after screenshots of a horizon and a fault on F3
+        seismic in Glow and Halo modes.
+
+40. **Aesthetics package** - status: todo
+   Build a -> j in order (hillshade and colour tables first, later items reuse them). 3D parts of a, e, g use the
+   item-33 viewer (custom QOpenGL + software renderer); if they cannot be verified here they ship behind the existing
+   software fallback and are noted in WHATS_NEW. Stack: PySide6 + pyqtgraph, numpy; matplotlib for figure export;
+   colorcet only if installed. Display changes published on the map bus.
+   40a. Hillshade lighting on horizons/grids (Live Map and map views): numpy slope/aspect, sun azimuth/elevation,
+        vertical exaggeration, blend strength with the colour fill, optional multi-directional - core maths covered by
+        23b (`blend.illuminate`, `blend.shade_rgba`, `blend.amplitude_on_structure`) and 21f
+        (`well_correlation.carto.hillshade` multi-directional, `maplayers` grid style hillshade / azimuth / ve /
+        shade_strength). New: small sun dial widget; settings per view; draped hillshade for attribute maps
+        (`shade_from`, covered by 23b) exposed in the Live Map; in 3D the same sun drives surface lighting.
+   40b. Colour tables: seismic bars (red-white-blue, grey, Petrel-style - covered by gui/colormaps.py; add
+        Kingdom-style, high-contrast), perceptually uniform tables generated in numpy (viridis/cividis/magma-style;
+        carto.ramp_lut has map ramps), colourblind-safe options marked; interactive colour bar editor (drag control
+        points, clip/symmetric clip, flip, gamma, save custom tables to the project, export/import); one library
+        shared by seismic viewer, maps, 3D and correlation tool.
+   40c. Co-rendering: blend a second volume/attribute over amplitude (coherence, dip, inversion) with a transparency
+        slider and blend modes (alpha, multiply, transparency-by-value) - alpha overlay on sections covered by 23a
+        (`blend.overlay`); new: multiply + transparency-by-value modes, time slices, horizon maps and 3D slices; each
+        layer keeps its own colour table and clipping.
+   40d. High-DPI and smoothing: per-monitor DPI on Windows (tested 4K at 150%/200%), crisp icons/fonts, anti-aliased
+        lines/text in pyqtgraph and 3D (MSAA where supported, fallback off); widths/fonts scale with DPI;
+        anti-aliasing off switch for speed.
+   40e. 3D depth cues: eye-dome lighting where available, optional soft shadows/ambient occlusion with plain-lighting
+        fallback; fault surfaces semi-transparent by default with crisp edges; optional distance fog; toggles in the
+        3D display panel.
+   40f. Dark and light themes: app-wide dark (default) and light (print/slides) via Qt palette + stylesheet; plot
+        backgrounds, axes, grids, legends and Glow/Halo auto-contrast follow; View > Theme switches without restart;
+        saved in user settings.
+   40g. Smooth motion: animated camera fly-to on selection (3D and map), eased zoom/pan, slices fading from decimated
+        to full resolution, gentle layer fade-in; speed setting with Off; never blocks input, stops when the user
+        interacts.
+   40h. Well-log tracks (correlation tool): editable lithology pattern library (sand, shale, limestone, dolomite, coal
+        ...) - lithology column / between-well fills partly covered by well_correlation `lithology.py` + section
+        fills; new: editable pattern library, gradient/colour fill on GR and any curve from the colour library, shaded
+        pay/net flags from cutoffs, crossover shading (neutron-density; density-neutron fill covered by
+        `section.fill_images`); track styles saved as templates.
+   40i. Figure templates: one-click export of any view (section, map, correlation panel, 3D) to PNG/PDF/SVG with title
+        block (project, line/well, date, author), scale bar, north arrow (maps), colour bar/legend, optional grid;
+        page/DPI presets (16:9 slide, letter/A4, poster); templates saved in the project - map export with title
+        block, north arrow, graticule, templates covered by 21 (`mapexport.export_map`, `save_template`); new: the same
+        for section, correlation panel and 3D, 16:9 / poster presets, theme or forced light; glow on/off per item 39g.
+   40j. Automatic horizon colours: new horizons/faults get maximally distinct colours that avoid the current seismic
+        colour table; optional ICS chronostratigraphic colours when a horizon has an age/unit; colours can be locked or
+        reassigned; changes propagate through the map bus.
+   40k. Tests: hillshade matches an analytic surface; colour tables round-trip and are monotonic in lightness where
+        claimed; co-render blend math; DPI scaling at 100/150/200%; theme switch updates every open view; animations
+        can be disabled and never block events; lithology patterns render; figure export has title block, scale bar
+        and legend; automatic colours stay distinct (minimum colour difference); 3D EDL/shadows fall back cleanly
+        offscreen/software GL. fakeqt + real-Qt offscreen.
+   40l. Docs: WHATS_NEW, test checklist, tutorial chapter with before/after screenshots on F3 (hillshaded horizon,
+        coherence co-render, dark vs light theme, styled correlation panel, exported figure).
+
+41. **Seismic Conditioning workflow** - status: todo
+   Full post-stack conditioning (after a structure-oriented filter test on F3). Stack: numpy + PySide6; scipy only if
+   importable, numpy fallbacks. Volumes read on demand in bricks (existing volume store / SEG-Y), never loaded whole.
+   Test volume F3 (~651 IL x 951 XL x 462 samples). Prototype on F3 inline 425 (dip-steered median, GST dips sigma 1 /
+   2.5, window +/-2 IL x +/-3 XL, 2 passes, 51-inline slab, ~75 s on 2 cores): noise removed, salt flank and big faults
+   sharp, BUT real signal in the difference at 1200-1350 ms (small faults) and the steep salt flank (1500-1800 ms);
+   ~47% RMS removed = too aggressive. So: 1 pass by default, fault/edge protection on, strength blend, difference QC
+   always shown.
+   41a. Workflow dialog: Seismic > Conditioning; input volume; chain of steps (add/remove/reorder, on/off,
+        parameters); chains saved as named presets. Built-ins: Interpretation (spike removal > bandpass > FX decon >
+        SOF > footprint removal); Light / for inversion (spike removal > bandpass only; the inversion package defaults
+        to these volumes and warns if given an SOF volume); Fault-attribute input (spike removal > SOF with strong
+        edge protection).
+   41b. Spectral QC and bandpass: amplitude spectra for user windows (volume sample, time gate, around a horizon),
+        before/after overlay (spectrum code covered by `inversion/common.amplitude_spectrum`, `resolution.spectrum_stats`);
+        zero-phase Ormsby/Butterworth bandpass (Butterworth covered by `inversion/common.butter_filter`; Ormsby new)
+        with corners dragged on the spectrum plot; optional spectral balancing/whitening, off by default.
+   41c. Spike removal: samples > N x local RMS (sliding window) replaced by the local median of neighbouring traces;
+        report count and locations; spikes can be shown on the Live Map.
+   41d. FX deconvolution: f-x Wiener prediction in sliding overlapping windows in time and space, inline- and
+        crossline-wise (or f-xy); window size, filter length, frequency range, mix-back %.
+   41e. Dip volumes: inline/crossline dip (+ azimuth/magnitude) from the gradient structure tensor with derivative and
+        smoothing sigmas exposed (GST dips covered by item 3 `rgt/dip.py` dip_3d_block / compute_dip_volume and
+        `faultlik.plane_normals`); new: planarity/confidence volume from the eigenvalues, saved as project volumes for
+        reuse (SOF steering, dip attributes, 3D viewer, RGT tools).
+   41f. Structure-oriented filter: dip-steered neighbours (linear interpolation in time) in a user IL x XL window;
+        median, alpha-trimmed mean, mean. Edge/fault protection: coherence/planarity guard (shrink or skip the window
+        where confidence is low, threshold slider) and Kuwahara-style edge-preserving sub-window selection (lowest
+        variance). Passes 1 by default, up to 3, re-estimating dips between passes. Strength slider: output =
+        original + s x (filtered - original), 0-100%.
+   41g. Footprint removal: per time slice (or gate) 2D FFT in kx-ky; detect footprint peaks automatically along
+        acquisition directions or let the user draw notch masks; tapered notches, inverse FFT; option to restrict to a
+        shallow time range.
+   41h. Optional extras: structure-oriented anisotropic diffusion as an alternative SOF engine; AGC as display-only
+        (never written into conditioned volumes unless chosen explicitly).
+   41i. Preview and QC: live preview on the current inline/crossline/time slice (with a small 3D halo): original |
+        conditioned | difference, same colour scale, synced zoom; metrics RMS removed %, signal-leakage score
+        (correlation of the difference with the filtered result along dip, flagged if high), before/after spectra;
+        warning when the difference shows coherent reflectors or RMS removed > threshold (default 35%).
+   41j. Protect geology: user polygons or time gates where filtering is reduced or skipped (gas chimneys, salt flank,
+        the small-fault interval), stored as masks, visible on the Live Map and in 3D.
+   41k. Full-volume run: bricks with halos sized to the largest window, background worker with progress, time
+        estimate, cancel, multi-core where available; output a new project volume (original never changed) with the
+        full chain + parameters saved in its history; optional difference volume; SEG-Y export with the original
+        headers (SEG-Y writer covered by `inversion/common.export_segy`).
+   41l. Links: conditioned volumes appear in the seismic viewer, 3D window and as inputs to autotracking,
+        coherence/attributes, fault mapping, RGT tools and the well tie; the map bus announces new volumes
+        (DataChanged); volume pickers show the conditioning history.
+   41m. Tests (synthetic volumes with known dipping reflectors + random noise + a fault + a footprint pattern +
+        spikes): SNR improves after SOF and the difference has no coherent reflectors (leakage below threshold); fault
+        throw preserved within tolerance with edge protection on; footprint notch removes the injected pattern and
+        leaves the rest of kx-ky within tolerance; all spikes detected, no false positives on clean data; FX decon
+        improves SNR for flat and dipping events; bandpass matches the designed response; brick processing equals
+        whole-volume processing (no seams); strength 0% returns the input exactly; presets round-trip. fakeqt +
+        real-Qt offscreen.
+   41n. Docs: WHATS_NEW, test checklist, tutorial chapter on F3: the Interpretation preset on inline 425, reading the
+        difference panel, a protect polygon over the 1200-1350 ms faulted interval, with before/after/difference
+        screenshots.
+
+42. **Survey horizon and grid blending** - status: todo
+   Adaptive seam blend for unmerged overlapping surveys. Logically after item 17 / 37 (depth horizons per survey);
+   built after item 41. Merging happens in depth (each survey depth-converted with its own velocities, then blended);
+   time-domain blending stays available. The mistie tool (item 10, `mistie.py` shift/phase/amplitude,
+   `overlap_ties`) does the bulk tie; this item handles only the RESIDUAL misfit left after that and after depth
+   conversion, at horizon/grid level, without smearing geology or removing fault throw. numpy only. Reuses the mistie
+   correction output, item 17/37 depth horizons, the gridding code (vgrid / livegrid / carto.grid_by_blocks), fault
+   polygons and the map hub / Live Map bus.
+   42a. Inputs: depth horizons per survey from item 17 (default) or mistie-corrected time horizons; survey outlines
+        auto-detected from trace coverage; survey priority order; optional fault polygons; resample to a common master
+        bin grid (finer or larger survey by default).
+   42b. Edge trimming: drop the outer N traces of each survey (low fold, migration-aperture edges); N user-set with a
+        sensible default.
+   42c. Residual along the seam: R = A - B per bin in the overlap, robust (median-based) so bad picks/spikes don't
+        drive it, smoothed along the seam.
+   42d. Adaptive blend width (core): width = |residual| / max allowed added slope (e.g. 2 m/km: 4 m residual -> 2 km,
+        20 m -> 10 km), clamped between min and max, varying along the seam.
+   42e. Allowed slope parameter: one value Chris sets (not derived from dip); units follow the domain (m/km or
+        ft/mile for depth, ms/km for time); default ~2-5 per km; global value plus optional per-horizon override.
+   42f. Blend methods: (1) priority cut (hard seam baseline), (2) distance-weighted feather (weights 1 -> 0 toward each
+        survey's edge), (3) residual surface (grid A - B in the overlap, taper to zero away from the seam, add to the
+        lower-priority survey), (4) Hybrid (default): residual surface then a narrow feather. Optional weights from
+        survey quality (newer/higher fold) and pick confidence (autotracker correlation).
+   42g. Width larger than the overlap: switch that stretch to the residual-surface method tapering into the
+        lower-priority survey; a gap (no overlap) is flagged as interpolation, not blending.
+   42h. Fault-aware: fault polygons are barriers - no blending across a fault; residual and width per fault block so
+        throw is preserved (fault-block labelling covered by `carto.fault_blocks`).
+   42i. Well tops stay honoured: after blending re-check every top; if a blend moved a well, re-apply the item-17
+        residual correction locally so every top ties exactly.
+   42j. Order: blend the picks then grid once (preferred); grid-then-blend kept for grid-only inputs.
+   42k. Dynamic update via 17c: re-blend only the changed horizon and only seam stretches whose residual changed;
+        status-bar message.
+   42l. QC outputs: residual map before/after, weight map, width map (wide = surveys disagree; an interpretation
+        flag), added-slope map proving the tolerance held, seam-gradient map, residual histogram, well-top tie table
+        after blending.
+   42m. UI: load horizons > overlap and priority > method > slope slider (min/max width under Advanced) > fault
+        barriers > live preview with seam on/off > export merged grid and QC maps; readout e.g. "Blend width 0.8-6.2
+        km, overlap fully used on 87% of seam"; can be the final step of the depth conversion dialog; outputs as
+        map-hub layers and through the Live Map bus; threaded and cancellable.
+   42n. Tests: synthetic two-survey overlap with a known spatially varying residual (tilt + local bump), a fault
+        across the seam, wells inside and outside the blend zone: added slope never exceeds tolerance; overlap
+        residual ~0; fault throw preserved within tolerance; every top ties within 0.1 m; a picking spike doesn't
+        widen the blend; width > overlap switches to residual surface; a moved top re-blends only that horizon;
+        priority cut reproduced exactly when blending is off. fakeqt; WHATS_NEW + test checklist.
