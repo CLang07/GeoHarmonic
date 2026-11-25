@@ -596,7 +596,7 @@ all consume their per-zone results. Design decisions (Chris can override):
    a synthetic analytic linear-flow well, economics against a hand-computed cash flow.
 
 ## Phase 3 - Live Map + 3D module (added 2026-11-24, interactive session)
-Chris asked for these on 2026-11-24. Order: 31 (Live Map), 32 (automated fault mapping), then the 3D module 33 -> 34 -> 35 -> 36. Full design
+Chris asked for these on 2026-11-24. Order: 31 (Live Map), 32 (automated fault mapping), 37 (velocity-volume depth conversion, added 2026-11-25, placed before 33), then the 3D module 33 -> 34 -> 35 -> 36. Full design
 notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D Module plan item" (3D items renumbered 33-36).
 - The Live Map EXTENDS the item-21 Map hub (layers, gridding, cartography, GIS package, QGIS link already exist) - do
   not rebuild what item 21 has; add the shared map bus and the missing interaction.
@@ -674,6 +674,49 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    TFL peaks within 1 trace of the true planes, strike/dip within 5 deg, one skin per fault (crossing pair separated),
    throw within 1 sample; stereonet filter keeps the right patches; merge assistant joins two halves of one fault and
    not two neighbouring faults; fault polygons close and do not overlap; 2D cut correlation links the right cuts.
+
+37. **Velocity-volume depth conversion (advanced mode of the Kingdom-style DDC, item 17)** - status: todo
+   Chris asked for this on 2026-11-25 (project doc "GeoHarmonic Velocity Volume plan item"): build a 3D interval-
+   velocity volume from the well-tie synthetics, framed by the interpreted horizons, and use it to convert to depth.
+   WELL TOPS ARE THE HARD DATA; THE VELOCITY VOLUME IS SECONDARY (trend). Final depth maps must tie every well top
+   exactly. Item 17's layer-cake modes stay unchanged (`velocity.VelocityModel`, `ddc.DynamicDepthModel`); this is an
+   additional mode in a new module (e.g. `velvolume.py`). numpy only. Numbered 37 (added after 32-36) but placed here
+   so it runs after 31/32 and before the 3D module: item 35c's depth framework consumes it.
+   37a. Velocities from the synthetics: per tied well take the final T-D from the well tie (`welltie.WellTD.twt()` incl.
+        shift / stretch / DTW warp from 16a-b, saved via `tie.write_td_csv`), falling back to checkshot
+        (`welltie.checkshot_for`) then sonic-integrated T-D (`welltie.sonic_td`, `tie.calibrate_sonic`); interval and
+        instantaneous velocity vs TWT (`tie.interval_velocity`); QC: drift vs checkshot (`tie.drift_table`), despike
+        (`tie.despike`), min/max caps, flag poorly tied wells (tie correlation from `tie.correlate` / TieState score);
+        velocities blocked per zone for display.
+   37b. Structural framework: time horizons (+ fault polygons where available, `faults.py`) define zones; layering per
+        zone proportional / parallel to top / parallel to base - reuse `inversion/lfm.strat_coords` and
+        `lfm.horizon_grids` (item 19a); RGT stack levels optional as in 19a.
+   37c. Velocity volume: interpolate well velocities along framework layers - IDW (`lfm.lateral_weights`), kriging
+        (`vgrid.fit_variogram` / `krige_fit`), or trend-guided with Dix-converted stacking/RMS velocities as the
+        background away from wells (`vgrid.dix`, `vgrid.guide_trends`, `vgrid.guided_grid`, item 17b); optional
+        smoothing (`inversion/common.butter_filter`); store as a float16 volume (`inversion/common.write_volume`,
+        same pattern as `lfm.VolumeLFM.write`) and export SEG-Y (`inversion/common.export_segy`); threaded + Cancel.
+   37d. Depth conversion through the volume: integrate trace by trace (z = sum v_int * dt / 2) to depth horizons, depth
+        sections and a depth-converted seismic volume (reuse `scenarios.depth_axis` / `depth_convert_volume` /
+        `interp_rows` with a volume-driven time->depth function instead of the layer-cake one).
+   37e. Well tops as hard data: residual per well and horizon (top TVDSS minus volume-predicted depth); grid residuals
+        (`vgrid` kriging or TPS; collocated cokriging with the volume-derived depth as secondary via the item-21c
+        cokriging in `maplayers`/`maps` as an option) and apply so every depth map ties the tops exactly; then calibrate
+        the volume (scale each layer's interval velocity at the wells to honour the tops, grid the scale factors like
+        17b's ratio guide) and write a calibrated velocity volume consistent with the corrected depth maps.
+   37f. Dynamic update via 17c (`ddc.DynamicDepthModel.refresh`, `_top_changes`, `_layer_of`): a new/moved top
+        recomputes residuals and calibration only for affected layers and below; a new/edited well tie updates only that
+        well's velocities and the nearby volume; status-bar message says what changed.
+   37g. QC and uncertainty: leave-one-well-out blind test vs the item-17 layer-cake modes (`scenarios.blind_test`,
+        `summarise`); residual maps per horizon; velocity sections with wells and tops overlaid; register as named
+        scenarios in 17e (`scenarios.save_scenario`, `difference_grid`, `probability_maps` for P10/P50/P90 depth).
+   37h. UI: "Velocity volume (advanced)" mode in `gui/velocity_dialog.py` as a guided a-e workflow; velocity volume on
+        seismic sections (as an attribute volume), as a map-hub layer (slice / layer average, `maplayers` / `maphub`)
+        and through the Live Map bus (item 31a: DataChanged "velocities").
+   37i. Tests: synthetic earth with lateral + vertical velocity change and 6-8 wells -> volume mode beats layer-cake in
+        the blind test; final maps tie every top within 0.1 m; calibrated volume reproduces the corrected depth maps
+        within 1 m; a moved top rebuilds only affected layers; stacking-velocity trend recovers a lateral gradient the
+        wells miss. GUI wiring under dev/fakeqt. WHATS_NEW section + test checklist.
 
 33. **3D Viewer (Petrel-style 3D window)** - status: todo
    33a. 3D window core: QOpenGLWidget canvas (orbit / pan / zoom, vertical exaggeration slider, axis box with
