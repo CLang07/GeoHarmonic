@@ -432,3 +432,37 @@ the 2D lines, Tui-1/Amokura-1 wells).
 - Next: no PLAN items left - add new ones (the follow-ups noted on items 20-30 in PLAN.md are good candidates), plus the
   "Later (Chris back)" list (bench on the PC, Maui 3D subset, mistie integration).
 
+
+## 2026-11-25 (interactive session with Chris) - first real-Qt install on Chris's PC, fixes, installer, F3 setup
+First time the tools ran under real PySide6 on Chris's laptop (Anaconda Python 3.11.3, PySide6 6.5.3). Final result
+on the PC: all self-tests and GUI tests pass (Well Correlation, Seismic 1,057 checks, Mistie), installer "Failures: 0".
+- Bugs found by the real-Qt run and fixed:
+  1. Well Correlation `gui/petro_dialog.py`: `QDialog.__init__` rejected a non-widget parent (GUI test stand-in) -
+     falls back to a top-level dialog.
+  2. Seismic `gui/welltie_dialog.py`: "best trace within N" spin box started at 0 in real Qt, so Find best trace only
+     compared one trace - default 1 (3 x 3 traces).
+  3. Seismic `gui/basin_dialog.py`: `set_settings()` did not update the widgets, so Save read the old heat flow back -
+     now syncs the widgets (`_sync=False` when called from `settings_from_widgets`).
+  4. Seismic `dashboard_model.py`: `histogram()` crashed (numpy "Too many bins for data range") on constant or
+     near-constant large values (e.g. coordinates) - one-bin fallback.
+  5. Seismic `test_qgislink.py`: the QGIS mock needs `dev/fakeqt/anything.py` - appended (last) to sys.path so it can
+     never shadow the real PySide6; the crash had cut off the last four GUI test groups.
+- New: Well Correlation `project.py` - `wells_header.csv` may carry projected `X`, `Y` (or `Easting`/`Northing`), which
+  win over Latitude/Longitude (the importer otherwise projects to NZTM). Needed for F3 (ED50 / UTM 31N).
+- New: one-click Windows setup at the repo root (all written without `( )` blocks - a ")" in the folder path breaks them):
+  `Install GeoHarmonic.bat` (finds Anaconda, per-tool .venv incl. Mistie, runs every test, desktop shortcuts,
+  install_log.txt), `Run all tests.bat` (test_summary.txt), `Uninstall GeoHarmonic.bat`, `START HERE.txt`,
+  `Set up F3 project.bat`.
+- New: `tools/guitest_runner.py` - runs `--guitest` under real Qt offscreen with every modal auto-answered (a hidden
+  dialog hung the first run), line-buffered output and a faulthandler watchdog (10 / 20 min) that dumps the stack.
+- New: Mistie Tool gets its own .venv (numpy, scipy, matplotlib): Chris's Anaconda base has a numpy/scipy mismatch
+  ("_ARRAY_API not found") that broke scipy. `Mistie Tool.bat` / `Run self-test.bat` use .venv (TCL/TK_LIBRARY set from
+  Anaconda), falling back to Anaconda.
+- New: `tools/setup_f3.py` - builds Documents\F3 Netherlands from the F3 Demo 2023 download (dGB / TerraNubis,
+  CC BY-SA 3.0) using its Rawdata exchange files: 4 wells (LAS, checkshot CSV, 39 marker tops), Well Correlation
+  project, 3D import (600,515 traces, IL 100-750, XL 300-1250, 4-1848 ms) with the exact bin grid from the OpendTect
+  .survey (header fit was within 0.1 m), 7 horizons, Fault A, linked seismic project. Ran on the PC in ~2 min.
+- Known on the PC: harmless "NumPy 1.x" warning from shiboken 6.5.3 under numpy 2.4; Qt "no font directory" note.
+- Tests here: all three self-tests and both --guitest (fakeqt) pass; setup_f3.py tested on the real F3 well, horizon,
+  fault and survey files with a synthetic SEG-Y on the F3 bin grid.
+- Next: Lesson 4 (F3) of the tutorial; PLAN Phase 3 (items 31-36).

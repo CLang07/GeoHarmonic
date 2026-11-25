@@ -212,13 +212,18 @@ class BasinDialog(QtWidgets.QDialog):
         else:
             hf = {"kind": "constant", "q": float(txt)}
         return self.set_settings(heat_flow=hf, surface_t=float(self.ts.text()), water_depth=float(self.wd.text()),
-                                 kinetics=self.kin.currentText())
+                                 kinetics=self.kin.currentText(), _sync=False)
 
-    def set_settings(self, **kw):
+    def set_settings(self, _sync=True, **kw):
         for k, v in kw.items():
             if k == "kinetics" and v not in MT.KINETICS:
                 continue
             self.s[k] = v
+        if _sync and self._widgets_live():  # keep the boxes in step, or Save would read the old values back
+            try:
+                self._settings_to_widgets()
+            except Exception:
+                pass
         return self.s
 
     def _widgets_live(self):

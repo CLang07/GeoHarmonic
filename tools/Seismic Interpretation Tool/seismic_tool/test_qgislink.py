@@ -151,6 +151,9 @@ def run_gui(check, tmp):
     for p in (FAKE_QGIS, PLUGIN_DIR):
         if p not in sys.path:
             sys.path.insert(0, p)
+    fake_qt = os.path.join(os.path.dirname(FAKE_QGIS), "fakeqt")  # the QGIS mock needs its 'anything' helper;
+    if fake_qt not in sys.path:  # appended last so it can never shadow the real PySide6 / pyqtgraph
+        sys.path.append(fake_qt)
     try:
         from geoharmonic_link.plugin import GeoHarmonicLinkPlugin
         from anything import Anything

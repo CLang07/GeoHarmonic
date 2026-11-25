@@ -142,7 +142,16 @@ class DashboardModel:
         base = self.visible(exclude=col) & np.isfinite(v)
         if not base.any():
             return np.array([0.0, 1.0]), np.zeros(1, int), np.zeros(1, int)
-        edges = np.histogram_bin_edges(v[base], bins)
+        lo, hi = float(np.min(v[base])), float(np.max(v[base]))
+        span = hi - lo
+        if not span > 1e-9 * max(1.0, abs(lo), abs(hi)):  # constant (or near-constant large) values: one unit-wide bin
+            half = max(0.5, 1e-6 * max(abs(lo), abs(hi)))
+            edges = np.linspace(lo - half, hi + half, 2)
+        else:
+            try:
+                edges = np.histogram_bin_edges(v[base], bins)
+            except ValueError:  # too many bins for the float resolution of this range
+                edges = np.linspace(lo, hi, 2)
         c, _ = np.histogram(v[vis], edges)
         sel = np.zeros(len(v), bool)
         sel[list(self.selected)] = True

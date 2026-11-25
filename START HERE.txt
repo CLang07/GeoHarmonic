@@ -1,0 +1,24 @@
+GeoHarmonic - Geo Tool Kit
+==========================
+
+1. Put this folder where you want it to live (for example Documents\GeoHarmonic).
+   Do this BEFORE installing - the desktop shortcuts point to this location.
+
+2. Double-click "Install GeoHarmonic.bat".
+   If Windows says "Windows protected your PC": click More info, then Run anyway.
+   It takes 5-15 minutes the first time and needs an internet connection.
+   It ends with "ALL GOOD" or a list of problems.
+
+3. Start the tools from the desktop shortcuts:
+     GeoHarmonic - Well Correlation
+     GeoHarmonic - Seismic Interpretation
+     GeoHarmonic - Mistie
+
+Other files here:
+  Run all tests.bat         re-runs every test, writes test_summary.txt
+  Set up F3 project.bat     builds Documents\F3 Netherlands from the F3 download (3D + 4 wells + horizons)
+  Uninstall GeoHarmonic.bat removes the Python environments and shortcuts (keeps your data)
+  install_log.txt           written by the installer - send it to Claude if something fails
+
+Moved the folder after installing? Just run "Install GeoHarmonic.bat" again.
+Needs Anaconda (or any Python 3.9-3.11) on the PC.

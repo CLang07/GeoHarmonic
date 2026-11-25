@@ -4,6 +4,7 @@ Folder layout the importer understands (what we built for the NZ data):
 
     <data folder>/
         wells_header.csv            Well, UWI, Latitude, Longitude, Elevation_m, Elev_Ref, TD_m, ...
+                                    (or X, Y in the seismic survey's projected CRS instead of lat/lon)
         wells/<Well>/las/*.las      log data (any number of files / runs)
         wells/<Well>/dlis/*.dlis    DLIS log data (read directly, depth frames -> curves like LAS)
         wells/<Well>/survey/*.csv   optional MD,INC,AZI (also picks up *Survey*.txt in mudlog/)
@@ -144,6 +145,11 @@ class Project:
                 w.info = {k: v for k, v in h.items() if k not in ("Well",)}
             if w.lat is not None and w.lon is not None:
                 w.x, w.y = tm_forward(w.lat, w.lon)
+            if h:  # projected X / Y in the header win over lat/lon (any CRS, e.g. ED50 UTM 31N for F3)
+                hx = _f(h.get("X") or h.get("Easting") or h.get("X_m"))
+                hy = _f(h.get("Y") or h.get("Northing") or h.get("Y_m"))
+                if hx is not None and hy is not None:
+                    w.x, w.y = hx, hy
             p.wells[name] = w
             if progress:
                 progress(i + 1, len(names), name)

@@ -55,7 +55,10 @@ def fmt_value(v):
 
 class PetroDialog(QtWidgets.QDialog):
     def __init__(self, win):
-        super().__init__(win)
+        try:
+            super().__init__(win)
+        except TypeError:  # win is not a QWidget (GUI test stand-in): open as a top-level dialog
+            super().__init__(None)
         self.win = win
         self.project = win.project
         self.setWindowTitle("Petrophysics")

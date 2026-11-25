@@ -70,6 +70,7 @@ class WellTieDialog(QtWidgets.QDialog):
         self.btn_corr.setToolTip("Correlation vs lag, polarity, phase scan, cycle-skip warning (Hampson-Russell style)")
         self.nbest_spin = QtWidgets.QSpinBox()
         self.nbest_spin.setRange(0, 10)
+        self.nbest_spin.setValue(1)  # 3 x 3 traces around the well by default (0 = the well trace only)
         self.nbest_spin.setPrefix("best trace within ")
         self.btn_best = QtWidgets.QPushButton("Find best trace")
         self.lag_spin = QtWidgets.QDoubleSpinBox()
