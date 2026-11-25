@@ -35,3 +35,7 @@ and `docs/PLAN.md` (ordered work) before changing anything.
 8. If blocked (tests failing you can't fix, design question only Chris can answer), commit what works
    behind a flag or in a separate module, mark the item `blocked: <reason>` and move to the next item
    only if time allows. Never leave `dev` with failing self-tests.
+
+## Standing rule (added 2026-11-24)
+Every tool must integrate with the Live Map (the map hub) through the shared map bus (selection, filters, active
+line/well, data-changed events) - see PLAN item 31. The 3D module (items 32-35) follows the same rule.
