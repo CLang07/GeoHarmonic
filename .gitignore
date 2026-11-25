@@ -8,3 +8,4 @@ __pycache__/
 *.npz
 test_results.txt
 dev/*.zip
+tutorial_local/

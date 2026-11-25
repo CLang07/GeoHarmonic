@@ -18,11 +18,15 @@ tools/QGIS Plugin/geoharmonic_link/   QGIS plugin "GeoHarmonic Link" (21h): core
                 no QGIS imports), plugin.py (qgis.PyQt / qgis.core / qgis.gui). Zip: python dev/build_qgis_plugin.py
 dev/fakeqt/     Qt + pyqtgraph mock for testing GUI code without Qt
 dev/fakeqgis/   qgis mock (module __getattr__ -> fakeqt Anything; needs dev/fakeqt on the path)
-docs/           HANDOFF (this), PLAN (ordered work), RUNLOG (one entry per run)
+docs/           HANDOFF (this), PLAN (ordered work), RUNLOG (one entry per run), TUTORIAL.md / .html + tutorial/
+                (generated - never edit by hand: python3 dev/build_tutorial.py; text in dev/tutorial_content.py)
+tutorial_local/ (Chris's PC only, gitignored) tutorial rebuilt by the installer with real-Qt window screenshots
 ```
 Chris runs each tool from its folder on Windows: `Install (run once).bat` creates `.venv` from
 `%USERPROFILE%\anaconda3\python.exe` with **PySide6==6.5.3 + pyqtgraph==0.13.7** (newer PySide6 fails with
-"DLL load failed ... procedure could not be found" against Anaconda's MSVC runtime; keep the pins). Launch
+"DLL load failed ... procedure could not be found" against Anaconda's MSVC runtime; keep the pins) and
+**numpy<2** (shiboken6 6.5.3 is built for NumPy 1.x; every pip line that installs PySide6 or the optional extras pins
+it - test_pcfixes checks the .bat files). Launch
 `.bat` sets `PYQTGRAPH_QT_LIB=PySide6`. Bats must have CRLF line endings.
 
 ## Seismic Interpretation Tool (focus of the build)
@@ -717,6 +721,19 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   Pressures / Contact_TVDSS). Section TRACKS FAC (FACIES) and DTP (DT_PRED + P10 / P90). PetroDialog: run_predict,
   run_facies, import_report. Tests `run_ml_reports` (+ 22 GUI check in run_gui).
 
+## Illustrated tutorial (PLAN 38d/e)
+- `python3 dev/build_tutorial.py` -> docs/TUTORIAL.md, docs/TUTORIAL.html (self-contained, base64 images),
+  docs/tutorial/*.png. Text: `dev/tutorial_content.py` (one dict per chapter: purpose, shots, steps, results_re =
+  regexes of PASS lines to quote, limits, trouble). Pictures: `SHOTS` = WINDOWS (real Qt: open the window off screen,
+  `QWidget.grab()`, callouts on the window's own menu bar / toolbars / docks / tabs / group boxes) and EXPORTS (the
+  tools' own image exports: 3D software renderer, Live Map export, horizon map export, Well Correlation section export
+  on the bundled NZ wells). Here (no Qt) only EXPORTS work and the caption says the window was not drawn; never draw
+  mock-ups. Results quote tools/<tool>/test_results.txt or `--results FILE` (repeatable).
+- On the PC, Install GeoHarmonic.bat step 6 runs `build_tutorial.py --pc` with the Seismic .venv -> tutorial_local/
+  (gitignored so Update_GeoHarmonic.bat's pull never conflicts); the "GeoHarmonic - Tutorial" shortcut opens it
+  (docs\TUTORIAL.html when the rebuild failed). The builder has a 15 min faulthandler stop.
+- Rule: re-run the builder at the end of any run that changes a window; new module -> new chapter + shot ids.
+
 ## Conventions
 - numpy only for algorithms; vectorise; memmap big arrays; float16 stores for volumes, float32 math.
 - GUI: PySide6 imported before pyqtgraph; `pg.setConfigOptions(antialias=False, imageAxisOrder="row-major")`;
@@ -736,7 +753,11 @@ catches import errors, wrong attribute names in our own code, and logic bugs - n
 key results with matplotlib to PNG and look at them.
 
 ## Lessons learned
-- Pin PySide6 6.5.3 / pyqtgraph 0.13.7 (see above).
+- Pin PySide6 6.5.3 / pyqtgraph 0.13.7 / numpy<2 (see above).
+- Never keep `QOpenGLWidget.context().functions()` (or any Qt object you did not create) on self: Python does not own
+  it and Qt reuses the address - on Chris's PC the cached table became the shader program (PLAN 38a). Fetch it in
+  each initializeGL / paintGL / resizeGL (`GLCanvas._funcs`).
+- GUI test modules run through `selftest._guarded`: a crash is one FAIL with traceback, the rest still runs.
 - FDCC is a density correction, not RHOB. Remove flat-lined cased-hole log sections.
 - numpy 2: use `np.ptp(a)`, not `a.ptp()`.
 - Trace-to-trace tracking on the NPRA land 2D lines fails within tens of traces on raw data (static

@@ -4,15 +4,20 @@ GeoHarmonic - Geo Tool Kit
 1. Put this folder where you want it to live (for example Documents\GeoHarmonic).
    Do this BEFORE installing - the desktop shortcuts point to this location.
 
-2. Double-click "Install GeoHarmonic.bat".
+2. Double-click "Install GeoHarmonic.bat". (Later updates: double-click Update_GeoHarmonic.bat on
+   your Desktop first, then run "Install GeoHarmonic.bat" again.)
    If Windows says "Windows protected your PC": click More info, then Run anyway.
    It takes 5-15 minutes the first time and needs an internet connection.
    It ends with "ALL GOOD" or a list of problems.
 
-3. Start the tools from the desktop shortcuts:
+3. Open docs\TUTORIAL.html in your web browser (or the desktop shortcut
+   "GeoHarmonic - Tutorial" after installing): click-by-click guide with screenshots.
+
+4. Start the tools from the desktop shortcuts:
      GeoHarmonic - Well Correlation
      GeoHarmonic - Seismic Interpretation
      GeoHarmonic - Mistie
+     GeoHarmonic - Tutorial
 
 Other files here:
   Run all tests.bat         re-runs every test, writes test_summary.txt

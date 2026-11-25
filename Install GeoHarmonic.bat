@@ -29,11 +29,11 @@ echo.
 
 if not exist "%ROOT%\tools\Well Correlation Tool\well_correlation" goto wrongplace
 
-echo [1/5] Unblocking downloaded files...
+echo [1/6] Unblocking downloaded files...
 echo Step 1: unblocking >> "%LOG%"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath $env:ROOT -Recurse -File | Unblock-File" >nul 2>&1
 
-echo [2/5] Looking for Python...
+echo [2/6] Looking for Python...
 echo Step 2: looking for Python >> "%LOG%"
 set "PY="
 call :trypy "%USERPROFILE%\anaconda3\python.exe"
@@ -49,15 +49,17 @@ echo       Using Python %PYVER% at %PY%
 echo Python %PYVER%: %PY% >> "%LOG%"
 "%PY%" -c "import sys;sys.exit(0 if sys.version_info[:2]<=(3,11) else 1)" || echo       WARNING: PySide6 6.5.3 needs Python 3.11 or older - the package step may fail.
 
-echo [3/5] Well Correlation Tool
+echo [3/6] Well Correlation Tool
 set "GUIMIN=10"
 call :tool "Well Correlation Tool" well_correlation
-echo [4/5] Seismic Interpretation Tool
+echo [4/6] Seismic Interpretation Tool
 set "GUIMIN=20"
 call :tool "Seismic Interpretation Tool" seismic_tool
 
-echo [5/5] Mistie Tool test and desktop shortcuts
+echo [5/6] Mistie Tool test and desktop shortcuts
 call :mistie
+echo [6/6] Illustrated tutorial with screenshots from this PC, and desktop shortcuts
+call :tutorial
 call :shortcuts
 
 echo. >> "%LOG%"
@@ -75,6 +77,7 @@ echo   ALL GOOD. Both tools are installed and every test passed.
 echo   Start them from the desktop shortcuts:
 echo     GeoHarmonic - Well Correlation
 echo     GeoHarmonic - Seismic Interpretation
+echo   Tutorial: desktop shortcut "GeoHarmonic - Tutorial"
 echo  ============================================================
 :done
 echo.
@@ -193,13 +196,32 @@ call :fail "Mistie packages"
 exit /b 0
 
 rem ----------------------------------------------------------------------
+:tutorial
+rem Rebuilds the tutorial with real window screenshots into tutorial_local (not tracked by git).
+rem A problem here is only a note: the tools still work and docs\TUTORIAL.html is always there.
+set "TPY=%ROOT%\tools\Seismic Interpretation Tool\.venv\Scripts\python.exe"
+set "TUT=%ROOT%\docs\TUTORIAL.html"
+if not exist "%TPY%" exit /b 0
+if not exist "%ROOT%\dev\build_tutorial.py" exit /b 0
+echo       Building the tutorial (about 1 minute)...
+echo ===== Tutorial ===== >> "%LOG%"
+if exist "%ROOT%\tutorial_local\TUTORIAL.html" del /q "%ROOT%\tutorial_local\TUTORIAL.html" >nul 2>&1
+"%TPY%" -u "%ROOT%\dev\build_tutorial.py" --pc >> "%LOG%" 2>&1
+if exist "%ROOT%\tutorial_local\TUTORIAL.html" set "TUT=%ROOT%\tutorial_local\TUTORIAL.html"
+if exist "%ROOT%\tutorial_local\TUTORIAL.html" echo       Tutorial built: tutorial_local\TUTORIAL.html
+if not exist "%ROOT%\tutorial_local\TUTORIAL.html" echo       Note: tutorial not rebuilt - the shortcut opens docs\TUTORIAL.html. See install_log.txt
+exit /b 0
+
+rem ----------------------------------------------------------------------
 :shortcuts
 set "SC_WC=%ROOT%\tools\Well Correlation Tool\Well Correlation Tool.bat"
 set "SC_SE=%ROOT%\tools\Seismic Interpretation Tool\Seismic Interpretation Tool.bat"
 set "SC_MI=%ROOT%\tools\Mistie Tool\Mistie Tool.bat"
+if not defined TUT set "TUT=%ROOT%\docs\TUTORIAL.html"
+set "SC_TU=%TUT%"
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
  "$d=[Environment]::GetFolderPath('Desktop'); $w=New-Object -ComObject WScript.Shell;" ^
- "foreach($p in @(@('GeoHarmonic - Well Correlation',$env:SC_WC),@('GeoHarmonic - Seismic Interpretation',$env:SC_SE),@('GeoHarmonic - Mistie',$env:SC_MI))){" ^
+ "foreach($p in @(@('GeoHarmonic - Well Correlation',$env:SC_WC),@('GeoHarmonic - Seismic Interpretation',$env:SC_SE),@('GeoHarmonic - Mistie',$env:SC_MI),@('GeoHarmonic - Tutorial',$env:SC_TU))){" ^
  " if(Test-Path -LiteralPath $p[1]){ $s=$w.CreateShortcut((Join-Path $d ($p[0]+'.lnk'))); $s.TargetPath=$p[1];" ^
  " $s.WorkingDirectory=(Split-Path -LiteralPath $p[1]); $s.IconLocation='imageres.dll,109'; $s.Save() } }" >> "%LOG%" 2>&1
 set "RC=%ERRORLEVEL%"

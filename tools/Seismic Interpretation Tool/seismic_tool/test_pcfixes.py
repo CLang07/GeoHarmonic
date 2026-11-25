@@ -133,3 +133,53 @@ def run(check, tmp):
     check(not hits, "38b: no NumPy-2-only API in the tools" + (f": {hits[:3]}" if hits else ""))
     import numpy as np
     check(True, f"38b: numpy here {np.__version__} (Chris's Qt tools: 1.26 after the pin)")
+
+
+def run_tutorial(check, tmp):
+    """38d/e: dev/build_tutorial.py builds both tutorial files in one command (Qt mock forced: same on every PC)."""
+    builder = os.path.join(REPO, "dev", "build_tutorial.py")
+    if not os.path.isfile(builder):
+        print("SKIP 38e: dev/build_tutorial.py not in this copy")
+        return
+    out = tempfile.mkdtemp(dir=tmp, prefix="tut_")
+    res = os.path.join(out, "res.txt")
+    with open(res, "w") as f:
+        f.write("PASS 38a: example check (1.0 ms)\nPASS 33a: plane (3 planes)\nSELFTEST PASSED\n")
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    p = subprocess.run([sys.executable, builder, "--mock", "--out", out, "--results", res], cwd=REPO, env=env,
+                       capture_output=True, text=True, timeout=600)
+    ok = p.returncode == 0 and "TUTORIAL BUILT" in p.stdout
+    check(ok, "38e: build_tutorial.py runs in one command" + ("" if ok else f" (rc={p.returncode}: "
+                                                              f"{(p.stdout + p.stderr)[-300:]})"))
+    if not ok:
+        return
+    page = open(os.path.join(out, "TUTORIAL.html"), encoding="utf-8").read()
+    md = open(os.path.join(out, "TUTORIAL.md"), encoding="utf-8").read()
+    sys.path.insert(0, os.path.join(REPO, "dev"))
+    try:
+        import importlib
+        import tutorial_content as TC
+        importlib.reload(TC)
+    finally:
+        sys.path.pop(0)
+    ids = [c["id"] for c in TC.CHAPTERS]
+    check(all(f"id='{i}'" in page for i in ids) and all(f'<a id="{i}"></a>' in md for i in ids),
+          f"38d: every chapter in TUTORIAL.html and TUTORIAL.md ({len(ids)} chapters)")
+    need = ["install", "fixes", "wellcorr", "mistie", "seismic", "rgt", "welltie", "velocity", "maps", "basin",
+            "inversion", "analytics", "faultmap", "view3d", "interp3d", "framework", "properties", "prospects"]
+    check(all(n in ids for n in need), "38d: chapters for install, fixes and every tool / module")
+    imgs = re.findall(r"src='data:image/png;base64,", page)
+    srcs = re.findall(r"src='([^']+)'", page)
+    check(len(imgs) >= 5 and all(s.startswith("data:") for s in srcs),
+          f"38d: HTML is self-contained ({len(imgs)} embedded pictures, no external files)")
+    from PIL import Image
+    pngs = [os.path.join(out, "tutorial", f) for f in os.listdir(os.path.join(out, "tutorial")) if f.endswith(".png")]
+    widths = [Image.open(f).size[0] for f in pngs]
+    check(pngs and max(widths) <= 1400 and os.path.getsize(os.path.join(out, "TUTORIAL.html")) < 25e6,
+          f"38d: pictures <= 1400 px wide (max {max(widths) if widths else 0}), HTML "
+          f"{os.path.getsize(os.path.join(out, 'TUTORIAL.html')) / 1e6:.1f} MB < 25 MB")
+    check(all(f"](tutorial/{os.path.basename(f)})" in md for f in pngs), "38d: TUTORIAL.md links every picture in tutorial/")
+    check("not captured (no Qt on the build server" in page and "PASS 38a: example check (1.0 ms)" in page,
+          "38d: windows that cannot be drawn are named in the caption (no mock-ups); test numbers quoted")
+    check('<ol class=\'legend\'>' in page, "38d: numbered callouts with a legend")

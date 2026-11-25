@@ -241,6 +241,7 @@ def run():
         _guarded(check, 'test_propmodel.run(check, tmp)', lambda: test_propmodel.run(check, tmp))
         from . import test_pcfixes
         _guarded(check, 'test_pcfixes.run(check, tmp)', lambda: test_pcfixes.run(check, tmp))
+        _guarded(check, 'test_pcfixes.run_tutorial(check, tmp)', lambda: test_pcfixes.run_tutorial(check, tmp))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")

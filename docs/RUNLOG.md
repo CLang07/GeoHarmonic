@@ -511,3 +511,49 @@ ran under the Qt mock, so the first real-Qt look on the PC matters most (checkli
   5. Interpret > Velocity volume (advanced): build, blind test vs layer-cake.
   6. Interpret > Structural framework + 3D grid > 1-3, Export GRDECL, open in ResInsight; 4. Properties + volumetrics.
 - Next: no PLAN items left - add new ones (candidates: the follow-ups noted on items 31-37, a guided F3 walk-through).
+
+
+## 2026-11-25 (scheduled run 7, 17:18-17:50 UTC) - item 38 PC test fixes + illustrated tutorial: ALL PLAN ITEMS DONE
+Item 38 was added to PLAN from your 25 Nov PC install (Live Map, velocity volume and 3D items already existed, so
+those additions were skipped). It is finished; no todo / partial items are left.
+- 38a 3D Viewer crash: `gui/view3d.py` no longer caches `context().functions()` (Qt re-used it for the shader
+  program -> "'QOpenGLShaderProgram' object has no attribute 'glClearColor'"); it is fetched in every initializeGL /
+  paintGL / resizeGL (`GLCanvas._funcs`), GL buffers reset on a new context, new resizeGL. Every test module in the
+  Seismic self-test / GUI test runs through `selftest._guarded` (a crash = one FAIL + traceback, the rest still runs);
+  same in the Well Correlation GUI test; `tools/guitest_runner.py` turns any remaining crash into "GUI TEST FAILED".
+  New real-Qt regression `test_scene3d.run_gl_real` (create, initializeGL, paintGL x2, resize, paintGL, plane change,
+  grabFramebuffer; SKIP + software-fallback check when no GL context).
+- 38b `"numpy<2"` in every pip line that installs PySide6 or the analytics extras (Install GeoHarmonic.bat, both
+  tools' Install (run once).bat, analytics extras) - existing .venvs are downgraded on the next install; install_log
+  now prints the numpy version. One numpy-2-only call (np.trapezoid in test_basin) made 1.26-safe; a scan test guards it.
+- 38c guitest_runner sets QT_QPA_FONTDIR=C:\Windows\Fonts on Windows.
+- 38d/e Tutorial: `dev/build_tutorial.py` (one command) + `dev/tutorial_content.py` -> docs/TUTORIAL.html (2.1 MB,
+  self-contained) + docs/TUTORIAL.md + docs/tutorial/*.png. 19 chapters: install / update, fixes in this release, then
+  every tool (well correlation + petro, mistie, seismic + tracking, RGT / Wheeler, well tie, velocity + DDC + velocity
+  volume, map hub + Live Map + bus, basin, inversion + resolution / AVO, analytics + dashboard, fault mapping, 3D
+  Viewer, 3D interpretation, framework + grid, properties + volumetrics, prospects / migration / spacing). Each has
+  purpose (vs Kingdom / Petrel / HRS / PaleoScan), pictures with numbered callouts + legend, click-by-click steps, the
+  test numbers (quoted from the actual test output), limits, troubleshooting. Install GeoHarmonic.bat step 6 rebuilds
+  it on your PC with real window screenshots (tutorial_local\, gitignored) and makes the "GeoHarmonic - Tutorial"
+  desktop shortcut; START HERE.txt points to it. CLAUDE.md rule: rebuild after any window change, new chapter per module.
+- Also: 3D Viewer Fit frames only visible objects (a far-away hidden 2D line made the scene a dot).
+- Files: gui/view3d.py, scene3d.py, selftest.py, test_scene3d.py, test_basin.py, test_pcfixes.py (new),
+  well_correlation/__main__.py, tools/guitest_runner.py, the 4 .bat installers, START HERE.txt, .gitignore,
+  dev/build_tutorial.py + dev/tutorial_content.py (new), docs/TUTORIAL.*, docs/tutorial/, PLAN, HANDOFF, WHATS_NEW,
+  CLAUDE.md. Versions: Seismic 0.61.0, Well Correlation 0.13.1.
+- Tests (here, no real Qt): Seismic selftest PASSED (1037 checks incl. 20 new 38a-e), Seismic --guitest under the Qt
+  mock PASSED (385), Well Correlation selftest PASSED (188) + guitest PASSED (30), Mistie selftest PASSED.
+- Known limitations: no Qt / GPU here, so the real-OpenGL regression and the real window screenshots only run on
+  your PC - on the build server 6 of 20 pictures exist (the tools' own exports: 3D software render, Live Map export,
+  horizon map, seismic inline, NZ well section); the other 14 captions say "not captured" until your installer
+  rebuilds the tutorial. Window pictures show each window as opened on the demo project (not after running each
+  workflow); the demo wells have no logs, so the well-tie window will not open in the tutorial build.
+- Test this first (Windows):
+  1. Double-click Update_GeoHarmonic.bat, then Install GeoHarmonic.bat - must end with ALL GOOD (install_log.txt:
+     "Qt OK - PySide6 6.5.3 - numpy 1.26.x" for both tools).
+  2. tools\Seismic Interpretation Tool\test_results.txt: the "38a: real OpenGL ..." lines PASS (or SKIP + software
+     fallback) and the GUI test runs to the end - GUI TEST PASSED.
+  3. Start the Seismic tool: no NumPy 1.x warning; View > 3D Viewer (Ctrl+Shift+3) opens without "software rendering".
+  4. Desktop shortcut "GeoHarmonic - Tutorial": check the window screenshots; tell Claude which still say "not captured".
+- Next: no PLAN items left - add new ones (candidates: follow-ups on items 31-38, result screenshots per workflow,
+  a guided F3 walk-through chapter).

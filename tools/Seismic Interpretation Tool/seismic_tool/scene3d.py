@@ -474,6 +474,8 @@ class Scene:
     def bounds(self):
         lo, hi = None, None
         for o in self.objects:
+            if not o.visible:  # Fit frames what is shown (a hidden far-away 2D line must not shrink the view)
+                continue
             for m in o.meshes:
                 b = m.bounds()
                 if b is None:

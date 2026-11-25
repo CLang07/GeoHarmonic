@@ -890,3 +890,31 @@ Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellip
 4. Interpret > Structural framework + 3D grid: 1. Framework, 2. Depth, 3. 3D grid, Export GRDECL - open it in the
    free ResInsight to look at zones and fault blocks.
 5. 4. Properties + volumetrics: Upscale logs, Variogram, Simulate (10 realizations), Volumetrics, Export.
+
+## PC test fixes + illustrated tutorial (PLAN item 38, Seismic v0.61.0, Well Correlation v0.13.1 - run 7, 25 Nov 2026)
+Fixes from your first install (25 Nov): the Seismic GUI test FAILED at the 3D Viewer, and every tool printed the
+"compiled using NumPy 1.x" warning.
+- **3D Viewer crash fixed** (`gui/view3d.py`): the window no longer keeps Qt's OpenGL function table between paints
+  (Qt had re-used it for the shader program -> `'QOpenGLShaderProgram' object has no attribute 'glClearColor'`). New
+  real-Qt regression test: initializeGL, paint twice, resize, paint, grab the framebuffer (skips to the software
+  fallback when the PC has no OpenGL context).
+- **GUI tests keep going after a crash**: each test module is guarded - a crash is one FAIL with the full error text
+  and the following modules still run (so the 3D interpretation / framework / property checks now run on your PC).
+- **numpy<2** is pinned for both Qt tools (and the optional analytics extras) in every installer, on every run - your
+  existing .venvs go back to numpy 1.26 and the warning disappears.
+- Off-screen tests no longer print "QFontDatabase: Cannot find font directory" (fonts from C:\Windows\Fonts).
+- **Illustrated tutorial**: `docs\TUTORIAL.html` (open in your browser) - install / update, the fixes, then one
+  chapter per tool with screenshots, numbered callouts, click-by-click steps, the numbers the tests prove, limits
+  and troubleshooting. The installer rebuilds it with real window screenshots from your PC (desktop shortcut
+  *GeoHarmonic - Tutorial*).
+- 3D Viewer **Fit** now frames only the visible objects.
+
+### Test this first
+1. Double-click **Update_GeoHarmonic.bat**, then **Install GeoHarmonic.bat** - it must end with **ALL GOOD**
+   (install_log.txt: "Qt OK - PySide6 6.5.3 - numpy 1.26.x" for both tools).
+2. `tools\Seismic Interpretation Tool\test_results.txt`: search `38a` - real OpenGL lines PASS (or SKIP + software
+   fallback); the GUI test now runs to the end ("GUI TEST PASSED").
+3. Start the Seismic tool: no NumPy warning in the console; **View > 3D Viewer** (Ctrl+Shift+3) opens in OpenGL
+   (title without "software rendering").
+4. Desktop shortcut **GeoHarmonic - Tutorial**: real screenshots of every window; tell Claude about any chapter whose
+   picture says "not captured".
