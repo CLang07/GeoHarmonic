@@ -675,7 +675,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    throw within 1 sample; stereonet filter keeps the right patches; merge assistant joins two halves of one fault and
    not two neighbouring faults; fault polygons close and do not overlap; 2D cut correlation links the right cuts.
 
-33. **3D viewer (Petrel-style 3D window)** - status: todo
+33. **3D Viewer (Petrel-style 3D window)** - status: todo
    33a. 3D window core: QOpenGLWidget canvas (orbit / pan / zoom, vertical exaggeration slider, axis box with
         IL/XL/time labels, background + lighting, saved camera views), object tree (visibility, opacity, colour bar per
         object), window state saved in the project. Clear message + 2D fallback if OpenGL context creation fails.
