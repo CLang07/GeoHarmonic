@@ -208,6 +208,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._petro_strip = None
         self._fault_dialog = None
         self._vv_dialog = None
+        self._viewer3d = None
         self._live_map = None
         # live-linked cursor (PLAN 23c): section <-> basemap, dashboard, petro strip
         from ..linking import CursorBus
@@ -302,6 +303,7 @@ class MainWindow(QtWidgets.QMainWindow):
         m = mb.addMenu("&View")
         self._act(m, "Live &Map (styled wells, filters, linked table + crossplot)...", lambda *_: self.live_map(),
                   "Ctrl+Shift+M")
+        self._act(m, "&3D Viewer (slices, horizons, faults, wells)...", lambda *_: self.viewer3d(), "Ctrl+Shift+3")
         self._act(m, "Next line / slice (PgDown)", lambda: self.section.step(1))
         self._act(m, "Previous line / slice (PgUp)", lambda: self.section.step(-1))
         m.addSeparator()
@@ -463,6 +465,25 @@ class MainWindow(QtWidgets.QMainWindow):
         lm.show()
         lm.raise_()
         return lm
+
+    def viewer3d(self, vol_name=None, force_software=False):
+        """Open (or raise) the 3D Viewer (PLAN 33) on the shared map bus."""
+        from .view3d import Viewer3D
+        src = self.section.source
+        vol_name = vol_name or (src[1] if src and src[0] == "3D" else None)
+        v = self._viewer3d
+        if v is None or v.project is not self.project or (vol_name and v.vol_name != vol_name):
+            if not self.project.volumes:
+                QtWidgets.QMessageBox.information(self, "3D Viewer", "Needs a 3D volume.")
+                return None
+            v = Viewer3D(self.project, vol_name, self.mapbus, self,
+                         open_section=lambda kind, name, mode=None, number=None: self.section.show(kind, name, mode,
+                                                                                                   number),
+                         stack=self.basemap.stack, force_software=force_software)
+            self._viewer3d = v
+        v.show()
+        v.raise_()
+        return v
 
     def bus_tick(self):
         """Deliver map bus events from the other tools (polled every 300 ms)."""

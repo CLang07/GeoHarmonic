@@ -829,3 +829,36 @@ Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellip
 3. Blind test vs layer-cake; if you have a stacking-velocity volume loaded, choose it as the trend and run again.
 4. Store volume, show it on an inline with the horizons; View > Auto-update depth model, move a top in the Well
    Correlation Tool and save - the status bar reports the re-tie.
+
+## 3D Viewer (PLAN item 33, Seismic v0.57.0 - run 6, 25 Nov 2026)
+- View > **3D Viewer** (Ctrl+Shift+3): survey box with IL / XL / time labels, inline, crossline and time-slice planes
+  (sliders on the toolbar; coarse while you drag, full resolution when you let go, and the seismic window jumps to
+  the same inline / crossline), horizons as surfaces coloured by time (holes and fault gaps left open), faults
+  (manual and automatic, item 32), wells as tubes (deviated from their surveys) with tops as discs, map-hub culture
+  draped at the top of the survey, 2D lines as curtains (tick them on in the object list). Vertical exaggeration,
+  Fit, saved views, Screenshot and Turntable GIF. Orbit with the left mouse button, pan with the middle button or
+  Shift + left, zoom with the wheel.
+- Linked through the map bus: an inline chosen in the seismic window or on the Live Map moves the plane; wells
+  selected on the Live Map light up in yellow; new picks, faults and tops update the 3D objects.
+- Uses PySide6's own OpenGL (no new install). If OpenGL cannot start (remote desktop, old driver) the window says so
+  and shows a software rendering instead.
+
+### Test this first (3D Viewer) - first real OpenGL run
+1. F3: View > 3D Viewer. Does the window show the box and three planes, or the software fallback message? Report
+   which, plus the graphics card (Device Manager > Display adapters) if it falls back.
+2. Drag the Inline slider: coarse while dragging, sharp on release, seismic window follows. Orbit / pan / zoom.
+3. Load the F3 horizons and wells: check they sit on the reflectors / at the right map positions; VE 3.
+4. Screenshot and Turntable GIF to the desktop.
+
+## 3D interpretation (PLAN item 34, Seismic v0.58.0 - run 6, 25 Nov 2026)
+- In the 3D Viewer (code-level today, buttons next): pick horizon points and fault sticks on the 3D planes (they go
+  into the same horizons / faults as the 2D viewer, Ctrl+Z works), track a horizon from the seeds picked in 3D
+  (item-1 tracker), opacity-curve volume rendering of a boxed sub-volume (kept within a voxel budget, warning on
+  integrated graphics), geobodies (threshold -> connected bodies with cell count and volume in m3, shown as 3D surfaces,
+  outlines pushed to the Live Map), any volume (inversion, attributes, RGT) on the planes, horizons coloured by an
+  attribute extraction.
+
+### Test this first (3D interpretation)
+1. In a Python console on the PC (until the toolbar buttons exist): open the 3D Viewer, then
+   `v = win._viewer3d; v.geobodies(lo=<amplitude threshold>)` on F3 - bodies appear in 3D and on the Live Map.
+2. `v.volume_render()` - check speed and the integrated-graphics message.

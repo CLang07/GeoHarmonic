@@ -718,7 +718,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
         within 1 m; a moved top rebuilds only affected layers; stacking-velocity trend recovers a lateral gradient the
         wells miss. GUI wiring under dev/fakeqt. WHATS_NEW section + test checklist.
 
-33. **3D Viewer (Petrel-style 3D window)** - status: todo
+33. **3D Viewer (Petrel-style 3D window)** - status: done (run 6, 2026-11-25, Seismic v0.57.0: `scene3d.py` (meshes, camera, picking, state, software renderer, turntable GIF), `gui/view3d.py` (QOpenGLWidget + one GLSL 1.20 shader; software fallback), View > 3D Viewer (Ctrl+Shift+3). NOT yet run on a real GPU - first thing to test on the PC. Follow-ups: texture-mapped slices for very large planes (now per-vertex colours, decimated while dragging), log ribbons (tubes are coloured by one colour / a log array but the window does not pick a log yet), culture draped on a horizon (draped at a level now), MP4 output)
    33a. 3D window core: QOpenGLWidget canvas (orbit / pan / zoom, vertical exaggeration slider, axis box with
         IL/XL/time labels, background + lighting, saved camera views), object tree (visibility, opacity, colour bar per
         object), window state saved in the project. Clear message + 2D fallback if OpenGL context creation fails.
@@ -735,7 +735,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Tests: slice extraction vs store, surface triangulation (NaN holes, faults), tube mesh along a deviated well,
    camera math; GUI wiring under dev/fakeqt with OpenGL calls mocked.
 
-34. **3D interpretation (picking, autotracking, volume rendering, geobodies)** - status: todo
+34. **3D interpretation (picking, autotracking, volume rendering, geobodies)** - status: done (run 6, 2026-11-25, Seismic v0.58.0: `geobody.py` (labelling in memory + out-of-core, surface nets, footprints, opacity slabs), 3D Viewer methods pick / pick_horizon / pick_fault_point + end_stick / track / volume_render / geobodies / set_volume / colour_horizon_by. Follow-ups: mouse-click picking mode buttons in the 3D toolbar (methods take pixel positions; wiring the canvas clicks is the next step), live growth display during tracking (shown when the run ends), 3D-texture volume rendering on strong GPUs)
    34a. Pick horizon points and fault sticks directly on 3D planes (ray-plane intersection); picks go to the same
         horizon/fault objects as the 2D viewer (item 1/2), undo shared.
    34b. Seeded autotracking from the 3D window using the item-1 tracker, in a background worker with progress and

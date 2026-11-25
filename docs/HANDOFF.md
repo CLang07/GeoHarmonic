@@ -550,6 +550,37 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   (well_velocities, build, store, blind_test vs the layer-cake, add_maps, refresh = MainWindow.ddc_tick). Tests
   `test_velvolume.py` (run, run_gui; earth v = 1800 + 0.25 dx + 0.4 t + 300 below H2; west-only wells for the trend).
 
+- 3D Viewer (item 33, v0.57): `scene3d.py` - world x, y map m, z = -t ms * zscale (1.25 m/ms) * VE; `Mesh(kind
+  triangles|lines, pos, rgba)` + `interleaved()` (x y z r g b a float32 for one VBO); `lut_rgba`, `grid_triangles`
+  (valid-corner filter), `slice_mesh(vol, mode, number, lut, clip, decimate)` (reads one inline / crossline / time
+  slice), `plane_corners`, `curtain_mesh` (2D lines), `surface_mesh` (NaN holes + max_jump ms keeps faults open),
+  `fault_mesh` (Fault.triangles), `tube_mesh` (parallel-transport frames) / `disc_mesh` / `polyline_mesh` / `drape`,
+  `well_path_world` (td.twt), `box_mesh` (+ IL / XL / time label positions), `look_at` / `perspective`, `Camera` (orbit,
+  pan in the view plane, zoom, fit, project, ray, to/from_dict), `ray_plane`, `pick_on_plane` (pixel -> il, xl, t: the
+  34a picking math), `Scene` (objects with visible / opacity / colour bar / version, draw_list opaque first, saved views,
+  state in display['view3d'], `render_png` = matplotlib painter's algorithm, `turntable` GIF). `gui/view3d.py`:
+  `GLCanvas(QOpenGLWidget)` (24-bit depth, 4x MSAA, shader attributes pos=0 col=1, uniforms mvp (QMatrix4x4 row-major)
+  and opacity (setUniformValue1f), one QOpenGLBuffer per mesh keyed by id(mesh), stale buffers destroyed after a
+  paint; left drag orbit, middle / Shift drag pan, wheel zoom), `SoftwareCanvas` (fallback), `Viewer3D` (planes via
+  toolbar sliders - decimated while dragging, full resolution on release + seismic window follows, VE, horizons, faults,
+  wells (trajectories, else vertical), tops discs, 2D curtains (hidden by default), hub culture draped at the survey
+  top, bus: active inline / crossline / timeslice, wells selection highlight, picks / faults / tops / layers rebuild),
+  `_check_gl` swaps to software when the context fails. dev/fakeqt gained PySide6.QtOpenGL / QtOpenGLWidgets mocks.
+  Tests `test_scene3d.py` (run, run_gui incl. the GL draw path under the mock).
+
+- 3D interpretation (item 34, v0.58): `geobody.py` - `label_components` (6-connected, min-label propagation + pointer
+  jumping, labels 1..n by size), `label_volume(vol, lo, hi, block, out_path)` (per inline block, union-find across
+  block faces, int32 memmap, bodies [{id, cells, volume_m3, bbox}] via `cell_volume` = bin area x v/2 dt),
+  `surface_nets` (padded mask; one vertex per surface cell nudged towards its inside corners, one quad per sign-change
+  edge -> watertight, Euler 2 for a sphere), `edge_use_counts`, `body_mesh_world`, `convex_hull`, `footprint`,
+  `fits_budget`, `opacity_curve`, `render_slabs(sub, lo, vol, lut, clip, curve, n_slabs, axis, ..., step, index_step)`,
+  `integrated_graphics`. Viewer3D: `set_volume` (any project volume on the planes, rainbow LUT for attributes /
+  inversion), `pick` (nearest visible plane hit), `pick_horizon` (horizons.Picker.pick_points -> same horizon object,
+  HorizonSet undo), `pick_fault_point` / `end_stick` (FaultSet snapshot), `track` (Picker.track from the 3D seeds; run_job
+  when threaded), `volume_render` (voxel budget -> read stride), `geobodies` (surfaces + 'Geobodies: <vol>' polygons
+  layer + bus 'layers'), `colour_horizon_by`. Mock trap again: attributes read with getattr on a Qt subclass must be
+  initialised in __init__. Tests `test_geobody.py` (run, run_volume, run_gui).
+
 ## Well Correlation Tool (v0.4.0, stable - Chris uses it)
 las.py (LAS reader), curves.py (alias families GR/RDEEP/RSHAL/RHOB/NPHI/DT/PE/SP/CALI, compositing,
 flatline removal), geo.py (NZTM2000 projection, min curvature), project.py (Project.open, wells, tops,

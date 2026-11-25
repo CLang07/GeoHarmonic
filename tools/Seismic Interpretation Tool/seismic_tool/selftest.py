@@ -219,6 +219,11 @@ def run():
         test_faultlik.run_throw_2d(check, tmp)
         from . import test_velvolume
         test_velvolume.run(check, os.path.join(tmp, "vv"))
+        from . import test_scene3d
+        test_scene3d.run(check, tmp)
+        from . import test_geobody
+        test_geobody.run(check, tmp)
+        test_geobody.run_volume(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -325,6 +330,10 @@ def run_gui():
         test_faultlik.run_gui(check, tmp)
         from . import test_velvolume
         test_velvolume.run_gui(check, os.path.join(tmp, "vvgui"))
+        from . import test_scene3d
+        test_scene3d.run_gui(check, tmp)
+        from . import test_geobody
+        test_geobody.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")
