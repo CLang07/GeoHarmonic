@@ -557,3 +557,6 @@ those additions were skipped). It is finished; no todo / partial items are left.
   4. Desktop shortcut "GeoHarmonic - Tutorial": check the window screenshots; tell Claude which still say "not captured".
 - Next: no PLAN items left - add new ones (candidates: follow-ups on items 31-38, result screenshots per workflow,
   a guided F3 walk-through chapter).
+
+## Run 8 - 2026-11-25 (scheduled, started 20:21 UTC) - IN PROGRESS
+- Added PLAN items 39 Glow / Halo, 40 Aesthetics, 41 Seismic Conditioning, 42 Survey horizon blending. Building 39 first.
