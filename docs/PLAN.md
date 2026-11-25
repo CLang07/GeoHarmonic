@@ -638,7 +638,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Tests: map bus, shapefile reader (tiny .shp built in tests), styling rules, filters, gridding; GUI wiring under
    dev/fakeqt; HANDOFF + WHATS_NEW note on opening the Live Map on Windows (step-by-step).
 
-32. **Automated fault mapping (PaleoScan AFE-style + fault likelihood)** - status: todo
+32. **Automated fault mapping (PaleoScan AFE-style + fault likelihood)** - status: done (run 6, 2026-11-25, Seismic v0.55.0: `faultlik.py` (32a, 32g likelihood), `faultskin.py` (32b-32h), `gui/faultmap_dialog.py`, Interpret > Automated fault mapping. Orientation from a two-pass structure tensor instead of a brute-force strike/dip scan (same answer, far cheaper; tests: strike / dip within 5 deg). Follow-ups: first run on F3 on the PC (speed, thresholds); stereonet brushing + merge / split buttons in the dialog (logic + PNG done); fault-polygon editor on the map uses the generic polygon tools; Allan / SGR panels to consume throw_map; 2D cut <-> 3D skin linking (2D-2D done))
    Chris asked for this on 2026-11-24: the PaleoScan-style features must include fault mapping. Builds on item 2
    (manual sticks / fault surfaces), item 4 (RGT, fault-aware), item 11 (coherence, dip-steered variance), items
    26-27 (fault growth, fault seal). numpy only, chunked out-of-core, Cancel + progress on every job.

@@ -212,6 +212,11 @@ def run():
         test_livemap.run_livedepth(check, os.path.join(tmp, "livedepth"))
         test_livemap.run_output(check, tmp)
         test_livemap.run_paths(check, tmp)
+        from . import test_faultlik
+        test_faultlik.run(check, tmp)
+        test_faultlik.run_volume(check, tmp)
+        test_faultlik.run_skins(check, tmp)
+        test_faultlik.run_throw_2d(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -314,6 +319,8 @@ def run_gui():
         test_livemap.run_gui_wellsection(check, tmp)
         test_livemap.run_gui_livegrid(check, tmp)
         test_livemap.run_gui_output(check, tmp)
+        from . import test_faultlik
+        test_faultlik.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

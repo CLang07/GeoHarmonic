@@ -245,7 +245,8 @@ class LiveMapCanvas(Basemap):
 class LiveMapWindow(QtWidgets.QMainWindow):
     """Top-level Live Map.  project = SeisProject; bus = the seismic window's MapBus (shared in-process)."""
 
-    def __init__(self, project, bus=None, parent=None, open_section=None, open_arbitrary=None, depth_model_fn=None):
+    def __init__(self, project, bus=None, parent=None, open_section=None, open_arbitrary=None, depth_model_fn=None,
+                 stack=None):
         super().__init__(parent)
         self.setWindowTitle("Live Map - GeoHarmonic")
         self.setObjectName("LiveMap")
@@ -331,7 +332,8 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         self.bus.subscribe("livemap", self._on_event)
         # map content
         from ..maplayers import LayerStack
-        self.canvas.stack = LayerStack.load(project)
+        # share the seismic window's layer stack (one set of map layers; edits in either window are seen by both)
+        self.canvas.stack = stack if stack is not None else LayerStack.load(project)
         self.layers.set_stack(self.canvas.stack)
         self.canvas.set_project(project)
         self.canvas.paths = LM.well_paths(project)

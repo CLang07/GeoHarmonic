@@ -1,4 +1,5 @@
 """Synthetic seismic for tests: Ricker reflectors at exact (sub-sample) times, written as SEG-Y and imported."""
+import math
 import os
 
 import numpy as np
@@ -147,3 +148,34 @@ def rgt_geology(nil=40, nxl=60, ns=300, dt_s=0.004, throw_ms=28.0, n_ref=60, see
         cube, hz_true = foot, hz
     return {"cube": cube, "horizons": hz_true, "tau_ref": tau_ref, "hang": hang, "fxl": fxl, "wedge": wedge,
             "g": g}
+
+
+def planar_faults_cube(nil=48, nxl=48, ns=160, faults=None, dt_s=0.004, noise=0.03, seed=3, f_hz=30.0,
+                       dip_il=0.15, dip_xl=-0.1):
+    """Layered random-reflectivity cube cut by planar normal faults given in INDEX space (PLAN 32 tests).
+    fault: dict(i0, j0, k0 (samples), az (deg, direction of the down-dip side in the (i, j) plane, 0 = +i,
+    90 = +j), slope (samples per trace the plane deepens towards az), throw (samples, hanging wall down)).
+    Applied in order (later faults offset earlier ones).  Returns dict(cube, faults, T (geologic time, samples),
+    normals [unit up-pointing index-space normal per fault], hw [bool hanging-wall masks])."""
+    rng = np.random.default_rng(seed)
+    faults = faults or []
+    i, j, k = np.meshgrid(np.arange(nil, dtype=float), np.arange(nxl, dtype=float), np.arange(ns, dtype=float),
+                          indexing="ij")
+    T = k - dip_il * i - dip_xl * j  # gentle structural dip
+    hws, normals = [], []
+    for f in faults:
+        a = math.radians(f["az"])
+        h = (i - f["i0"]) * math.cos(a) + (j - f["j0"]) * math.sin(a)
+        hw = k < f["k0"] + f["slope"] * h
+        T = np.where(hw, T - f["throw"], T)  # hanging wall moved down by the throw
+        n = np.array([f["slope"] * math.cos(a), f["slope"] * math.sin(a), -1.0])
+        normals.append(n / np.linalg.norm(n))
+        hws.append(hw)
+    tau = np.arange(-ns, 2 * ns, dtype=float)
+    r = rng.normal(0, 1, len(tau)) * (rng.random(len(tau)) < 0.35)
+    tw = np.arange(-20, 21) * dt_s
+    w = (1 - 2 * (np.pi * f_hz * tw) ** 2) * np.exp(-(np.pi * f_hz * tw) ** 2)
+    trace = np.convolve(r, w, "same")
+    cube = np.interp(T, tau, trace).astype(np.float32)
+    cube += noise * trace.std() * rng.normal(0, 1, cube.shape).astype(np.float32)
+    return {"cube": cube, "faults": faults, "T": T, "normals": normals, "hw": hws}

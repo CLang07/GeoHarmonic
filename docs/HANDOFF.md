@@ -511,6 +511,29 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   Tool with "well_project" in its config); nothing else to configure - the shared folder is created next to the well
   project.
 
+- Automated fault mapping (item 32, v0.55): `faultlik.py`: `sample3` (vectorised trilinear), `semblance3` (dip-steered 3x3
+  semblance for every trace, edges padded), `plane_normals` (gradient structure tensor, largest eigenvector, sign = up
+  -> horizontal part points down-dip), `plane_axes` / `plane_smooth` (separable Gaussian along strike then dip,
+  trilinear), `thin` (non-max suppression along the horizontal normal), `fault_likelihood_block` (fl = 1 - s_plane^8;
+  pass 1 normals from 1 - s, pass 2 from the smoothed fl: dip error 15 -> 2 deg), `enhance` (ant-track-like),
+  `index_frame(vol)` (map vectors of +1 inline / crossline), `geo_orientation` / `plane_normal_index` (strike RHR /
+  dip with v/2 for the time axis, default 2500 m/s), `compute_fault_volumes` (write_volumes: '[Fault likelihood]',
+  '[TFL]', '[Fault strike]', '[Fault dip]', halo = half_w + 3 sigma + 3), `section_likelihood`, `fault_likelihood_2d`.
+  `faultskin.py`: `Skin` (pts i/j/k, normals, fl, throw), `grow_components` (seeded BFS fronts; neighbour within
+  max_angle of its parent AND max_dev of the seed, judged on METRIC normals (`metric_normals`, `default_scale`) - in
+  index space conjugate faults look parallel), `extract_skins` / `extract_from_volumes` (strike/dip volumes ->
+  `index_normals`), `skin_sticks` / `skin_to_fault` (sticks every Nth inline or crossline, whichever crosses the
+  fault), throws: `throw_at_points` (RGT: iso-T across the fault vs linear footwall extrapolation), `throw_from_rgt`,
+  `rgt_throw_volume` (+ throw-weighted probability), `throw_by_correlation` (Hale-style slip, footwall dip removed),
+  `throw_profile`, `throw_map`, `displacement_length_flag`; QC: `skin_table`, `poles` / `stereo_xy` / `stereonet`
+  (Kamb) / `rose`, `filter_skins` (ranges or a stereonet brush polygon), `merge_candidates` / `merge_skins` /
+  `split_skin`; maps: `horizon_cutoffs`, `fault_polygon` (fw line + reversed hw line, throw, down vector),
+  `polygons_layer_items` (hub polygons with compass 'down'); 2D: `Cut`, `segments_2d`, `cuts_on_line`,
+  `cut_link_score` (same line: extrapolated trace; different lines: A(t)->B(t) parallel at two times = strike, same
+  dip side, same perpendicular migration rate = dip), `link_cuts` (mutual best per line pair), `cuts_to_faults`,
+  `project_cuts`; `ml_backend` / `cnn_fault_probability` (optional). `synth.planar_faults_cube` (index-space planar
+  faults, throws, geologic time T). Tests `test_faultlik.py` (run, run_volume, run_skins, run_throw_2d, run_gui).
+
 ## Well Correlation Tool (v0.4.0, stable - Chris uses it)
 las.py (LAS reader), curves.py (alias families GR/RDEEP/RSHAL/RHOB/NPHI/DT/PE/SP/CALI, compositing,
 flatline removal), geo.py (NZTM2000 projection, min curvature), project.py (Project.open, wells, tops,

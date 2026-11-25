@@ -206,6 +206,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                            if self.qgis is not None else None)
         self.basemap.mapClicked.connect(lambda x, y, t: self.layers_panel.identify(x, y, t) if self.layers_panel.stack else None)
         self._petro_strip = None
+        self._fault_dialog = None
         self._live_map = None
         # live-linked cursor (PLAN 23c): section <-> basemap, dashboard, petro strip
         from ..linking import CursorBus
@@ -286,6 +287,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&Well tie (synthetic seismogram)...", self.well_tie)
         self._act(m, "Horizon &maps (structure, isochron, amplitude, depth)...", self.horizon_maps, "Ctrl+M")
         self._act(m, "M&istie analysis (2D-3D, 2D-2D)...", self.mistie_analysis)
+        self._act(m, "Automated &fault mapping (fault likelihood, auto faults, polygons)...",
+                  lambda *_: self.fault_mapping())
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
         self._act(m, "Well &prognosis / geosteering...", self.prognosis)
         self._act(m, "&Basin model (burial, thermal, maturity, Wheeler)...", self.basin_model)
@@ -446,7 +449,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                open_section=lambda kind, name, mode=None, number=None: self.section.show(kind, name,
                                                                                                          mode, number),
                                open_arbitrary=lambda name, xs, ys: self.open_arbitrary(name, xs, ys),
-                               depth_model_fn=lambda: self.section.depth_model())
+                               depth_model_fn=lambda: self.section.depth_model(), stack=self.basemap.stack)
             self._live_map = lm
         lm.show()
         lm.raise_()
@@ -1210,6 +1213,29 @@ class MainWindow(QtWidgets.QMainWindow):
             [k for k in sol if not str(k).startswith("3D:")], sol, ties)
         dlg.show()
         self._mistie_dialog = dlg
+        return dlg
+
+    def fault_mapping(self, vol_name=None):
+        """PLAN 32: fault likelihood volumes, automatic fault extraction, QC, faults + fault polygons."""
+        src = self.section.source
+        vol_name = vol_name or (src[1] if src and src[0] == "3D" else (self.project.volumes[0]["name"]
+                                                                       if self.project.volumes else None))
+        if vol_name is None:
+            QtWidgets.QMessageBox.information(self, "Fault mapping", "Needs a 3D volume.")
+            return None
+        from .faultmap_dialog import FaultMappingDialog
+
+        def faults_made(names):
+            self.fault_dock.set_project(self.project)
+            self._faults_changed()
+
+        def layer_made(lid):
+            self.basemap.draw_layers()
+            self.layers_panel.refresh()
+            self.maplink.bus.notify("layers", ids=[lid], source="seismic", what="fault polygons")
+        dlg = FaultMappingDialog(self.project, vol_name, self, self.run_job, faults_made, layer_made)
+        dlg.show()
+        self._fault_dialog = dlg
         return dlg
 
     def horizon_maps(self):

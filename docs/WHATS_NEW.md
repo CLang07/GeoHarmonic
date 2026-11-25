@@ -790,3 +790,23 @@ Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellip
    once, full grid ~1.5 s later.
 9. Add > Add shapefile / culture layer: any lease / pipeline shapefile you have with the matching preset.
 10. Export map (PDF) and Export GIS to a folder; open the folder in QGIS / the .zmap in Petrel or Kingdom.
+
+## Automated fault mapping (PLAN item 32, Seismic v0.55.0 - run 6, 25 Nov 2026)
+- Interpret > **Automated fault mapping**: 1. fault likelihood volumes (Hale-style: dip-steered semblance, fault
+  orientation from the structure tensor, smoothing in the fault plane, 1 - s^8) + thinned likelihood (TFL) + fault
+  strike and dip volumes - all viewable like attributes; 2. extract faults: TFL points grown into fault "skins" with
+  consistent orientation (crossing / conjugate faults stay apart), table with size, strike, dip, likelihood, max throw
+  (from the RGT volume when one exists, else by cross-correlation); filters by strike / dip / size / throw, stereonet
+  (poles + Kamb density) and rose plot, merge suggestions for halves of one fault, split, rename, delete small;
+  3. create faults: every skin becomes a normal editable fault (sticks every 5th inline or crossline + surface);
+  fault polygons on the active horizon (heave polygons, downthrown ticks) as a map layer that the Live Map gridding
+  uses as barriers; 2D lines: fault cuts on every line, correlated across intersecting lines into named faults.
+- Optional CNN (onnxruntime / torch + a model file) is detected; the numpy method is the default.
+
+### Test this first (fault mapping)
+1. F3: Interpret > Automated fault mapping > 1. Fault likelihood volumes (watch the time per inline block - report
+   it), then look at '<F3> [TFL]' on a time slice and an inline.
+2. 2. Extract faults with TFL threshold 0.5 / minimum size 2000; check the table strikes against the known F3 fault
+   trends (NW-SE graben faults), tighten the filters, 3. Create faults, then look at the sticks on inlines.
+3. Pick or load a horizon, Fault polygons on active horizon, then Live Map > Live grid on that horizon: contours must
+   break at the polygons.
