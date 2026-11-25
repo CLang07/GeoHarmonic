@@ -675,7 +675,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    throw within 1 sample; stereonet filter keeps the right patches; merge assistant joins two halves of one fault and
    not two neighbouring faults; fault polygons close and do not overlap; 2D cut correlation links the right cuts.
 
-37. **Velocity-volume depth conversion (advanced mode of the Kingdom-style DDC, item 17)** - status: todo
+37. **Velocity-volume depth conversion (advanced mode of the Kingdom-style DDC, item 17)** - status: done (run 6, 2026-11-25, Seismic v0.56.0: `velvolume.py`, `gui/velvolume_dialog.py`, Interpret > Velocity volume depth conversion (advanced). Follow-ups: 'use for depth display' in the section panel (the volume model has depth_of_time, the panel still uses the layer-cake model); collocated cokriging of residuals (TPS / kriging / IDW now); a well-tie save does not yet call update_well automatically (Build again or the dynamic tick re-ties tops))
    Chris asked for this on 2026-11-25 (project doc "GeoHarmonic Velocity Volume plan item"): build a 3D interval-
    velocity volume from the well-tie synthetics, framed by the interpreted horizons, and use it to convert to depth.
    WELL TOPS ARE THE HARD DATA; THE VELOCITY VOLUME IS SECONDARY (trend). Final depth maps must tie every well top

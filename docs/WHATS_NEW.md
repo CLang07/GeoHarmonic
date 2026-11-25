@@ -810,3 +810,22 @@ Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellip
    trends (NW-SE graben faults), tighten the filters, 3. Create faults, then look at the sticks on inlines.
 3. Pick or load a horizon, Fault polygons on active horizon, then Live Map > Live grid on that horizon: contours must
    break at the polygons.
+
+## Velocity-volume depth conversion (PLAN item 37, Seismic v0.56.0 - run 6, 25 Nov 2026)
+- Interpret > **Velocity volume depth conversion (advanced)** - additional mode next to the item-17 layer-cake
+  models (unchanged): a. interval velocities from every tied well's final time-depth (tie > checkshot > sonic),
+  despiked and capped, QC flags for poor ties; b-e. velocities spread along the horizon framework (proportional /
+  parallel to top / base) between the wells (IDW or kriging), optionally riding on a stacking / RMS velocity volume
+  (Dix) as the trend; depth through the volume; **the tops are the hard data**: residuals gridded so every depth map
+  ties every top exactly, and the velocity volume is calibrated to agree with those maps. Store volume (view on
+  sections / export SEG-Y), Maps to map hub (depth, interval velocity, residual per horizon), Blind test (leave one
+  well out) side by side with your layer-cake model. With Auto-update depth model on, a moved top re-ties the
+  volume maps from that horizon down.
+
+### Test this first (velocity volume)
+1. F3 (or Maui): define the layer-cake model first (Interpret > Velocity model, Build), then open the velocity volume
+   dialog: a. Well velocities - check the sources (tie / checkshot / sonic) and flags.
+2. b-e. Build + tie to tops; Maps to map hub; compare the depth map with the layer-cake one (Grid calculator A - B).
+3. Blind test vs layer-cake; if you have a stacking-velocity volume loaded, choose it as the trend and run again.
+4. Store volume, show it on an inline with the horizons; View > Auto-update depth model, move a top in the Well
+   Correlation Tool and save - the status bar reports the re-tie.

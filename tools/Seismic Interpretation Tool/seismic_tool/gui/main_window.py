@@ -207,6 +207,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.basemap.mapClicked.connect(lambda x, y, t: self.layers_panel.identify(x, y, t) if self.layers_panel.stack else None)
         self._petro_strip = None
         self._fault_dialog = None
+        self._vv_dialog = None
         self._live_map = None
         # live-linked cursor (PLAN 23c): section <-> basemap, dashboard, petro strip
         from ..linking import CursorBus
@@ -290,6 +291,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Automated &fault mapping (fault likelihood, auto faults, polygons)...",
                   lambda *_: self.fault_mapping())
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
+        self._act(m, "Velocity &volume depth conversion (advanced)...", lambda *_: self.velocity_volume())
         self._act(m, "Well &prognosis / geosteering...", self.prognosis)
         self._act(m, "&Basin model (burial, thermal, maturity, Wheeler)...", self.basin_model)
         self._act(m, "Seismic &inversion (LFM, post-stack, pre-stack)...", self.inversion)
@@ -371,6 +373,13 @@ class MainWindow(QtWidgets.QMainWindow):
         """One dynamic-update check (debounced file change, horizon edit or poll). Returns the report or None."""
         if not self.ddc_auto:
             return None
+        if self._vv_dialog is not None:  # velocity-volume mode (PLAN 37f): re-tie to new / moved tops
+            try:
+                r2 = self._vv_dialog.refresh()
+                if r2:
+                    self.statusBar().showMessage(r2["message"], 15000)
+            except Exception as e:
+                self.statusBar().showMessage(f"Velocity volume update failed: {e}", 10000)
         try:
             rep = self.section.ddc_refresh()
         except Exception as e:
@@ -1154,6 +1163,21 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg = VelocityDialog(self.project, self.basemap, self, changed)
         dlg.show()
         self._velocity_dialog = dlg
+        return dlg
+
+    def velocity_volume(self):
+        """PLAN 37: velocity volume from the well ties, framed by the horizons, tied to the tops."""
+        from .velvolume_dialog import VelocityVolumeDialog
+
+        def changed(model):
+            try:
+                self.maplink.bus.notify("velocities", ids=[h for h, _ in model.layers], source="seismic",
+                                        message="velocity volume", mode="volume")
+            except Exception:
+                pass
+        dlg = VelocityVolumeDialog(self.project, self, self.basemap.stack, changed, self.run_job)
+        dlg.show()
+        self._vv_dialog = dlg
         return dlg
 
     def inversion(self):

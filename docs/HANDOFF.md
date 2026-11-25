@@ -534,6 +534,22 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   `project_cuts`; `ml_backend` / `cnn_fault_probability` (optional). `synth.planar_faults_cube` (index-space planar
   faults, throws, geologic time T). Tests `test_faultlik.py` (run, run_volume, run_skins, run_throw_2d, run_gui).
 
+- Velocity-volume depth conversion (item 37, v0.56): `velvolume.py` `VelocityVolumeModel(project, vol, [(horizon,
+  formation)], modes, method idw|kriging, residual_method tps|kriging|idw, nu, vmin/vmax, trend None | {volume, kind
+  rms|interval} | {array, kind} | ndarray, td_fn, tops_fn, exclude)`: `well_curves` (WellSet.td_for -> WellCurve.v per
+  sample, despike, caps, QC flags), `_well_zone_curves` (strat_coords -> per zone u axis: proportional 0..1 nu levels,
+  top / base ms offsets; ratio to the Dix trend when given), `build` (lateral weights W (nil, nxl, nw) once,
+  `traces(ii, jj, calibrated)` nan-aware weighted sums per zone x u, `depth_traces` (z = cumsum v dt / 2 from t = 0),
+  `_depth_grids(mask, base)` -> z_raw (K, nil, nxl)), `residuals(from_layer)` (residual at wells = top - bilinear
+  z_raw; gridded, then the read-back misfit re-gridded up to 6 times so wells between nodes tie to < 1 mm; z_corr;
+  scale per zone = corrected / raw thickness -> calibrated traces), `depth_grid`, `residual_grid`,
+  `layer_velocity_grid`, `depth_of_time` (scenarios.depth_convert_volume works with it), `set_top`, `refresh_tops`
+  (re-reads the .wcproj when its mtime changes), `update_well` (re-integrates only traces with weight > 1e-3),
+  `blind_test` (LOO incl. the residual correction), `probability_maps`, `velocity_section`, `write` (write_volume),
+  `to_dict` / `from_dict`; `dix`, `save_scenario`, `difference_grids`. `gui/velvolume_dialog.VelocityVolumeDialog`
+  (well_velocities, build, store, blind_test vs the layer-cake, add_maps, refresh = MainWindow.ddc_tick). Tests
+  `test_velvolume.py` (run, run_gui; earth v = 1800 + 0.25 dx + 0.4 t + 300 below H2; west-only wells for the trend).
+
 ## Well Correlation Tool (v0.4.0, stable - Chris uses it)
 las.py (LAS reader), curves.py (alias families GR/RDEEP/RSHAL/RHOB/NPHI/DT/PE/SP/CALI, compositing,
 flatline removal), geo.py (NZTM2000 projection, min curvature), project.py (Project.open, wells, tops,

@@ -217,6 +217,8 @@ def run():
         test_faultlik.run_volume(check, tmp)
         test_faultlik.run_skins(check, tmp)
         test_faultlik.run_throw_2d(check, tmp)
+        from . import test_velvolume
+        test_velvolume.run(check, os.path.join(tmp, "vv"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -321,6 +323,8 @@ def run_gui():
         test_livemap.run_gui_output(check, tmp)
         from . import test_faultlik
         test_faultlik.run_gui(check, tmp)
+        from . import test_velvolume
+        test_velvolume.run_gui(check, os.path.join(tmp, "vvgui"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")
