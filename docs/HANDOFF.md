@@ -581,6 +581,22 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   layer + bus 'layers'), `colour_horizon_by`. Mock trap again: attributes read with getattr on a Qt subclass must be
   initialised in __init__. Tests `test_geobody.py` (run, run_volume, run_gui).
 
+- Structural framework + 3D grid (item 35, v0.59): `framework.py` - `smooth_sticks` / `remove_stick` / `add_stick`,
+  `fault_trace(fault, MapGrid)` (triangle edges crossing the horizon; vertices at the grid edge sampled towards the
+  triangle centre), `extend_trace`, `Geometry(x0, y0, dx, dy, nx, ny, rotation)` (`nodes` = pillars (ny+1, nx+1),
+  `centres`, `around`), `fault_blocks(X, Y, traces)` (cut node graph, label propagation), `FrameworkModel(geom,
+  [(name, (px, py, v), rule)], faults [(name, (xs, ys))], method, domain)`: build -> blocks, surfaces[k] (nblocks,
+  ny+1, nx+1) per block (a block without data uses all points), grids[k] (own block per node), `apply_rules`
+  (conformable fmax with the horizon above, erosional fmax on all older, base fmin with the one below), report
+  crossings before / after, `to_depth(depth_fn)`, `horizon_grid`; `depth_fn_from_model` (depth_of_time in 512-point
+  chunks, diagonal); `crossings`; `cell_blocks` (block of a cell = first corner node reachable from the centre without
+  crossing a fault); `Grid3D(model, [(kind, n | dz)] per zone)` -> zcorn (2nz, 2ny, 2nx) Eclipse order, zone,
+  block, actnum, thickness / cell_volumes / coord / zone_index / block_index / quality / zone_thickness;
+  `write_grdecl` (SPECGRID, COORD, ZCORN, ACTNUM, ZONE, FAULTBLK, FIPNUM, props; integers run-length encoded),
+  `read_grdecl`, `write_surfaces` (ZMAP+ / XYZ). `gui/framework_dialog.FrameworkDialog` (build from 3D picks +
+  fault traces, depth via the velocity-volume model when built else the layer-cake, make_grid, export, bus
+  'velocities' -> rebuild). Tests `test_framework.py` (run, run_gui).
+
 ## Well Correlation Tool (v0.4.0, stable - Chris uses it)
 las.py (LAS reader), curves.py (alias families GR/RDEEP/RSHAL/RHOB/NPHI/DT/PE/SP/CALI, compositing,
 flatline removal), geo.py (NZTM2000 projection, min curvature), project.py (Project.open, wells, tops,

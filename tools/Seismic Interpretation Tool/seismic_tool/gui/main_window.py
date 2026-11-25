@@ -208,6 +208,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._petro_strip = None
         self._fault_dialog = None
         self._vv_dialog = None
+        self._framework_dialog = None
         self._viewer3d = None
         self._live_map = None
         # live-linked cursor (PLAN 23c): section <-> basemap, dashboard, petro strip
@@ -293,6 +294,7 @@ class MainWindow(QtWidgets.QMainWindow):
                   lambda *_: self.fault_mapping())
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
         self._act(m, "Velocity &volume depth conversion (advanced)...", lambda *_: self.velocity_volume())
+        self._act(m, "Structural framework + 3D &grid (GRDECL)...", lambda *_: self.framework())
         self._act(m, "Well &prognosis / geosteering...", self.prognosis)
         self._act(m, "&Basin model (burial, thermal, maturity, Wheeler)...", self.basin_model)
         self._act(m, "Seismic &inversion (LFM, post-stack, pre-stack)...", self.inversion)
@@ -1199,6 +1201,26 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg = VelocityVolumeDialog(self.project, self, self.basemap.stack, changed, self.run_job)
         dlg.show()
         self._vv_dialog = dlg
+        return dlg
+
+    def framework(self, vol_name=None):
+        """PLAN 35: framework per fault block, depth, stair-stepped 3D grid, GRDECL."""
+        from .framework_dialog import FrameworkDialog
+        src = self.section.source
+        vol_name = vol_name or (src[1] if src and src[0] == "3D" else (self.project.volumes[0]["name"]
+                                                                       if self.project.volumes else None))
+        if vol_name is None:
+            QtWidgets.QMessageBox.information(self, "Framework", "Needs a 3D volume with horizons.")
+            return None
+        vv = self._vv_dialog
+
+        def depth_model():
+            if vv is not None and vv.model is not None and getattr(vv.model, "_built", False):
+                return vv.model
+            return self.section.depth_model()
+        dlg = FrameworkDialog(self.project, vol_name, self, depth_model, self.mapbus)
+        dlg.show()
+        self._framework_dialog = dlg
         return dlg
 
     def inversion(self):

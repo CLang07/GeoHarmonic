@@ -224,6 +224,8 @@ def run():
         from . import test_geobody
         test_geobody.run(check, tmp)
         test_geobody.run_volume(check, tmp)
+        from . import test_framework
+        test_framework.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -334,6 +336,8 @@ def run_gui():
         test_scene3d.run_gui(check, tmp)
         from . import test_geobody
         test_geobody.run_gui(check, tmp)
+        from . import test_framework
+        test_framework.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

@@ -862,3 +862,15 @@ Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellip
 1. In a Python console on the PC (until the toolbar buttons exist): open the 3D Viewer, then
    `v = win._viewer3d; v.geobodies(lo=<amplitude threshold>)` on F3 - bodies appear in 3D and on the Live Map.
 2. `v.volume_render()` - check speed and the integrated-graphics message.
+
+## Structural framework + 3D grid (PLAN item 35, Seismic v0.59.0 - run 6, 25 Nov 2026)
+- Interpret > **Structural framework + 3D grid**: 1. the horizons picked on a 3D survey are gridded per fault block
+  (faults from their sticks / the automatic faults cut the map into blocks, so throws are kept), crossings removed
+  (conformable / erosional / onlap rules); 2. converted to depth with your current depth model (velocity volume if
+  built, else the layer-cake) and rebuilt whenever the velocity model changes; 3. a stair-stepped 3D grid (vertical
+  pillars, zones between horizons, 10 proportional layers per zone by default) with fault-block and zone numbers;
+  Export GRDECL (opens in the free OPM Flow / ResInsight) + ZMAP+ surfaces.
+
+### Test this first (framework)
+1. F3 with 3+ horizons and the main faults: 1. Framework - check the block count in the message.
+2. 2. Depth, 3. 3D grid, Export GRDECL; open the .grdecl in ResInsight (free) and look at the zones and fault blocks.

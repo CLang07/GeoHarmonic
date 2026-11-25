@@ -75,8 +75,10 @@ class GLCanvas(QOpenGLWidget):
         self.buffers = {}  # id(mesh) -> (buffer, version, count)
         self.gl_error = None
         self._last = None
+        self._press = None
         self._buttons = None
         self.on_release = None  # callable(): the window re-reads planes at full resolution after a drag
+        self.on_click = None  # callable(px, py, w, h): a click without dragging (3D picking, item 34)
 
     # ---------------------------------------------------------------- GL
     def initializeGL(self):
@@ -144,6 +146,7 @@ class GLCanvas(QOpenGLWidget):
     # ---------------------------------------------------------------- mouse
     def mousePressEvent(self, ev):
         self._last = (ev.position().x(), ev.position().y())
+        self._press = self._last
         self._buttons = ev.buttons()
 
     def mouseMoveEvent(self, ev):
@@ -161,6 +164,12 @@ class GLCanvas(QOpenGLWidget):
 
     def mouseReleaseEvent(self, ev):
         self._last = None
+        p0 = self._press
+        self._press = None
+        x, y = ev.position().x(), ev.position().y()
+        if p0 is not None and abs(x - p0[0]) + abs(y - p0[1]) < 3 and self.on_click is not None:
+            self.on_click(x, y, self.width(), self.height())
+            return
         if self.on_release is not None:
             self.on_release()
 
@@ -178,6 +187,7 @@ class SoftwareCanvas(QtWidgets.QLabel):
         self.reason = reason
         self._last = None
         self.on_release = None
+        self.on_click = None
         self.setMinimumSize(400, 300)
         self.setAlignment(QtCore.Qt.AlignCenter)
         self._png = os.path.join(tempfile.gettempdir(), f"geoharmonic_3d_{os.getpid()}.png")
@@ -204,6 +214,10 @@ class SoftwareCanvas(QtWidgets.QLabel):
         if self._last is None:
             return
         x, y = ev.position().x(), ev.position().y()
+        if abs(x - self._last[0]) + abs(y - self._last[1]) < 3 and self.on_click is not None:
+            self._last = None
+            self.on_click(x, y, self.width(), self.height())
+            return
         self.scene.camera.orbit(x - self._last[0], y - self._last[1])
         self._last = None
         self.update()
@@ -244,6 +258,9 @@ class Viewer3D(QtWidgets.QMainWindow):
         reason = "" if not self.software else ("forced" if force_software else "PySide6 QtOpenGL not available")
         self.canvas = SoftwareCanvas(self.scene, self, reason) if self.software else GLCanvas(self.scene, self)
         self.canvas.on_release = lambda: self.full_resolution()
+        self.canvas.on_click = lambda x, y, w, h: self.click(x, y, w, h)
+        self.pick_mode = None  # None | 'horizon' | 'fault'
+        self.pick_target = ""  # horizon / fault name
         self.setCentralWidget(self.canvas)
         self._build_tree()
         self._build_toolbar()
@@ -261,6 +278,7 @@ class Viewer3D(QtWidgets.QMainWindow):
         self.software = True
         self.canvas = SoftwareCanvas(self.scene, self, "OpenGL failed")
         self.canvas.on_release = lambda: self.full_resolution()
+        self.canvas.on_click = lambda x, y, w, h: self.click(x, y, w, h)
         self.setCentralWidget(self.canvas)
         self._say(f"OpenGL could not start ({err}) - showing the software rendering instead")
         self.redraw()
@@ -294,7 +312,17 @@ class Viewer3D(QtWidgets.QMainWindow):
         self.ve_spin.setValue(self.scene.ve)
         self.ve_spin.valueChanged.connect(lambda v: self.set_ve(v))
         tb.addWidget(self.ve_spin)
-        for text, fn in (("Fit", lambda *_: self.fit()), ("Save view", lambda *_: self._save_view_dialog()),
+        for text, fn in (("Pick horizon...", lambda *_: self._pick_mode_dialog("horizon")),
+                         ("Pick fault...", lambda *_: self._pick_mode_dialog("fault")),
+                         ("End stick", lambda *_: self.end_stick(self.pick_target) if self.pick_mode == "fault" else None),
+                         ("Stop picking", lambda *_: self.set_pick_mode(None)),
+                         ("Track", lambda *_: self.track(self.pick_target, threaded=True,
+                                                         run_job=getattr(self.parent(), "run_job", None))
+                          if self.pick_mode == "horizon" and self.pick_target else None),
+                         ("Volume...", lambda *_: self._volume_dialog()),
+                         ("Volume render", lambda *_: self.volume_render()),
+                         ("Geobodies...", lambda *_: self._geobody_dialog()),
+                         ("Fit", lambda *_: self.fit()), ("Save view", lambda *_: self._save_view_dialog()),
                          ("Screenshot...", lambda *_: self._screenshot_dialog()),
                          ("Turntable GIF...", lambda *_: self._turntable_dialog())):
             a = QtGui.QAction(text, self)
@@ -575,6 +603,43 @@ class Viewer3D(QtWidgets.QMainWindow):
         for mode, number in list(self.planes.items()):
             self.set_plane(mode, number, publish=False)
         return self.vol_name
+
+    def set_pick_mode(self, mode, target=""):
+        """3D picking on / off: clicks (no drag) on a plane add horizon points or fault-stick points."""
+        self.pick_mode = mode if mode in ("horizon", "fault") else None
+        self.pick_target = str(target or "")
+        self.stick = []
+        self._say(f"3D picking: {self.pick_mode} {self.pick_target}" if self.pick_mode else "3D picking off")
+        return self.pick_mode
+
+    def click(self, px, py, w, h):
+        if self.pick_mode == "horizon" and self.pick_target:
+            return self.pick_horizon(self.pick_target, px, py, w, h)
+        if self.pick_mode == "fault":
+            return self.pick_fault_point(px, py, w, h)
+        hit = self.pick(px, py, w, h)
+        if hit is not None:
+            self._say(f"{hit[0]}: IL {hit[1]:.0f}  XL {hit[2]:.0f}  {hit[3]:.0f} ms")
+        return hit
+
+    def _pick_mode_dialog(self, mode):
+        items = self.project.horizons.names() if mode == "horizon" else self.project.faults.names()
+        name, ok = QtWidgets.QInputDialog.getItem(self, f"Pick {mode} in 3D", "Name (or type a new one):",
+                                                  list(items) or [f"3D {mode}"], 0, True)
+        if ok and name:
+            self.set_pick_mode(mode, name)
+
+    def _volume_dialog(self):
+        names = [v["name"] for v in self.project.volumes]
+        name, ok = QtWidgets.QInputDialog.getItem(self, "Volume on the planes", "Volume:", names, 0, False)
+        if ok and name:
+            self.set_volume(name)
+
+    def _geobody_dialog(self):
+        v, ok = QtWidgets.QInputDialog.getDouble(self, "Geobodies", "Keep values above:", 0.5, -1e9, 1e9, 3)
+        if ok:
+            b = self.geobodies(lo=v)
+            self._say(f"{len(b)} geobodies")
 
     def pick(self, px, py, w=None, h=None):
         """Pixel -> nearest hit on the visible planes: (mode, il, xl, t) or None (34a ray-plane picking)."""

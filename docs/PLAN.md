@@ -735,7 +735,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Tests: slice extraction vs store, surface triangulation (NaN holes, faults), tube mesh along a deviated well,
    camera math; GUI wiring under dev/fakeqt with OpenGL calls mocked.
 
-34. **3D interpretation (picking, autotracking, volume rendering, geobodies)** - status: done (run 6, 2026-11-25, Seismic v0.58.0: `geobody.py` (labelling in memory + out-of-core, surface nets, footprints, opacity slabs), 3D Viewer methods pick / pick_horizon / pick_fault_point + end_stick / track / volume_render / geobodies / set_volume / colour_horizon_by. Follow-ups: mouse-click picking mode buttons in the 3D toolbar (methods take pixel positions; wiring the canvas clicks is the next step), live growth display during tracking (shown when the run ends), 3D-texture volume rendering on strong GPUs)
+34. **3D interpretation (picking, autotracking, volume rendering, geobodies)** - status: done (run 6, 2026-11-25, Seismic v0.58.0: `geobody.py` (labelling in memory + out-of-core, surface nets, footprints, opacity slabs), 3D Viewer methods pick / pick_horizon / pick_fault_point + end_stick / track / volume_render / geobodies / set_volume / colour_horizon_by. Toolbar: Pick horizon / Pick fault / End stick / Track / Volume / Volume render / Geobodies; a click without dragging picks. Follow-ups: live growth display during tracking (shown when the run ends), 3D-texture volume rendering on strong GPUs)
    34a. Pick horizon points and fault sticks directly on 3D planes (ray-plane intersection); picks go to the same
         horizon/fault objects as the 2D viewer (item 1/2), undo shared.
    34b. Seeded autotracking from the 3D window using the item-1 tracker, in a background worker with progress and
@@ -750,7 +750,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Tests: ray-plane pick maps to the right il/xl/sample; geobody labelling on a synthetic with two known bodies
    (counts + volumes exact); marching-cubes closed surface for a sphere; tracking from 3D seeds = item-1 result.
 
-35. **Structural framework + 3D grid** - status: todo
+35. **Structural framework + 3D grid** - status: done (run 6, 2026-11-25, Seismic v0.59.0: `framework.py`, `gui/framework_dialog.py`, Interpret > Structural framework + 3D grid. Stair-stepped faults with vertical pillars (as planned); per-block surfaces + rules (conformable / erosional / base); depth through the layer-cake or the velocity-volume model, rebuilt on 'velocities'; GRDECL with ZONE / FAULTBLK / FIPNUM. Follow-ups: framework surfaces and the grid shown in the 3D Viewer; rotated grids aligned with the survey (rotation supported in Geometry, the dialog uses an unrotated box); per-zone layering choices in the dialog (code takes them))
    35a. Fault modeling: fault surfaces from sticks and the item-32 auto-extracted faults (triangulated surfaces) with editing (add/remove
         sticks, smooth); fault polygons per horizon from fault-horizon intersections, shared with Live Map gridding.
    35b. Horizon modeling: grid horizons per fault block (reuse item-21/31g gridding with faults as barriers),

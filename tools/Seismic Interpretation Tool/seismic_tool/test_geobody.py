@@ -115,6 +115,11 @@ def run_gui(check, tmp):
           "the survey (= item-1 tracker), undo available")
     mw.project.horizons.undo()
     check(np.isfinite(hz.data["3D:Synth"]).sum() <= 2, "34b GUI: one undo removes the tracking run")
+    # the same through the toolbar mode: a click (no drag) on the canvas picks
+    v.set_pick_mode("horizon", "3D pick")
+    r2 = v.canvas.on_click(px[0], px[1], 800, 600)
+    check(r2 is not None and v.seeds3d[-1] == r2[:2], "34a GUI: click in horizon pick mode adds a pick + seed")
+    v.set_pick_mode(None)
     # fault stick picked in 3D
     for tt in (300.0, 500.0):
         p2 = cam.project([[float(x), float(y), S3.world_z(tt)]], 800, 600)[0]
