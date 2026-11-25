@@ -466,3 +466,9 @@ on the PC: all self-tests and GUI tests pass (Well Correlation, Seismic 1,057 ch
 - Tests here: all three self-tests and both --guitest (fakeqt) pass; setup_f3.py tested on the real F3 well, horizon,
   fault and survey files with a synthetic SEG-Y on the F3 bin grid.
 - Next: Lesson 4 (F3) of the tutorial; PLAN Phase 3 (items 31-36).
+
+
+## 2026-11-25 (scheduled run 6, started 07:18 UTC) - Live Map (item 31) - run in progress
+- PLAN: added item 37 "Velocity-volume depth conversion" (placed after 32, before the 3D items; 35c consumes it).
+  Live Map (31) and 3D Viewer (33) already existed, so those one-time additions were skipped.
+- Checkpoint 1: 31a map bus + retrofit of Seismic / Well Correlation / Mistie tools (all self-tests + GUI tests pass).

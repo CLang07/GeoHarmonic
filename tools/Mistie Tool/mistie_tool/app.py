@@ -135,6 +135,9 @@ class MistieApp:
         root.title("Mistie Tool"); root.geometry("1600x960"); root.minsize(1100, 700)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         self._style(); self._menu(); self._layout(); self._keys()
+        from .maplink import MistieMapLink  # Live Map bus (PLAN 31a); off without a configured bus folder
+        self.maplink = MistieMapLink(self)
+        self.root.after(500, self._bus_tick)
         if path:
             root.after(100, lambda: self.open_path(path))
         else:
@@ -455,6 +458,10 @@ class MistieApp:
         self.S, self.cur, self.map_lims, self.sort_col, self._map_drawn = S, 0, None, None, False
         self.solve_by.set(S.solve_by)
         self.colors = {L: LINE_COLORS[i % len(LINE_COLORS)] for i, L in enumerate(S.names)}
+        try:
+            self.maplink.attach(S)
+        except Exception:
+            pass
         self.refresh_all(rebuild_panels=True)
 
     def edit(self, fn):
@@ -472,6 +479,20 @@ class MistieApp:
             self.load_panels()
         self.fill_ties(); self.fill_lines(); self.fill_loops(); self.fill_warnings(); self._ref_menu(); self._scen_menus()
         self.draw_map(); self.draw_tie(); self.draw_overlay(); self.refresh_status()
+        try:
+            self.maplink.solution_changed(self.S)
+        except Exception:
+            pass
+
+    def _bus_tick(self):
+        try:
+            self.maplink.poll()
+        except Exception:
+            pass
+        try:
+            self.root.after(300, self._bus_tick)
+        except Exception:
+            pass
 
     def refresh_status(self):
         if not self.S:
@@ -592,6 +613,10 @@ class MistieApp:
             self.tt.selection_set(str(self.cur)); self.tt.focus(str(self.cur)); self.tt.see(str(self.cur))
             self.root.after_idle(lambda: setattr(self, "_suppress", False))
         self.draw_map(); self.draw_tie(); self.draw_overlay()
+        try:
+            self.maplink.tie_selected(self.S.P.ties[self.cur])
+        except Exception:
+            pass
 
     def step(self, d):
         order = [int(i) for i in self.tt.get_children()]

@@ -225,6 +225,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._qgis_poll.setInterval(200)
         self._qgis_poll.timeout.connect(lambda *_: self.qgis_tick())
         self._arbitrary = []
+        # Live Map bus (PLAN 31a): selection / active line / data-changed shared with the other tools
+        from .maplink import SeismicMapLink
+        self.maplink = SeismicMapLink(self)
+        self.mapbus = self.maplink.bus
+        self.basemap.wellsSelected.connect(lambda names: self.maplink.wells_selected(names))
+        self.section.positionChanged.connect(lambda: self.maplink.position_changed())
+        self._bus_poll = QtCore.QTimer(self)
+        self._bus_poll.setInterval(300)
+        self._bus_poll.timeout.connect(lambda *_: self.bus_tick())
+        self._bus_poll.start()
         self.tree.itemDoubleClicked.connect(self._tree_open)
         self.horizon_dock.changed.connect(self._horizons_changed)
         self.fault_dock.changed.connect(self._faults_changed)
@@ -363,6 +373,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._ddc_watch_paths()
         if rep:
             self.statusBar().showMessage(rep["message"], 15000)
+            try:
+                self.maplink.depth_model_changed(rep)
+            except Exception:
+                pass
             dlg = self._velocity_dialog
             if dlg is not None and dlg.ddm is not None:
                 if dlg.ddm is self.section.depth_model():
@@ -415,6 +429,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fault_dock.set_project(p)
         self._horizons_changed()
         self._faults_changed()
+        try:
+            self.maplink.attach(p)
+        except Exception as e:
+            self.statusBar().showMessage(f"Map bus not connected: {e}", 8000)
+
+    def bus_tick(self):
+        """Deliver map bus events from the other tools (polled every 300 ms)."""
+        try:
+            return self.maplink.poll()
+        except Exception as e:
+            self.statusBar().showMessage(f"Map bus: {e}", 8000)
+            return []
 
     # ---------------------------------------------------------------- viewer quick wins (PLAN 23)
     def set_linked_cursor(self, on):
@@ -641,6 +667,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _faults_changed(self):
         self.section.draw_faults()
         self.basemap.draw_faults()
+        if getattr(self, "maplink", None) is not None:
+            self.maplink.faults_changed()
 
     def _horizons_changed(self):
         if self.ddc_auto:
@@ -648,6 +676,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.section.draw_horizons()
         self.basemap.show_horizon(self.horizon_dock.active() if self.horizon_dock.map_chk.isChecked() else None)
         self.basemap.show_current(self.section.current_trace_line())
+        if getattr(self, "maplink", None) is not None:
+            self.maplink.horizons_changed()
 
     def _tree_open(self, item, _col):
         d = item.data(0, QtCore.Qt.UserRole)
@@ -1153,6 +1183,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.section.reset_rgt_editors()
             self.section.redraw()
             self._horizons_changed()
+            self.maplink.misties_changed(sorted((self.project.display.get("mistie") or {}).keys()))
 
         dlg = MistieDialog(self.project, self, refreshed, self.basemap)
         dlg.show()
@@ -1290,6 +1321,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.project.save()
             except Exception:
                 pass
+        self.maplink.close()
         ev.accept()
 
 

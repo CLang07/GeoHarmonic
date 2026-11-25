@@ -147,6 +147,9 @@ def run():
         # ---- cartography (PLAN 21f)
         from . import test_carto
         test_carto.run(check, tmp)
+        # ---- Live Map bus link (PLAN 31a)
+        from . import test_maplink
+        test_maplink.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")

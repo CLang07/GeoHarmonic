@@ -28,6 +28,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dirty = False
         self.settings = QtCore.QSettings(ORG, APP)
         self.resize(1500, 900)
+        # Live Map bus (PLAN 31a): shared selection / active well / tops with the Seismic tool and the Live Map
+        from ..maplink import WellCorrMapLink
+        self.maplink = WellCorrMapLink(self)
+        self._bus_poll = QtCore.QTimer(self)
+        self._bus_poll.setInterval(300)
+        self._bus_poll.timeout.connect(lambda *_: self.bus_tick())
+        if self.maplink.enabled:
+            self._bus_poll.start()
 
         # central: map | section
         self.map = MapView()
@@ -348,6 +356,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh_formations()
         self._apply_section()
         self._update_title()
+        try:
+            self.maplink.attach(p)
+        except Exception as e:
+            self.status.showMessage(f"Map bus not connected: {e}", 8000)
+
+    def bus_tick(self):
+        """Deliver map bus events from the other tools (polled every 300 ms)."""
+        try:
+            got = self.maplink.poll()
+        except Exception as e:
+            self.status.showMessage(f"Map bus: {e}", 8000)
+            return []
+        if got and self.maplink.messages:
+            self.status.showMessage(self.maplink.messages[-1], 5000)
+        return got
 
     def save(self):
         if not self.project:
@@ -473,6 +496,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.map.set_section(names)
         self.section.set_wells(names)
         self._update_title()
+        self.maplink.section_changed(self.project.current_section, names)
 
     def _load_with_progress(self, names, force=False):
         todo = [n for n in names if force or not self.project.wells[n].loaded]
@@ -504,6 +528,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.map.set_selected(name)
         self.section.set_selected(name)
+        self.maplink.well_selected(name)
         w = self.project.wells[name]
         try:
             self.project.load_well(name)
@@ -698,6 +723,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.section.refresh_tops()  # only tops + between-well fills
         self._refresh_tops_table()
         self._update_title()
+        try:
+            self.maplink.push_tops(formation=fm)
+        except Exception as e:
+            self.status.showMessage(f"Map bus: tops not shared ({e})", 6000)
 
     def undo(self):
         if self.undo_stack:
@@ -946,6 +975,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, ev):
         if self._maybe_save():
+            self.maplink.close()
             ev.accept()
         else:
             ev.ignore()

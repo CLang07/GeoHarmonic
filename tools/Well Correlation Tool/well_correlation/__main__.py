@@ -166,6 +166,8 @@ def main(argv=None):
         tmp = tempfile.mkdtemp(prefix="wc_guitest_")
         try:
             test_petro.run_gui(check, tmp)
+            from . import test_maplink
+            test_maplink.run_gui(check, tmp)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         print("GUI TEST PASSED" if ok[0] else "GUI TEST FAILED")

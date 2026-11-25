@@ -201,6 +201,10 @@ def run():
         test_spacing.run(check, tmp)
         from . import test_depletion
         test_depletion.run(check, tmp)
+        from . import test_mapbus
+        test_mapbus.run(check, tmp)
+        from . import test_livemap
+        test_livemap.run(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -294,6 +298,8 @@ def run_gui():
         test_migration.run_gui(check, tmp)
         from . import test_spacing
         test_spacing.run_gui(check, tmp)
+        from . import test_mapbus
+        test_mapbus.run_gui(check, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

@@ -69,6 +69,62 @@ def run(verbose=True):
     good = abs(abs(sh) - 8.0) < 1.5
     ok &= good
     msgs.append(f"short window with a long max lag: shift {sh:+.1f} ms (|8|) {'ok' if good else 'FAIL'}")
+    good, why = _maplink_check(cfg, d)
+    ok &= good
+    msgs.append(f"Live Map bus link (PLAN 31a): {why} {'ok' if good else 'FAIL'}")
     if verbose:
         print("\n".join(msgs)); print("SELFTEST", "PASSED" if ok else "FAILED", "(files in", d + ")")
     return ok
+
+
+def _maplink_check(cfg, d):
+    """Mistie session publishes its solution + current tie through the map bus; follows an active line."""
+    from .maplink import MistieMapLink, import_mapbus, folder_for, worst_tie_on
+    from .session import Session
+    MB = import_mapbus()
+    if MB is None:
+        return True, "skipped (Seismic Interpretation Tool folder not found)"
+    c2 = dict(cfg, mapbus_folder="bus")
+    cp = os.path.join(d, "cfg_bus.json")
+    json.dump(c2, open(cp, "w"))
+    S = Session(cp)
+    if folder_for(S) != os.path.join(d, "bus"):
+        return False, "bus folder"
+
+    class App:  # stand-in for the tkinter app
+        def __init__(self):
+            self.S, self.cur, self.picked = S, 0, []
+
+        def select(self, k):
+            self.cur = k
+            self.picked.append(k)
+            link.tie_selected(S.P.ties[k])  # what MistieApp.select does (suppressed while following)
+    app = App()
+    link = MistieMapLink(app)
+    link.attach(S)
+    other = MB.MapBus()
+    br = MB.FileBridge(other, os.path.join(d, "bus"), "seismic")
+    seen = []
+    other.subscribe("seis", seen.append)
+    e1 = link.solution_changed(S)
+    e2 = link.solution_changed(S)  # unchanged -> nothing
+    link.tie_selected(S.P.ties[2])
+    br.poll()
+    mist = [e for e in seen if e["topic"] == "data" and e.get("kind") == "misties"]
+    if not (e1 and e2 is None and mist and abs(mist[0]["solution"]["L2"]["shift"] - S.P.sol["L2"]["shift"]) < 1e-2):
+        return False, "solution event"
+    t = S.P.ties[2]
+    if other.active.get("line") != t["a"] or other.selection.get("lines") != [t["a"], t["b"]]:
+        return False, "active line / selected lines"
+    other.active.set("line", "L5", source="seis")
+    n_before = len(other.history)
+    link.poll()
+    br.poll()
+    k = worst_tie_on(S, "L5")
+    if not (app.picked and app.picked[-1] == k and "L5" in (S.P.ties[k]["a"], S.P.ties[k]["b"])):
+        return False, "follow active line"
+    if len(other.history) != n_before:
+        return False, "echo while following"
+    link.close()
+    br.close()
+    return True, f"{len(mist)} solution event(s), tie {k} followed"

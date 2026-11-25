@@ -608,7 +608,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
   connected components: numpy (no scipy, gstools, GemPy). Rendering logic is tested without a GPU: mesh/slice/colour
   building is pure numpy; only the draw calls touch OpenGL.
 
-31. **Live Map (Kingdom-style live base map, Spotfire-style styling, map bus)** - status: todo
+31. **Live Map (Kingdom-style live base map, Spotfire-style styling, map bus)** - status: partial (run 6, 2026-11-25: 31a map bus + retrofit done - `mapbus.py`, `gui/maplink.py`, well_correlation `maplink.py`, mistie_tool `maplink.py`; 31b/31d logic in `livemap.py` in progress)
    31a. Map bus / shared project services (build first): SelectionService (wells/lines/points), FilterService,
         ActiveObject (current inline/crossline/2D line/well/horizon), DataChanged events (picks, tops, grids, misties,
         velocities), project WellTable (column store any tool can add columns to). Pure Python, unit-tested without
