@@ -175,6 +175,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(v, "Fit section", lambda: self.section.redraw(), "F")
         self._act(v, "Fit map", self.map.fit)
         v.addSeparator()
+        st = v.addMenu("Track &style")  # Seismic tool PLAN 40h
+        self._act(st, "GR gradient fill on / off", lambda *_: self.toggle_style("gr_fill"))
+        self._act(st, "Lithology patterns on / off", lambda *_: self.toggle_style("patterns"))
+        self._act(st, "Net / pay flags on / off (cutoffs: Vsh, PHIE, Sw)", lambda *_: self.toggle_style("pay"))
+        self._act(st, "Neutron-density crossover shading on / off", lambda *_: self.toggle_style("crossover"))
+        self._act(st, "Save track style as template...", lambda *_: self.save_track_template())
+        self._act(st, "Apply track template...", lambda *_: self.apply_track_template())
+        v.addSeparator()
         for d in self.findChildren(QtWidgets.QDockWidget):
             v.addAction(d.toggleViewAction())
         h = m.addMenu("&Help")
@@ -1013,6 +1021,44 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_start_hint(self):
         self.status.showMessage("File > Open project, or File > New project from data folder", 15000)
+
+    # ------------------------------------------------------------ track style (PLAN 40h)
+    def toggle_style(self, key):
+        d = self.project.display
+        if key == "gr_fill":
+            d["gr_fill"] = "cutoff" if d.get("gr_fill") == "gradient" else "gradient"
+        elif key == "pay":
+            p = dict(d.get("pay") or {"vsh_max": 0.4, "phi_min": 0.08, "sw_max": 0.6})
+            p["show"] = not p.get("show")
+            d["pay"] = p
+        else:
+            d[key] = not d.get(key)
+        self.section.redraw(keep_view=True)
+        return d.get(key)
+
+    def save_track_template(self):
+        from .. import trackstyle as TS
+        name, ok = QtWidgets.QInputDialog.getText(self, "Track template", "Template name:")
+        if not ok or not name:
+            return None
+        d = self.project.display
+        tpl = {"tracks": list(d.get("tracks", [])), "gr_fill": d.get("gr_fill", "cutoff"),
+               "gr_lut": d.get("gr_lut", "Sand-shale"), "pay": dict(d.get("pay") or {}),
+               "crossover": bool(d.get("crossover")), "patterns": bool(d.get("patterns"))}
+        return TS.save_template(self.project, name, tpl)
+
+    def apply_track_template(self):
+        from .. import trackstyle as TS
+        names = sorted((self.project.display.get(TS.KEY_TEMPLATES) or {}))
+        if not names:
+            QtWidgets.QMessageBox.information(self, "Track template", "No saved track templates yet.")
+            return None
+        name, ok = QtWidgets.QInputDialog.getItem(self, "Track template", "Template:", names, 0, False)
+        if not ok:
+            return None
+        t = TS.apply_template(self.project, name)
+        self.section.redraw(keep_view=True)
+        return t
 
     def help_layout(self):
         QtWidgets.QMessageBox.information(self, "Data folder layout", (

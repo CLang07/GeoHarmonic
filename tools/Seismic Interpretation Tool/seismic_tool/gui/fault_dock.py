@@ -110,6 +110,10 @@ class FaultDock(QtWidgets.QWidget):
         if self.section.stick:
             self.section.end_stick()
         f = fs.new(name)
+        try:  # PLAN 40j
+            f.color = self.section.auto_colour("fault", f.name, [x.color for x in fs.items if x is not f])
+        except Exception:
+            pass
         self.section.active_fault = f.name
         self.refresh(f.name)
         self.set_fault_mode(True)

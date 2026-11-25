@@ -88,6 +88,13 @@ def run():
         tm = lay.top_marks()[0]
         check(all(abs(y) < 1e-6 for _, y, _ in tm["marks"]), "flatten puts the datum at 0")
         check(abs(lay.md_at(p.wells["Beta-1"], 0.0) - 1540.0) < 0.2, "cursor depth inverse")
+        lay_s = SectionLayout(p, ["Alpha-1"], {"gr_fill": "gradient", "patterns": True,
+                                               "tracks": ["LITH", "GR", "RES"]})
+        imgs = lay_s.style_images(lay_s.panels[0])
+        lith = lay_s.track_lith_images()
+        check(len(imgs) == 1 and imgs[0][0].shape[1] == 40 and imgs[0][0][..., 3].max() == 255 and len(lith) == 1
+              and lith[0][0].shape[1] == 24 and not any(c == "#f2d64b" for _, _, _, c in lay_s.fills(lay_s.panels[0])),
+              "40h: section draws the GR gradient fill (instead of the cutoff fill) and the patterned lithology column")
         from . import tops as T
         inv = T.set_top(p, "Alpha-1", "SandTop", 1510.0)
         check(p.tops["Alpha-1"]["SandTop"] == 1510.0 and p.tops_meta["Alpha-1"]["SandTop"]["source"] == "user", "set top")
@@ -147,6 +154,8 @@ def run():
         # ---- cartography (PLAN 21f)
         from . import test_carto
         test_carto.run(check, tmp)
+        from . import test_trackstyle
+        test_trackstyle.run(check, tmp)
         # ---- Live Map bus link (PLAN 31a)
         from . import test_maplink
         test_maplink.run(check, tmp)

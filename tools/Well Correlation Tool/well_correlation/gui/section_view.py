@@ -148,6 +148,8 @@ class SectionView(pg.GraphicsLayoutWidget):
             for p in lay.panels:
                 for img, x0, x1, y0, y1 in lay.fill_images(p):
                     self._add_image(img, x0, x1, y0, y1, -15)
+                for img, x0, x1, y0, y1 in lay.style_images(p):  # 40h gradient GR, pay flags, crossover
+                    self._add_image(img, x0, x1, y0, y1, -14)
         except Exception as e:  # never let a fill problem stop the logs drawing
             self.cursorInfo.emit(f"Fill skipped: {e}")
         for p in lay.panels:

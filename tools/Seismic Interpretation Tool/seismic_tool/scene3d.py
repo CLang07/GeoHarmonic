@@ -75,7 +75,14 @@ def world_z(t_ms, zscale=DEFAULT_ZSCALE, ve=1.0):
     return -np.asarray(t_ms, float) * zscale * ve
 
 
-def slice_mesh(vol, mode, number, lut, clip, decimate=1, zscale=DEFAULT_ZSCALE, ve=1.0, data=None):
+def _plane_values(vol, mode, number, st):
+    if mode == "Time slice":
+        return np.asarray(vol.time_slice(number), float)[::st, ::st]
+    sec = vol.inline(number) if mode == "Inline" else vol.xline(number)
+    return np.asarray(sec, float)[::st, ::st]
+
+
+def slice_mesh(vol, mode, number, lut, clip, decimate=1, zscale=DEFAULT_ZSCALE, ve=1.0, data=None, corender=None):
     """Plane through the volume: mode 'Inline' | 'Crossline' | 'Time slice', number = il / xl / ms.  Read on demand
     from the store (one line or one slice), decimated by `decimate` (drag: 4, release: 1).  clip = (vmin, vmax)."""
     st = max(1, int(decimate))
@@ -107,6 +114,14 @@ def slice_mesh(vol, mode, number, lut, clip, decimate=1, zscale=DEFAULT_ZSCALE, 
     ny, nx = vals.shape
     pos = np.stack([np.ravel(X), np.ravel(Y), np.ravel(Z)], 1)
     rgba = lut_rgba(np.ravel(vals), lut, clip[0], clip[1])
+    if corender:  # 40c: a second volume over the amplitude on the 3D plane, own colour table + clip
+        from .aesthetics import corender as _co
+        ov = _plane_values(corender["volume"], mode, number, st)
+        if ov.shape == vals.shape:
+            base = (np.asarray(rgba) * 255.0).reshape(-1, 1, 4)
+            out = _co(base, ov.ravel()[:, None], corender["lut"], corender.get("mode", "multiply"),
+                      float(corender.get("opacity", 0.6)))
+            rgba = out.reshape(-1, 4).astype(np.float32) / 255.0
     tri = grid_triangles(ny, nx, np.isfinite(np.ravel(vals)))
     p, c = _expand(tri, pos, rgba)
     return Mesh("triangles", p, c, f"{mode} {number:g}", {"mode": mode, "number": float(number), "decimate": st})
@@ -174,6 +189,34 @@ def fault_mesh(tris, color=(200, 0, 0), alpha=0.8, zscale=DEFAULT_ZSCALE, ve=1.0
     pos = np.column_stack([a[:, 0], a[:, 1], world_z(a[:, 2], zscale, ve)])
     c = np.array(list(np.asarray(color[:3], float) / 255.0) + [alpha], np.float32)
     return Mesh("triangles", pos, np.tile(c, (len(pos), 1)), name)
+
+
+def shade_mesh(mesh, sun, ambient=0.35):
+    """40a: the map sun lights 3D surfaces - Lambert shading of a triangle mesh's vertex colours (two-sided, so a
+    horizon seen from below is lit too).  Returns a new Mesh; lines are returned unchanged."""
+    if mesh.kind != "triangles" or not len(mesh) or sun is None or not getattr(sun, "on", True):
+        return mesh
+    from .aesthetics import light_vector
+    P = mesh.pos.reshape(-1, 3, 3).astype(np.float64)
+    n = np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0])
+    L = np.linalg.norm(n, axis=1, keepdims=True)
+    n = n / np.where(L > 0, L, 1.0)
+    lam = np.abs(n @ light_vector(sun))
+    f = ambient + (1 - ambient) * lam
+    f = f / (ambient + (1 - ambient) * math.sin(math.radians(sun.elevation)))  # flat surfaces keep their colour
+    rgba = mesh.rgba.reshape(-1, 3, 4).copy()
+    rgba[:, :, :3] = np.clip(rgba[:, :, :3] * f[:, None, None], 0, 1)
+    return Mesh("triangles", mesh.pos, rgba.reshape(-1, 4), mesh.name, dict(mesh.meta, lit=True))
+
+
+def edge_mesh(mesh, rgba=(0.0, 0.0, 0.0, 0.9)):
+    """40e: crisp outline (boundary edges) of a triangle mesh as a line mesh - fault surfaces stay readable when
+    semi-transparent."""
+    from .glow import boundary_edges
+    e = boundary_edges(mesh.pos)
+    if not len(e):
+        return Mesh("lines", np.zeros((0, 3)), np.zeros((0, 4)), mesh.name)
+    return Mesh("lines", e.reshape(-1, 3), np.asarray(rgba, np.float32), f"{mesh.name} edges", {"edges": True})
 
 
 def _frames(path):
@@ -446,6 +489,9 @@ class Scene:
         self.glow_notice = ""
         self.glow_suppressed = False  # "Export without glow" while a screenshot is taken
         self.glow_export = None  # None = settings['export_glow']; True / False = this export's checkbox
+        self.sun = None  # aesthetics.Sun - lights horizon surfaces (40a)
+        # 40e depth cues (software renderer: EDL + fog; GL: fog uniform; shadows / AO -> plain lighting fallback)
+        self.cues = {"edl": False, "edl_strength": 1.0, "fog": 0.0, "shadows": False}
         self._glow_cache = {}
 
     def add(self, kind, name, meshes, **kw):
@@ -541,6 +587,7 @@ class Scene:
 
     def state(self):
         return {"camera": self.camera.to_dict(), "views": self.views, "ve": self.ve, "zscale": self.zscale,
+                "cues": dict(self.cues), "sun": self.sun.to_dict() if self.sun is not None else None,
                 "objects": [{"kind": o.kind, "name": o.name, "visible": o.visible, "opacity": o.opacity,
                              "src": o.src} for o in self.objects]}
 
@@ -555,10 +602,14 @@ class Scene:
         if d.get("camera"):
             s.camera = Camera.from_dict(d["camera"])
         s.views = dict(d.get("views") or {})
+        s.cues.update({k: v for k, v in (d.get("cues") or {}).items() if k in s.cues})
+        if d.get("sun"):
+            from .aesthetics import Sun
+            s.sun = Sun.from_dict(d["sun"])
         return s, list(d.get("objects") or [])
 
     # ------------------------------------------------------------------ software rendering (no GPU)
-    def render_png(self, path, size=(900, 700), max_tris=60000, dpi=100, title=None, legend=None):
+    def render_png(self, path, size=(900, 700), max_tris=60000, dpi=100, title=None, legend=None, cues=None):
         """Screenshot without OpenGL (matplotlib, painter's algorithm on projected triangles).  Used for the
         fallback view, tests and turntable GIF frames."""
         import matplotlib
@@ -605,12 +656,48 @@ class Scene:
                 P = self.camera.project(m.pos, w, h).reshape(-1, 2, 3)
                 ok = np.all(np.abs(P[:, :, 2]) <= 1.0, axis=1)
                 ax.add_collection(LineCollection(P[ok][:, :, :2], colors=m.rgba[::2][ok], linewidths=1.0, zorder=3))
+        cues = dict(self.cues, **(cues or {}))
+        want_depth = bool(cues.get("edl") or cues.get("fog"))
         if polys:
             P = np.concatenate(polys)
             C = np.clip(np.concatenate(cols), 0, 1)
             D = np.concatenate(depth)
             o = np.argsort(-D)  # far first
-            ax.add_collection(PolyCollection(P[o], facecolors=C[o], edgecolors="none", zorder=2))
+            pc = PolyCollection(P[o], facecolors=C[o], edgecolors="none", zorder=2)
+            ax.add_collection(pc)
+        if want_depth and polys:  # 40e: depth raster = the same painter pass with grey = depth (near 0, far 1)
+            fig.canvas.draw()
+            rgb = np.asarray(fig.canvas.buffer_rgba(), float)[:, :, :3].copy()
+            lo, hi = float(D.min()), float(D.max())
+            g = (D[o] - lo) / max(1e-12, hi - lo)
+            pc.set_facecolors(np.c_[g, g, g, np.ones_like(g)])
+            for c in list(ax.collections):
+                if c is not pc:
+                    c.set_visible(False)
+            fig.patch.set_facecolor((1, 1, 1))
+            fig.canvas.draw()
+            dep = np.asarray(fig.canvas.buffer_rgba(), float)[:, :, 0] / 255.0
+            bgmask = np.all(np.abs(rgb - np.asarray(self.background[:3]) * 255) < 2, axis=2) & (dep > 0.999)
+            dep = np.where(bgmask, np.inf, dep)
+            from .aesthetics import eye_dome, fog
+            if cues.get("fog"):
+                rgb = np.where(bgmask[..., None], rgb, fog(rgb, np.where(bgmask, np.nan, dep),
+                                                           np.asarray(self.background[:3]) * 255, cues["fog"]))
+            if cues.get("edl"):
+                rgb = rgb * eye_dome(dep + 1.0, cues.get("edl_strength", 1.0))[..., None]
+            plt.close(fig)
+            from PIL import Image
+            im = Image.fromarray(np.clip(np.round(rgb), 0, 255).astype(np.uint8))
+            if title or legend:
+                from PIL import ImageDraw
+                dr = ImageDraw.Draw(im)
+                if title:
+                    dr.text((10, 10), str(title), fill=(255, 255, 255))
+                for k, (lab, c) in enumerate(legend or []):
+                    dr.text((10, 35 + 16 * k), "# " + str(lab),
+                            fill=tuple(int(255 * v) for v in np.asarray(c, float)[:3]))
+            im.save(path)
+            return path
         if title:
             ax.text(10, 20, title, color="w", fontsize=11)
         for k, (lab, c) in enumerate(legend or []):

@@ -562,3 +562,5 @@ those additions were skipped). It is finished; no todo / partial items are left.
 - Added PLAN items 39 Glow / Halo, 40 Aesthetics, 41 Seismic Conditioning, 42 Survey horizon blending. Building 39 first.
 - 39 Glow / Halo DONE (Seismic v0.62.0) - selftest PASSED (1083), guitest (Qt mock) PASSED, WC selftest + guitest
   PASSED, Mistie selftest PASSED. Next: 40 Aesthetics.
+- 40 Aesthetics DONE (Seismic v0.63.0, Well Correlation v0.14.0) - Seismic selftest PASSED (1150), guitest PASSED,
+  WC selftest + guitest PASSED, Mistie PASSED. Next: 41 Seismic Conditioning.

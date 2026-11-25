@@ -82,10 +82,19 @@ def main(argv=None):
         print("Run 'Install (run once).bat' first.")
         sys.exit(1)
     pg.setConfigOptions(antialias=False, imageAxisOrder="row-major")
+    from .aesthetics import qt_env
+    qt_env()  # PLAN 40d: per-monitor DPI, 150 % stays sharp (PassThrough rounding)
     from .gui.main_window import MainWindow
     app = QtWidgets.QApplication(sys.argv[:1])
     app.setApplicationName("Seismic Interpretation Tool")
     w = MainWindow(argv[0] if argv else None)
+    try:  # PLAN 40f: saved theme (dark by default) + anti-aliasing
+        from .gui.theme import startup
+        s = startup(app)
+        w.theme = s.get("theme", "dark")
+        w.act_aa.setChecked(bool(s.get("antialias", True)))
+    except Exception as e:  # a theme problem must never stop the program
+        print("theme:", e)
     w.show()
     sys.exit(app.exec())
 

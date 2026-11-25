@@ -44,16 +44,22 @@ attribute vec4 col;
 uniform mat4 mvp;
 uniform float opacity;
 varying vec4 vcol;
+varying float vdepth;
 void main() {
     gl_Position = mvp * vec4(pos, 1.0);
     vcol = vec4(col.rgb, col.a * opacity);
+    vdepth = clamp(gl_Position.z / max(gl_Position.w, 1e-6) * 0.5 + 0.5, 0.0, 1.0);
 }
 """
 FS = """#version 120
 varying vec4 vcol;
+varying float vdepth;
+uniform float fog;
+uniform vec3 fogcol;
 void main() {
     if (vcol.a < 0.01) discard;
-    gl_FragColor = vcol;
+    float w = 1.0 - exp(-fog * 3.0 * pow(vdepth, 8.0));
+    gl_FragColor = vec4(mix(vcol.rgb, fogcol, w), vcol.a);
 }
 """
 
@@ -80,6 +86,7 @@ class GLCanvas(QOpenGLWidget):
         self.on_release = None  # callable(): the window re-reads planes at full resolution after a drag
         self.on_click = None  # callable(px, py, w, h): a click without dragging (3D picking, item 34)
         self.glow_failed = ""  # PLAN 39d: set when the driver cannot draw the glow pass (notice, no crash)
+        self.on_input = None  # 40g: callable() on mouse / wheel input (stops camera animations)
         self.max_line_width = 16.0
 
     # ---------------------------------------------------------------- GL
@@ -155,6 +162,11 @@ class GLCanvas(QOpenGLWidget):
         p = self.program
         p.bind()
         p.setUniformValue("mvp", QtGui.QMatrix4x4(*[float(v) for v in mvp.ravel()]))
+        try:  # 40e distance fog (0 = off); EDL / shadows are software-renderer / fallback features
+            p.setUniformValue1f("fog", float(self.scene.cues.get("fog", 0.0)))
+            p.setUniformValue("fogcol", QtGui.QVector3D(float(bg[0]), float(bg[1]), float(bg[2])))
+        except Exception:
+            pass
         live = set()
         # pass 1 (PLAN 39d): glow / halo underlays - wide lines + transparent shells, depth test on, depth write off
         glow = []
@@ -211,6 +223,8 @@ class GLCanvas(QOpenGLWidget):
 
     # ---------------------------------------------------------------- mouse
     def mousePressEvent(self, ev):
+        if getattr(self, "on_input", None):  # 40g: any input stops a camera animation
+            self.on_input()
         self._last = (ev.position().x(), ev.position().y())
         self._press = self._last
         self._buttons = ev.buttons()
@@ -240,6 +254,8 @@ class GLCanvas(QOpenGLWidget):
             self.on_release()
 
     def wheelEvent(self, ev):
+        if getattr(self, "on_input", None):
+            self.on_input()
         self.scene.camera.zoom(1.15 if ev.angleDelta().y() > 0 else 1 / 1.15)
         self.update()
 
@@ -249,6 +265,7 @@ class SoftwareCanvas(QtWidgets.QLabel):
 
     def __init__(self, scene, parent=None, reason=""):
         super().__init__(parent)
+        self.on_input = None
         self.scene = scene
         self.reason = reason
         self._last = None
@@ -274,6 +291,8 @@ class SoftwareCanvas(QtWidgets.QLabel):
         return self._png
 
     def mousePressEvent(self, ev):
+        if getattr(self, "on_input", None):  # 40g: any input stops a camera animation
+            self.on_input()
         self._last = (ev.position().x(), ev.position().y())
 
     def mouseReleaseEvent(self, ev):
@@ -291,6 +310,8 @@ class SoftwareCanvas(QtWidgets.QLabel):
             self.on_release()
 
     def wheelEvent(self, ev):
+        if getattr(self, "on_input", None):
+            self.on_input()
         self.scene.camera.zoom(1.15 if ev.angleDelta().y() > 0 else 1 / 1.15)
         self.update()
 
@@ -325,6 +346,13 @@ class Viewer3D(QtWidgets.QMainWindow):
         self.canvas = SoftwareCanvas(self.scene, self, reason) if self.software else GLCanvas(self.scene, self)
         self.canvas.on_release = lambda: self.full_resolution()
         self.canvas.on_click = lambda x, y, w, h: self.click(x, y, w, h)
+        self.canvas.on_input = lambda: self.stop_animation()
+        self.overlay = None  # 40c: {"name": volume, "mode", "opacity", "lut"} co-rendered on the planes
+        self.anim = None  # 40g camera fly-to (aesthetics.Tween)
+        self.anim_speed = "Normal"
+        self._anim_timer = QtCore.QTimer(self)
+        self._anim_timer.setInterval(16)
+        self._anim_timer.timeout.connect(lambda *_: self.animate_step())
         self.pick_mode = None  # None | 'horizon' | 'fault'
         self.pick_target = ""  # horizon / fault name
         self.setCentralWidget(self.canvas)
@@ -351,6 +379,7 @@ class Viewer3D(QtWidgets.QMainWindow):
         self.canvas = SoftwareCanvas(self.scene, self, "OpenGL failed")
         self.canvas.on_release = lambda: self.full_resolution()
         self.canvas.on_click = lambda x, y, w, h: self.click(x, y, w, h)
+        self.canvas.on_input = lambda: self.stop_animation()
         self.setCentralWidget(self.canvas)
         self._say(f"OpenGL could not start ({err}) - showing the software rendering instead")
         self.redraw()
@@ -400,6 +429,9 @@ class Viewer3D(QtWidgets.QMainWindow):
             a = QtGui.QAction(text, self)
             a.triggered.connect(fn)
             tb.addAction(a)
+        a = QtGui.QAction("Display...", self)  # 40a / e / g: sun, EDL, fog, shadows, fly-to speed
+        a.triggered.connect(lambda *_: self._display_dialog())
+        tb.addAction(a)
         self.act_glow = QtGui.QAction("Glow (G)", self)  # PLAN 39c: G toggles glow globally
         self.act_glow.setShortcut(QtGui.QKeySequence("G"))
         self.act_glow.triggered.connect(lambda *_: self.toggle_glow())
@@ -513,7 +545,15 @@ class Viewer3D(QtWidgets.QMainWindow):
             number = float(vol.times[k])
         self.planes[mode] = number
         dec = 4 if dragging else 1
-        m = S3.slice_mesh(vol, mode, number, self._lut(), self._clip(), dec, self.scene.zscale, self.scene.ve)
+        co = None
+        if self.overlay:  # 40c co-render on the 3D planes
+            try:
+                co = dict(self.overlay, volume=self.project.volume(self.overlay["name"]),
+                          lut=self._lut(self.overlay.get("lut", "Grey")))
+            except Exception:
+                co = None
+        m = S3.slice_mesh(vol, mode, number, self._lut(), self._clip(), dec, self.scene.zscale, self.scene.ve,
+                          corender=co)
         self.scene.replace("slice", mode, [m], colorbar=(self.lut_name, self._clip()[0], self._clip()[1], ""),
                            src={"mode": mode, "number": number})
         if publish:
@@ -564,6 +604,7 @@ class Viewer3D(QtWidgets.QMainWindow):
             fin = np.asarray(g)[ok]
             m = S3.surface_mesh(X, Y, g, self._lut("Rainbow (attributes)"), (float(fin.min()), float(fin.max())),
                                 max_jump=25.0, zscale=self.scene.zscale, ve=self.scene.ve, name=h.name, decimate=dec)
+            m = S3.shade_mesh(m, self.scene.sun)  # 40a: the map sun lights the 3D surfaces
             self.scene.replace("horizon", h.name, [m], colorbar=("Rainbow (attributes)", float(fin.min()),
                                                                  float(fin.max()), "ms"), visible=h.visible)
             n += 1
@@ -576,8 +617,9 @@ class Viewer3D(QtWidgets.QMainWindow):
             if not len(tris):
                 continue
             c = f.color if isinstance(f.color, (tuple, list)) else (200, 0, 0)
-            self.scene.replace("fault", f.name, [S3.fault_mesh(tris, c, 0.75, self.scene.zscale, self.scene.ve,
-                                                               f.name)], visible=f.visible)
+            fm = S3.fault_mesh(tris, c, 0.55, self.scene.zscale, self.scene.ve, f.name)  # 40e: semi-transparent
+            self.scene.replace("fault", f.name, [fm, S3.edge_mesh(fm, (0.05, 0.05, 0.05, 0.9))],  # + crisp edges
+                               visible=f.visible)
             n += 1
         return n
 
@@ -909,6 +951,31 @@ class Viewer3D(QtWidgets.QMainWindow):
             self.scene.glow_suppressed, self.scene.glow_export = keep
             self.redraw()
 
+    def export_page(self, path, template=None):
+        """PLAN 40i: the 3D view on a page with title block + legend (horizons / faults / wells shown)."""
+        from .. import aesthetics as AE
+        t = AE.default_template()
+        t.update(template or {})
+        t.setdefault("title", "")
+        if not t["title"]:
+            t["title"] = f"3D view - {self.vol_name}"
+        t["project"] = t.get("project") or getattr(self.project, "name", "")
+        tmp = tempfile.mkdtemp(prefix="v3dpage_")
+        shot = os.path.join(tmp, "view.png")
+        try:
+            self.screenshot(shot, with_glow=t.get("glow", True))
+            legend = [(o.name, tuple(int(255 * v) for v in np.nanmean(o.meshes[0].rgba[:, :3], axis=0)))
+                      for o in self.scene.objects if o.visible and o.kind in ("horizon", "fault", "well")
+                      and o.meshes and len(o.meshes[0])]
+            return AE.compose_figure(path, image=shot, template=dict(t, scale_bar=False), legend=legend[:20],
+                                     kind="3d")
+        finally:
+            try:
+                os.remove(shot)
+                os.rmdir(tmp)
+            except OSError:
+                pass
+
     def _screenshot(self, path):
         if not self.software and hasattr(self.canvas, "grabFramebuffer"):
             try:
@@ -967,6 +1034,19 @@ class Viewer3D(QtWidgets.QMainWindow):
                 self.set_plane(mode, ev.get("value"), publish=False)
         elif t == "selection" and k == "wells":
             self.highlight_wells(ev.get("ids") or [])
+            ids = set(ev.get("ids") or [])
+            bs = [m.bounds() for o in self.scene.objects if o.kind == "well" and o.name in ids for m in o.meshes
+                  if m.bounds() is not None]
+            if bs and self.anim_speed != "Off":  # 40g: fly to the selection
+                self.fly_to(np.min([b[0] for b in bs], axis=0), np.max([b[1] for b in bs], axis=0))
+        elif t == "selection" and k == "horizons" and ev.get("ids") and self.anim_speed != "Off":
+            self.fly_to_object("horizon", ev["ids"][0])
+        elif t == "display" and k == "sun" and ev.get("sun"):  # 40a: the map sun lights the 3D surfaces
+            from .. import aesthetics as AE
+            self.set_sun(AE.Sun.from_dict(ev["sun"]))
+        elif t == "display" and k == "theme":
+            self.scene.background = (0.09, 0.10, 0.12) if ev.get("theme") == "dark" else (0.96, 0.96, 0.96)
+            self.redraw()
         elif t == "data" and k in ("picks", "horizons"):
             self.add_horizons()
             self.redraw()
@@ -991,6 +1071,107 @@ class Viewer3D(QtWidgets.QMainWindow):
         if kind is None:
             return None
         return self.glow_state.emphasis(kind, obj.name)
+
+    # ---------------------------------------------------------------- aesthetics (PLAN 40a / e / g)
+    def set_sun(self, sun):
+        """40a: the map sun lights the 3D surfaces (same Sun as the Live Map / map views)."""
+        self.scene.sun = sun
+        self.add_horizons()
+        self.redraw()
+        return sun
+
+    def set_overlay(self, name=None, mode="multiply", opacity=0.6, lut="Grey"):
+        """40c: co-render a second volume (coherence, dip, inversion) on the 3D planes; name None = off."""
+        self.overlay = None if not name else {"name": name, "mode": mode, "opacity": float(opacity), "lut": lut}
+        for md, num in list(self.planes.items()):
+            self.set_plane(md, num, publish=False)
+        return self.overlay
+
+    def set_cues(self, **kw):
+        """40e: edl / edl_strength / fog / shadows.  EDL and shadows need the software renderer here (screenshots,
+        fallback view); in the OpenGL view only fog is drawn - the status bar says so."""
+        self.scene.cues.update({k: v for k, v in kw.items() if k in self.scene.cues})
+        if not self.software and (kw.get("edl") or kw.get("shadows")):
+            self._say("Eye-dome lighting / shadows: in screenshots and the software view; the OpenGL view uses "
+                      "plain lighting + fog")
+        self.redraw()
+        return dict(self.scene.cues)
+
+    def fly_to(self, lo, hi, speed=None):
+        """40g: animated camera fly-to (never blocks; stops on any mouse input; speed Off jumps)."""
+        from .. import aesthetics as AE
+        dur = AE.SPEEDS.get(speed or self.anim_speed, 0.5)
+        self.anim = AE.fly_to_camera(self.scene.camera, lo, hi, dur)
+        if self.anim.done:
+            self.redraw()
+            return self.anim
+        self._anim_timer.start()
+        return self.anim
+
+    def fly_to_object(self, kind, name, speed=None):
+        o = self.scene.find(kind, name)
+        if o is None:
+            return None
+        bs = [m.bounds() for m in o.meshes if m.bounds() is not None]
+        if not bs:
+            return None
+        lo = np.min([b[0] for b in bs], axis=0)
+        hi = np.max([b[1] for b in bs], axis=0)
+        return self.fly_to(lo, hi, speed)
+
+    def animate_step(self, now=None):
+        if self.anim is None or self.anim.done:
+            self._anim_timer.stop()
+            return None
+        v = self.anim.step(now)
+        self.redraw()
+        if self.anim.done:
+            self._anim_timer.stop()
+        return v
+
+    def stop_animation(self):
+        if self.anim is not None:
+            self.anim.interrupt()
+        self._anim_timer.stop()
+
+    def _display_dialog(self):
+        """3D display panel: sun, eye-dome lighting, fog, shadows (fallback), fly-to speed."""
+        from .. import aesthetics as AE
+        d = QtWidgets.QDialog(self)
+        d.setWindowTitle("3D display")
+        f = QtWidgets.QFormLayout(d)
+        sun = self.scene.sun or AE.Sun()
+        az, el = QtWidgets.QDoubleSpinBox(), QtWidgets.QDoubleSpinBox()
+        az.setRange(0, 360)
+        az.setValue(sun.azimuth)
+        el.setRange(1, 90)
+        el.setValue(sun.elevation)
+        lit = QtWidgets.QCheckBox("Light horizons with the sun")
+        lit.setChecked(self.scene.sun is not None)
+        edl = QtWidgets.QCheckBox("Eye-dome lighting (screenshots / software view)")
+        edl.setChecked(bool(self.scene.cues["edl"]))
+        fogs = QtWidgets.QDoubleSpinBox()
+        fogs.setRange(0, 1)
+        fogs.setSingleStep(0.1)
+        fogs.setValue(float(self.scene.cues["fog"]))
+        sh = QtWidgets.QCheckBox("Soft shadows / ambient occlusion (falls back to plain lighting)")
+        sh.setChecked(bool(self.scene.cues["shadows"]))
+        sp = QtWidgets.QComboBox()
+        sp.addItems(list(AE.SPEEDS))
+        sp.setCurrentText(self.anim_speed)
+        for lab, w in (("Sun azimuth", az), ("Sun elevation", el), ("", lit), ("", edl), ("Fog", fogs), ("", sh),
+                       ("Fly-to speed", sp)):
+            f.addRow(lab, w)
+        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        bb.accepted.connect(lambda *_: d.accept())
+        bb.rejected.connect(lambda *_: d.reject())
+        f.addRow(bb)
+        if d.exec():
+            self.anim_speed = sp.currentText() or "Normal"
+            self.set_sun(AE.Sun(az.value(), el.value()) if lit.isChecked() else None)
+            self.set_cues(edl=edl.isChecked(), fog=float(fogs.value()), shadows=sh.isChecked())
+            self.save_state()
+        return d
 
     def glow_notice(self):
         """One-line status: auto-limit or 'glow not supported by this driver'."""

@@ -373,7 +373,7 @@ class GlowSettingsDialog(QtWidgets.QDialog):
         return v
 
 
-def install_list_menu(listwidget, settings_fn, kind, on_change=None):
+def install_list_menu(listwidget, settings_fn, kind, on_change=None, project_fn=None, colour_fn=None):
     """Right-click on an object list (Horizons / Faults dock) > Glow > On / Off / Use global / Colour...
     The item's UserRole data is the object name."""
     def show(pos):
@@ -383,6 +383,12 @@ def install_list_menu(listwidget, settings_fn, kind, on_change=None):
             return None
         m = QtWidgets.QMenu(listwidget)
         add_glow_menu(m, settings_fn(), kind, name, on_change)
+        if project_fn is not None:  # PLAN 40j: lock / unlock the colour against automatic reassignment
+            from .. import aesthetics as AE
+            ca = AE.ColourAssigner(project_fn())
+            locked = ca.is_locked(kind, name)
+            a = m.addAction("Unlock colour" if locked else "Lock colour")
+            a.triggered.connect(lambda *_: ca.lock(kind, name, colour_fn(name) if colour_fn else None, not locked))
         m.exec(listwidget.viewport().mapToGlobal(pos))
         return m
     listwidget.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)

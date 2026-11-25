@@ -199,6 +199,10 @@ class HorizonDock(QtWidgets.QWidget):
             if not ok or not str(name).strip():
                 return None
         h = self.hset().new(str(name).strip())
+        try:  # PLAN 40j: distinct colour, away from the seismic colour table
+            h.color = self.section.auto_colour("horizon", h.name, [x.color for x in self.hset().items if x is not h])
+        except Exception:
+            pass
         self.section.active_horizon = h.name
         self.refresh(h.name)
         if not self.pick_btn.isChecked():

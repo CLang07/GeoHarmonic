@@ -945,3 +945,39 @@ Fixes from your first install (25 Nov): the Seismic GUI test FAILED at the 3D Vi
 3. View > 3D Viewer: horizons and planes have glowing outlines; if the status bar says "Glow off: ..." the driver
    cannot draw wide lines - tell Claude the text. Check the frame rate when orbiting (target: hardly slower).
 4. File > Export section image > *With glow* and again *Export without glow*; compare the two PNGs.
+
+## Aesthetics package (PLAN item 40, Seismic v0.63.0 / Well Correlation v0.14.0 - run 8, 25 Nov 2026)
+- **Hillshade + sun (40a):** Live Map toolbar **Sun...** - a sun dial (drag = azimuth / elevation), vertical
+  exaggeration, blend strength, multi-directional; lights every grid layer, saved per view; the 3D Viewer's horizons
+  are lit by the same sun (bus display event 'sun'). Time / depth maps light structural highs like hills.
+- **Colour tables (40b):** one library (`colortables.py`) for section, maps, 3D and the Well tool: the old five +
+  Kingdom-style, High contrast, Blue-white-orange (CVD safe), Viridis / Cividis / Magma-style generated in OKLab
+  (monotonic lightness, tested), Sand-shale; colourblind-safe tables marked; **View > Colour bar editor...** (drag
+  control points, double-click adds, right-click removes, flip, gamma, symmetric clip), custom tables saved in the
+  project and listed in every colour picker, JSON / 256-row CSV export + import.
+- **Co-render (40c):** **View > Co-render a volume / attribute (alpha, multiply, transparency)...** on inlines,
+  crosslines and time slices; the 3D planes (`Viewer3D.set_overlay`) and map grids (style `corender`) do the same.
+- **High DPI + anti-aliasing (40d):** per-monitor DPI with PassThrough rounding (150 % stays sharp); **View >
+  Anti-aliasing** (on by default; off = faster).
+- **3D depth cues (40e):** 3D toolbar **Display...** - sun, eye-dome lighting, fog, shadows (plain-lighting
+  fallback), fly-to speed. Fault surfaces semi-transparent with crisp black edges. EDL is drawn in screenshots / the
+  software view; the OpenGL view has fog (new shader uniform).
+- **Themes (40f):** **View > Theme > Dark / Light** - restyles every open plot, the Live Map and the 3D view without
+  a restart; saved in `%USERPROFILE%\.geoharmonic\settings.json`; dark is the default at start-up.
+- **Smooth motion (40g):** selecting wells / a horizon on the Live Map flies the 3D camera there (any click stops
+  it); Live Map **Zoom to selection** eases in; speed Off / Fast / Normal / Slow.
+- **Well tracks (40h, Well Correlation Tool):** **View > Track style**: GR gradient fill, lithology patterns (editable
+  library: sand dots, shale dashes, limestone bricks, dolomite, coal, anhydrite, salt, marl), net / pay flags from
+  Vsh / PHIE / Sw cutoffs, neutron-density crossover shading, save / apply track templates.
+- **Figures (40i):** Seismic **File > Export section figure (title block, scale bar, legend)...** - 16:9 slide,
+  Letter, A4, poster; PNG / PDF / SVG; theme or forced light; glow per its setting. 3D Viewer `export_page`.
+- **Automatic colours (40j):** new horizons / faults get distinct colours away from the seismic colour table (ICS
+  colour when a unit / age is given); right-click > Lock colour; **Display > Reassign horizon + fault colours**.
+
+### Test this first (aesthetics)
+1. Start the Seismic tool: it opens in the **dark theme**; View > Theme > Light and back - no restart, no errors.
+2. F3: View > Co-render... > a coherence / attribute volume, *multiply*, Grey, 0.6 - faults darken the amplitude.
+3. Live Map > Sun... on a horizon grid: drag the sun; the 3D Viewer's horizon shading follows.
+4. File > Export section figure > 16:9 slide > PDF: title block, scale bar, colour bar, legend on one page.
+5. Well tool: View > Track style > GR gradient fill + Lithology patterns on the NZ wells.
+6. On your 4K screen at 150 %: text and lines sharp (not blurry), toolbar icons not tiny.

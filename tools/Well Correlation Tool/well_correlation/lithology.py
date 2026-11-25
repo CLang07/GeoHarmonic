@@ -147,6 +147,23 @@ def _sample(well, layout, ydisp, arr, kind="nearest"):
     return out
 
 
+def track_codes(layout, panel, dy=0.5):
+    """Lithology code per display row (rows = depth) for a well's column, plus (y0, y1) - the pattern library
+    (trackstyle.pattern_column) draws these."""
+    w = layout.project.wells[panel.name]
+    if w.depth is None or not len(w.depth):
+        return None
+    vsh, code = well_lithology(w)
+    y = layout.y_full(w)
+    ok = np.isfinite(y) & (code < 5)
+    if ok.sum() < 2:
+        return None
+    y0, y1 = float(np.nanmin(y[ok])), float(np.nanmax(y[ok]))
+    grid = np.arange(y0, y1 + dy, dy)
+    c = _sample(w, layout, grid, code, "code").astype(int)
+    return np.clip(c, 0, 5), y0, y1 + dy
+
+
 def track_image(layout, panel, dy=0.5):
     """RGBA image (rows = depth) for a well's lithology column, plus (y0, y1)."""
     w = layout.project.wells[panel.name]

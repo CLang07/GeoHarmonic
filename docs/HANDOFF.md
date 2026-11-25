@@ -735,6 +735,23 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   (GLCanvas pass 1, `glow_failed` = driver notice), software renderer draws it too.
 - Mapbus TOPICS gained "display". MainWindow publishes the active horizon / fault (`_publish_active`).
 
+## Aesthetics (PLAN 40)
+- `colortables.py`: library (SEISMIC + ATTRIBUTE dicts of control points), OKLab helpers (`rgb_to_oklab`, `lightness`,
+  `delta_e`, `simulate_cvd`), `ColourTable` (points, flip, gamma, clip, symmetric; move / add / remove points; `lut()`,
+  `levels()`), project storage display['colour_tables'], JSON / CSV export + import. `gui/colormaps.py` is now a thin
+  front (NAMES, lut) - the original five tables are byte-identical except rounding (round vs truncate).
+- `aesthetics.py`: Sun (+ per-view save in display['sun']), slope_aspect / hillshade (positive_down for time / depth) /
+  shaded_grid, sun dial maths, apply_sun(LayerStack), corender (alpha / multiply / transparency), dpi helpers + qt_env,
+  eye_dome / fog, THEMES + stylesheet + user settings (~/.geoharmonic/settings.json), Tween / fly_to_camera /
+  zoom_range, compose_figure (pages, title block, scale bar, north arrow, colour bar, legend; templates in
+  display['figure_templates']), distinct_colours / ICS / ColourAssigner (display['object_colours']).
+- Qt: `gui/theme.py` (apply_theme, set_antialias, startup), `gui/sundial.py`; scene3d `shade_mesh`, `edge_mesh`,
+  `Scene.cues` (render_png draws EDL / fog from a second depth-coded painter pass), slice_mesh(corender=); view3d fog
+  uniform, Display... dialog, set_sun / set_cues / set_overlay / fly_to / export_page; section_panel corender branch in
+  blend_image, export_page, auto_colour.
+- Well Correlation `trackstyle.py` (patterns, gradient fill, net / pay, crossover, templates) + SectionLayout
+  `style_images`; display keys gr_fill ('gradient'), patterns, pay {show, cutoffs}, crossover.
+
 ## Illustrated tutorial (PLAN 38d/e)
 - `python3 dev/build_tutorial.py` -> docs/TUTORIAL.md, docs/TUTORIAL.html (self-contained, base64 images),
   docs/tutorial/*.png. Text: `dev/tutorial_content.py` (one dict per chapter: purpose, shots, steps, results_re =

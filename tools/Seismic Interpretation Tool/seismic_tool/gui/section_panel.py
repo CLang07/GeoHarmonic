@@ -653,9 +653,30 @@ class SectionPanel(QtWidgets.QWidget):
         if kind != "3D" or self.mode not in ("Inline", "Crossline", "Time slice") or self.wheeler_on() or self.depth_on():
             raise ValueError("co-blend / overlay work on 3D inlines, crosslines and time slices in time")
         v = self.project.volume(name)
-        if sp.get("overlay"):
-            from .. import attributes as A
-            attr = np.asarray(A.section_attribute(v, sp["overlay"], self.mode, self.number), float)
+        if sp.get("overlay") or sp.get("volume"):
+            if sp.get("volume"):  # 40c: a second project volume (coherence, dip, inversion ...) over the amplitude
+                ov = self.project.volume(sp["volume"])
+                if self.mode == "Inline":
+                    attr = np.asarray(ov.inline(self.number), float).T
+                elif self.mode == "Crossline":
+                    attr = np.asarray(ov.xline(self.number), float).T
+                else:
+                    attr = np.asarray(ov.time_slice(self.number), float)
+            else:
+                from .. import attributes as A
+                attr = np.asarray(A.section_attribute(v, sp["overlay"], self.mode, self.number), float)
+            if sp.get("mode") in ("multiply", "transparency", "alpha"):
+                from .. import aesthetics as AE
+                from .. import colortables as CT
+                t = CT.get(self.cmap_combo.currentText() or "Seismic (red-white-blue)") or CT.get("Grey")
+                t.clip, t.flip = float(self.clip_spin.value() or 99.0), bool(self.rev_chk.isChecked())
+                lo, hi = t.levels(arr)
+                base = B.lut_rgba(arr, t.lut(), lo, hi)  # the amplitude keeps its own colour table + clip
+                if attr.shape != np.shape(arr):
+                    raise ValueError(f"overlay volume shape {attr.shape} differs from the section {np.shape(arr)}")
+                return AE.corender(base, attr, colormaps.lut(sp.get("lut", "Rainbow (attributes)"), False),
+                                   sp["mode"], float(sp.get("opacity", 0.5)), clip=tuple(sp.get("clip", (1.0, 99.0))),
+                                   invert_alpha=bool(sp.get("invert", False)))
             base = B.gray_rgba(arr)
             return B.overlay(base, attr, colormaps.lut(sp.get("lut", "Rainbow (attributes)"), False),
                              float(sp.get("opacity", 0.5)), threshold=sp.get("threshold"))
@@ -885,6 +906,66 @@ class SectionPanel(QtWidgets.QWidget):
         if hit != self.glow.state.hover:
             self.glow.state.set_hover(*(hit or (None, None)))
         return hit
+
+    def auto_colour(self, kind, name, existing=(), unit=None, age_ma=None):
+        """PLAN 40j: maximally distinct colour for a new horizon / fault that avoids the current seismic colour
+        table (ICS colour when an age / unit is known); locked colours are kept."""
+        from .. import aesthetics as AE
+        return AE.ColourAssigner(self.project).colour_for(kind, name, existing, self._glow_lut(), unit, age_ma)
+
+    def section_length_m(self):
+        """Horizontal length of the shown section in metres (scale bar of the figure export)."""
+        try:
+            kind, name = self.source
+            if kind == "2D":
+                l = self.project.line(name)
+                return float(np.hypot(np.diff(l.x), np.diff(l.y)).sum())
+            v = self.project.volume(name)
+            if self.mode == "Inline":
+                a, b = v.xy(float(self.number), float(v.xlines[0])), v.xy(float(self.number), float(v.xlines[-1]))
+            elif self.mode == "Crossline":
+                a, b = v.xy(float(v.inlines[0]), float(self.number)), v.xy(float(v.inlines[-1]), float(self.number))
+            else:
+                a, b = v.xy(float(v.inlines[0]), float(v.xlines[0])), v.xy(float(v.inlines[0]), float(v.xlines[-1]))
+            return float(np.hypot(b[0] - a[0], b[1] - a[1]))
+        except Exception:
+            return None
+
+    def export_page(self, path, template=None, with_glow=None):
+        """PLAN 40i: one-click figure of the section on a page preset with title block, scale bar, colour bar and
+        legend (horizons / faults); glow per the template (39g)."""
+        from .. import aesthetics as AE
+        from .. import glow as G
+        if self._data is None:
+            raise RuntimeError("no section shown")
+        t = AE.default_template()
+        t.update(template or {})
+        if not t.get("title"):
+            t["title"] = self._title_text()
+        if not t.get("project") and self.project is not None:
+            t["project"] = getattr(self.project, "name", "")
+        st = self.glow.settings if self.glow is not None else G.GlowSettings()
+        wg = t.get("glow", True) if with_glow is None else with_glow
+        lut = self._glow_lut()
+        curves = self.glow_curves()
+        box = {}
+
+        def draw(ax):
+            n, c = G.draw_section(ax, np.asarray(self._data, float).T, np.asarray(self._xaxis, float),
+                                  np.asarray(self._yaxis, float), curves, lut, float(self.clip_spin.value() or 99.0),
+                                  st, wg, int(t["dpi"]))
+            box["clip"] = c
+            ax.set_xlabel("Crossline" if self.mode == "Inline" else "Inline" if self.mode == "Crossline" else "Trace")
+            ax.set_ylabel("TWT (ms)" if self.mode != "Time slice" else "Inline")
+        seen, legend = set(), []
+        for cv in curves:
+            if cv["kind"] in ("horizon", "fault") and (cv["kind"], cv["name"]) not in seen:
+                seen.add((cv["kind"], cv["name"]))
+                legend.append((cv["name"], cv["colour"]))
+        res = AE.compose_figure(path, draw=draw, template=t, legend=legend,
+                                colourbar=(lut, -1.0, 1.0, "amplitude (relative)") if lut is not None else None,
+                                x_extent=self.section_length_m(), kind="section")
+        return res
 
     def _title_text(self):
         if not self.source:

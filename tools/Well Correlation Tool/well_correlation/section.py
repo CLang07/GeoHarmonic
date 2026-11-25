@@ -219,7 +219,7 @@ class SectionLayout:
             return
         y = self.y_full(w)
         for tid, tx0, tx1 in panel.tracks:
-            if tid == "GR" and "GR" in w.logs:
+            if tid == "GR" and "GR" in w.logs and self.d.get("gr_fill", "cutoff") != "gradient":
                 gr = w.logs["GR"]
                 cut = float(self.d.get("gr_cutoff", 75.0))
                 xc = to_x([cut], 0, 150, False, tx0, tx1 - tx0)[0]
@@ -298,18 +298,84 @@ class SectionLayout:
 
     def track_lith_images(self):
         """Lithology columns for LITH tracks: [(rgba, x0, x1, y0, y1)]."""
-        from .lithology import track_image
+        from .lithology import track_codes, track_image
         res = []
+        lib = None
+        if self.d.get("patterns"):  # 40h: pattern library (dots / dashes / bricks ...) instead of flat colours
+            from .trackstyle import library
+            lib = library(self.project)
         for p in self.panels:
             if not self.project.wells[p.name].loaded:
                 self.project.load_well(p.name)
             for tid, tx0, tx1 in p.tracks:
+                if tid == "LITH" and lib is not None:
+                    from .trackstyle import pattern_column
+                    r = track_codes(self, p, dy=0.5)
+                    if r:
+                        codes, y0, y1 = r
+                        res.append((pattern_column(codes, 24, lib), tx0, tx1, y0, y1))
+                    continue
                 if tid == "LITH":
                     r = track_image(self, p)
                     if r:
                         img, y0, y1 = r
                         res.append((img, tx0, tx1, y0, y1))
         return res
+
+    def style_images(self, panel, dy=0.5, ncols=40):
+        """40h track styling: GR gradient fill (display gr_fill = 'gradient'), shaded net / pay flags from cutoffs
+        (display pay.show), neutron-density crossover (display crossover: gas yellow, shale grey).
+        [(rgba, x0, x1, y0, y1)]."""
+        from . import trackstyle as TS
+        w = self.project.wells[panel.name]
+        if not w.loaded:
+            self.project.load_well(w.name)
+        if w.depth is None or not len(w.depth):
+            return []
+        y = self.y_full(w)
+        ok = np.isfinite(y)
+        if ok.sum() < 2:
+            return []
+        y0, y1 = float(np.nanmin(y[ok])), float(np.nanmax(y[ok]))
+        grid = np.arange(y0, y1 + dy, dy)
+        order = np.argsort(y[ok])
+        ys = y[ok][order]
+
+        def on_grid(v):
+            v = np.asarray(v, float)[ok][order]
+            return np.interp(grid, ys, v, left=np.nan, right=np.nan)
+        out = []
+        for tid, tx0, tx1 in panel.tracks:
+            if tid == "GR" and "GR" in w.logs and self.d.get("gr_fill") == "gradient":
+                g = on_grid(w.logs["GR"])
+                img = TS.curve_fill_image(g, TS.gr_lut(self.d.get("gr_lut", "Sand-shale")), 0.0, 150.0, ncols,
+                                          x=np.clip(g / 150.0, 0, 1), side="left")
+                out.append((img, tx0, tx1, y0, y1 + dy))
+            if tid == "GR" and (self.d.get("pay") or {}).get("show"):
+                pp = self.d["pay"]
+                res = TS.net_pay(grid, on_grid(self.log_values(w, "VSH")) if self.log_values(w, "VSH") is not None
+                                 else None,
+                                 on_grid(self.log_values(w, "PHIE")) if self.log_values(w, "PHIE") is not None else None,
+                                 on_grid(self.log_values(w, "SW")) if self.log_values(w, "SW") is not None else None,
+                                 pp.get("vsh_max", 0.4), pp.get("phi_min", 0.08), pp.get("sw_max", 0.6))
+                strip = np.zeros((len(grid), 4, 4), np.uint8)
+                strip[res["net"]] = (60, 170, 60, 220)
+                strip[res["pay"]] = (220, 40, 40, 230)
+                out.append((strip, tx1 - 0.08 * (tx1 - tx0), tx1, y0, y1 + dy))
+            if tid == "DN" and self.d.get("crossover") and "RHOB" in w.logs and "NPHI" in w.logs:
+                rh, np_ = on_grid(w.logs["RHOB"]), on_grid(w.logs["NPHI"])
+                xr = (rh - 1.95) / (2.95 - 1.95)
+                xn = (np_ - 0.45) / (-0.15 - 0.45)
+                cx = (np.arange(ncols) + 0.5) / ncols
+                lo, hi = np.minimum(xr, xn), np.maximum(xr, xn)
+                between = (cx[None, :] >= np.nan_to_num(lo, nan=2)[:, None]) & \
+                          (cx[None, :] <= np.nan_to_num(hi, nan=-1)[:, None])
+                gas = (np.nan_to_num(xn, nan=-1) > np.nan_to_num(xr, nan=2))[:, None]
+                img = np.zeros((len(grid), ncols, 4), np.uint8)
+                img[between & gas] = (255, 204, 0, 200)
+                img[between & ~gas] = (150, 150, 150, 140)
+                out.append((img, tx0, tx1, y0, y1 + dy))
+        return out
 
     def gap_images(self, ylim, mode=None, cache=None):
         """Between-well fills: [(rgba, x0, x1, y0, y1)]. Pass a dict as cache to reuse unchanged gaps."""
@@ -337,6 +403,9 @@ class SectionLayout:
         """All images (track lithology + between-well) as (rgba, x0, x1, y0, y1, kind)."""
         for img, x0, x1, y0, y1 in self.track_lith_images():
             yield img, x0, x1, y0, y1, "track"
+        for p in self.panels:
+            for img, x0, x1, y0, y1 in self.style_images(p):
+                yield img, x0, x1, y0, y1, "style"
         for img, x0, x1, y0, y1 in self.gap_images(ylim, mode):
             yield img, x0, x1, y0, y1, "gap"
 

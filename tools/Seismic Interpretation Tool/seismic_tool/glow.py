@@ -420,22 +420,15 @@ def mpl_path_effects(st, mode, base_rgb, line_width_pt=1.5, emphasis=None, lut=N
     return eff
 
 
-def export_section_png(path, data, xaxis, times, curves, lut=None, clip=99.0, settings=None, with_glow=True,
-                       title="", xlabel="Trace", ylabel="TWT (ms)", dpi=100, size=(12.0, 6.5), emphasis=None):
-    """Section figure export (PNG / PDF / SVG by extension) with the interpretation drawn as on screen.
-
-    data (n_x, n_t); curves = [{"x", "y", "colour", "width", "kind", "name", "points"?}] (horizons, fault cuts /
-    sticks, well paths).  `with_glow=False` = the "Export without glow" checkbox (PLAN 39g).  Returns the number of
-    glowing curves drawn (tests)."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+def draw_section(ax, data, xaxis, times, curves, lut=None, clip=99.0, settings=None, with_glow=True, dpi=100,
+                 emphasis=None):
+    """Draw a section (n_x, n_t) + interpretation curves into a matplotlib axes, glow as on screen.  Returns the
+    number of glowing curves."""
     from matplotlib.colors import ListedColormap
     st = settings or GlowSettings()
     data = np.asarray(data, float)
     xaxis = np.asarray(xaxis, float)
     times = np.asarray(times, float)
-    fig, ax = plt.subplots(figsize=size, dpi=dpi)
     fin = np.isfinite(data)
     c = float(np.percentile(np.abs(data[fin]), clip)) if fin.any() else 1.0
     cmap = ListedColormap(np.asarray(lut, float)[:, :3] / 255.0) if lut is not None else "seismic"
@@ -459,6 +452,21 @@ def export_section_png(path, data, xaxis, times, curves, lut=None, clip=99.0, se
             ln.set_path_effects(eff)
     ax.set_xlim(xaxis[0], xaxis[-1])
     ax.set_ylim(times[-1], times[0])
+    return n_glow, c
+
+
+def export_section_png(path, data, xaxis, times, curves, lut=None, clip=99.0, settings=None, with_glow=True,
+                       title="", xlabel="Trace", ylabel="TWT (ms)", dpi=100, size=(12.0, 6.5), emphasis=None):
+    """Section figure export (PNG / PDF / SVG by extension) with the interpretation drawn as on screen.
+
+    data (n_x, n_t); curves = [{"x", "y", "colour", "width", "kind", "name", "points"?}] (horizons, fault cuts /
+    sticks, well paths).  `with_glow=False` = the "Export without glow" checkbox (PLAN 39g).  Returns the number of
+    glowing curves drawn (tests)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=size, dpi=dpi)
+    n_glow, _ = draw_section(ax, data, xaxis, times, curves, lut, clip, settings, with_glow, dpi, emphasis)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     if title:

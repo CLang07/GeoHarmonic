@@ -34,7 +34,9 @@ DEFAULT_STYLE = {
     "horizon": {"lut": "Rainbow (attributes)", "reverse": True},
     "grid": {"lut": "Rainbow (attributes)", "reverse": None, "vmin": None, "vmax": None,
              "ramp": None, "hillshade": False, "ve": 1.0, "shade_strength": 0.55, "blank": None,
-             "shade_from": None, "azimuth": None, "elevation": 35.0},
+             "shade_from": None, "azimuth": None, "elevation": 35.0, "corender": None},
+    # corender (40c): {"lid": other grid layer, "mode": alpha | multiply | transparency, "opacity", "lut"} drawn over
+    # this grid with its own colour table (e.g. coherence over a time-structure map)
     # shade_from: layer id of a structure grid whose illumination shades this one (amplitude on structure, 23b);
     # azimuth: single light direction (bump map) instead of the multi-directional hillshade; elevation in degrees
     "blend": {"mode": "rgb", "clip": (2.0, 98.0), "gamma": 1.0},  # src {"grids": [lid, lid, lid]} co-blend (23a)
@@ -554,6 +556,16 @@ def render(stack, wells=None):
                         rgba = shaded_rgba(g.z, lut, cb["vmin"], cb["vmax"], sh, float(st.get("shade_strength", 0.55)), a)
                     else:
                         rgba, _, _ = _rgba_image(g.z, lut, cb["vmin"], cb["vmax"], a)
+                    co = st.get("corender")
+                    if co and co.get("lid"):
+                        from . import aesthetics as AE
+                        from . import blend as B
+                        og = display_grid(stack, co["lid"])
+                        if og is not None:
+                            from .gui import colormaps as CM
+                            oz = B.on_grid(g, og)
+                            rgba = AE.corender(rgba, oz, CM.lut(co.get("lut", "Grey")), co.get("mode", "multiply"),
+                                               float(co.get("opacity", 0.6)))
                     prim.append(("image", lid, rgba, tuple(g.transform())))
             elif kind == "blend":
                 from . import blend as B

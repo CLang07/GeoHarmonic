@@ -459,6 +459,48 @@ equivalent; it is closest to Petrel's "highlight selected object".""",
                  "selected object** is unticked, and that the object has no per-object *Off*.",
                  "*Glow looks too heavy*: Glow settings > Width 3-4 px, Intensity 50 %, or switch to Halo."],
     ),
+    # ------------------------------------------------------------------------------------------------ aesthetics
+    dict(
+        id="aesthetics", title="14c. Aesthetics: hillshade, colour tables, co-rendering, themes, figures",
+        purpose="""\
+Display polish shared by every window: sun-lit (hillshaded) maps and 3D surfaces, one colour-table library (seismic
+bars incl. Kingdom-style, perceptual viridis / cividis / magma-style tables, colourblind-safe ones marked, your own
+tables saved in the project), co-rendering of a second volume over the amplitude (like Petrel's co-render /
+Kingdom's overlay), dark and light themes, smooth camera moves, styled well-log tracks and one-click figures with a
+title block for slides and reports.""",
+        shots=["aes_hillshade", "aes_corender", "aes_dark", "aes_light", "aes_wc"],
+        steps=[
+            "**Sun / hillshade (maps):** Live Map toolbar **Sun...**: drag the sun on the dial (direction = azimuth, "
+            "nearer the centre = higher), set *Vertical exaggeration*, *Blend with colour*, *Multi-directional*. Every "
+            "grid on the map is lit; the 3D Viewer's horizons are lit by the same sun.",
+            "**Colour tables:** the colour box above the section lists the library; colourblind-safe tables are "
+            "marked. Custom tables are saved with the project (export / import as JSON or a 256-row CSV).",
+            "**Co-render:** **View > Co-render a volume / attribute (alpha, multiply, transparency)...**: pick a "
+            "second volume (e.g. coherence) or an attribute, the blend mode, its colour table and opacity. *Multiply* "
+            "darkens the seismic where coherence is low; *transparency* hides low values. In 3D the same on the planes.",
+            "**Theme:** **View > Theme > Dark** or **Light (print / slides)** - switches immediately, remembered next "
+            "time. **View > Anti-aliasing** off = faster drawing on huge sections.",
+            "**3D display:** 3D Viewer toolbar **Display...**: sun on/off, eye-dome lighting, fog, shadows (falls back "
+            "to plain lighting), fly-to speed (Off / Fast / Normal / Slow). Selecting a well or horizon on the Live Map "
+            "flies the 3D camera to it; any mouse click stops the move. Live Map **Zoom to selection** eases in.",
+            "**Well tracks (Well tool):** **View > Track style**: GR gradient fill, lithology patterns, net / pay flags "
+            "(Vsh / PHIE / Sw cutoffs), neutron-density crossover; **Save track style as template...** / **Apply track "
+            "template...**.",
+            "**Figures:** Seismic tool **File > Export section figure (title block, scale bar, legend)...**: page (16:9 "
+            "slide, Letter, A4, poster), title; PNG / PDF / SVG. The 3D Viewer has the same for its view.",
+            "**Automatic colours:** new horizons / faults get colours that differ from each other and from the seismic "
+            "colour table; right-click > **Lock colour**; **Display > Reassign horizon + fault colours**.",
+        ],
+        results="Pictures: the tools' own exports on the demo data. The tests check:",
+        results_re=[r"^PASS 40[a-j]"],
+        limits=["Eye-dome lighting and soft shadows are drawn by the software renderer (screenshots, fallback view); "
+                "the OpenGL view shows plain lighting + fog.",
+                "Theme: plot windows restyle immediately; a few dialogs keep their colours until reopened.",
+                "High-DPI: tested here as maths (100 / 150 / 200 %); check on your 4K screen.",
+                "ICS colours cover epochs / periods commonly mapped (Holocene to Cambrian)."],
+        trouble=["*Map looks flat*: Sun... > raise Vertical exaggeration (time maps in ms need 3-10).",
+                 "*Theme did not change a window*: close and reopen that window."],
+    ),
     # ------------------------------------------------------------------------------------------------ 3D interp
     dict(
         id="interp3d", title="15. 3D interpretation (picking, tracking, volume rendering, geobodies)",

@@ -868,7 +868,7 @@ is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built ag
    39j. Docs: WHATS_NEW, test checklist, tutorial section with before/after screenshots of a horizon and a fault on F3
         seismic in Glow and Halo modes.
 
-40. **Aesthetics package** - status: todo
+40. **Aesthetics package** - status: done (run 8, 2026-11-25, Seismic v0.63.0 / Well Correlation v0.14.0: `colortables.py`, `aesthetics.py`, `gui/theme.py`, `gui/sundial.py`, `gui/colorbar_editor.py` (View > Colour bar editor), well_correlation `trackstyle.py`, test_aesthetics + test_trackstyle. Follow-ups: real 4K / 150-200 % check on the PC; eye-dome lighting + shadows only in the software renderer / screenshots (GL view: fog); slices fading from decimated to full resolution and layer fade-in not built (camera fly-to + eased map zoom are); Well Correlation Tool keeps its own light look (no theme switch) and has no figure-template export; ICS colours for the common epochs / periods only)
    Build a -> j in order (hillshade and colour tables first, later items reuse them). 3D parts of a, e, g use the
    item-33 viewer (custom QOpenGL + software renderer); if they cannot be verified here they ship behind the existing
    software fallback and are noted in WHATS_NEW. Stack: PySide6 + pyqtgraph, numpy; matplotlib for figure export;

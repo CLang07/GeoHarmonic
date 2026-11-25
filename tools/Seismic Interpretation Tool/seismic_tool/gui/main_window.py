@@ -240,8 +240,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.section.set_glow_state(self.glow_state)
         from .glow import install_list_menu
         for dock, kind in ((self.horizon_dock, "horizon"), (self.fault_dock, "fault")):
+            coll = (lambda: self.project.horizons) if kind == "horizon" else (lambda: self.project.faults)
             install_list_menu(dock.list, lambda: self.glow_state.settings, kind,
-                              lambda: (self.store_glow_settings(), self.glow_state.broadcast()))
+                              lambda: (self.store_glow_settings(), self.glow_state.broadcast()),
+                              project_fn=lambda: self.project,
+                              colour_fn=lambda n, coll=coll: tuple(coll().get(n).color) if coll().get(n) else None)
         self.basemap.wellsSelected.connect(lambda names: self.maplink.wells_selected(names))
         self.section.positionChanged.connect(lambda: self.maplink.position_changed())
         self._bus_poll = QtCore.QTimer(self)
@@ -267,6 +270,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&Save project", self.save, "Ctrl+S")
         m.addSeparator()
         self._act(m, "Export section &image (PNG / PDF / SVG)...", lambda *_: self.export_section_dialog(), "Ctrl+E")
+        self._act(m, "Export section &figure (title block, scale bar, legend)...", lambda *_: self.export_page_dialog())
         m.addSeparator()
         self._act(m, "Import &3D SEG-Y...", self.import_3d_dialog, "Ctrl+3")
         self._act(m, "Add &2D SEG-Y lines...", self.add_2d_dialog, "Ctrl+2")
@@ -331,6 +335,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.act_link.setChecked(True)
         self._act(m, "Co-&blend attributes on the section (RGB / CMY / HSV)...", lambda *_: self.coblend_dialog())
         self._act(m, "Attribute &overlay on the seismic...", lambda *_: self.overlay_dialog())
+        self._act(m, "Co-&render a volume / attribute (alpha, multiply, transparency)...",
+                  lambda *_: self.corender_dialog())
+        self._act(m, "Colour bar &editor (custom colour tables)...", lambda *_: self.colorbar_editor())
         self.act_bump = self._act(m, "Bump-map the section / slice", lambda *_: self.section.set_blend(
             {"bump": True} if self.act_bump.isChecked() else None))
         self.act_bump.setCheckable(True)
@@ -345,6 +352,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "Send map to QGIS (shared GeoPackage)", lambda *_: self.send_map_to_qgis())
         self.act_ddc = self._act(m, "&Auto-update depth model (dynamic depth conversion)", self.toggle_ddc)
         self.act_ddc.setCheckable(True)
+        m.addSeparator()  # PLAN 40d / 40f
+        tm = m.addMenu("&Theme")
+        self._act(tm, "&Dark", lambda *_: self.set_theme("dark"))
+        self._act(tm, "&Light (print / slides)", lambda *_: self.set_theme("light"))
+        self.act_aa = self._act(m, "Anti-aliasing (smooth lines; off = faster)",
+                                lambda *_: self.set_antialias(self.act_aa.isChecked()))
+        self.act_aa.setCheckable(True)
+        self.act_aa.setChecked(True)
         m = mb.addMenu("&Display")
         self.act_glow = self._act(m, "&Glow on/off", lambda *_: self.toggle_glow(), "G")
         self.act_glow.setCheckable(True)
@@ -355,6 +370,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.act_glow_active = self._act(m, "Glow only the &active / selected object",
                                          lambda *_: self.set_glow(active_only=self.act_glow_active.isChecked()))
         self.act_glow_active.setCheckable(True)
+        m.addSeparator()
+        self._act(m, "&Reassign horizon + fault colours (distinct, keeps locked ones)",
+                  lambda *_: self.reassign_colours())
         self.act_glow_active.setChecked(bool(self.glow_state.settings["active_only"]))
         m = mb.addMenu("&Help")
         self._act(m, "About", lambda: QtWidgets.QMessageBox.information(
@@ -445,6 +463,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def _refresh(self):
         p = self.project
         self.load_glow_settings()
+        try:  # PLAN 40b: the project's custom colour tables in every picker
+            from .. import colortables as CT
+            from . import colormaps
+            CT.load_project(p)
+            colormaps.refresh_names(p)
+        except Exception:
+            pass
         self._ddc_watch_paths()
         self.setWindowTitle(f"Seismic Interpretation Tool - {p.name}" + (f"  [{p.path}]" if p.path else ""))
         self.tree.clear()
@@ -553,6 +578,52 @@ class MainWindow(QtWidgets.QMainWindow):
         if not ok:
             return None
         spec = {"overlay": t, "opacity": op}
+        self.section.set_blend(spec)
+        return spec
+
+    def colorbar_editor(self):
+        """PLAN 40b: edit / save / import / export colour tables; a saved table appears in every colour picker."""
+        from .colorbar_editor import ColourBarEditor
+
+        def applied(name):
+            cb = self.section.cmap_combo
+            cb.blockSignals(True)
+            cb.clear()
+            from . import colormaps
+            cb.addItems(colormaps.NAMES)
+            cb.blockSignals(False)
+            cb.setCurrentText(name)
+            self.section._apply_colors()
+        dlg = ColourBarEditor(self.project, self.section.cmap_combo.currentText() or None, self, on_apply=applied)
+        dlg.show()
+        self._cbar_editor = dlg
+        return dlg
+
+    def corender_dialog(self):
+        """PLAN 40c: co-render a second volume / attribute over the amplitude (alpha, multiply, transparency by
+        value); each keeps its own colour table and clip."""
+        from .. import attributes as A
+        from . import colormaps
+        vols = [v["name"] for v in self.project.volumes if not self.section.source
+                or v["name"] != self.section.source[1]]
+        items = [f"Volume: {n}" for n in vols] + [f"Attribute: {a}" for a in A.ATTRIBUTES]
+        what, ok = QtWidgets.QInputDialog.getItem(self, "Co-render", "Layer over the amplitude", items, 0, False)
+        if not ok:
+            return None
+        mode, ok = QtWidgets.QInputDialog.getItem(self, "Co-render", "Blend mode",
+                                                  ["alpha", "multiply", "transparency"], 1, False)
+        if not ok:
+            return None
+        lut, ok = QtWidgets.QInputDialog.getItem(self, "Co-render", "Colour table of the layer", colormaps.NAMES,
+                                                 colormaps.NAMES.index("Grey") if "Grey" in colormaps.NAMES else 0,
+                                                 False)
+        if not ok:
+            return None
+        op, ok = QtWidgets.QInputDialog.getDouble(self, "Co-render", "Opacity (0-1)", 0.6, 0.05, 1.0, 2)
+        if not ok:
+            return None
+        spec = {"mode": mode, "opacity": op, "lut": lut}
+        spec["volume" if what.startswith("Volume: ") else "overlay"] = what.split(": ", 1)[1]
         self.section.set_blend(spec)
         return spec
 
@@ -821,6 +892,42 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(f"Saved {self.project.path}", 4000)
         return True
 
+    # ------------------------------------------------------------ theme / anti-aliasing (PLAN 40d / 40f)
+    def set_theme(self, name):
+        """View > Theme: every open view switches without a restart; saved in the user settings."""
+        from . import theme as TH
+        from .. import aesthetics as AE
+        n = TH.apply_theme(None, name, bus=getattr(self, "mapbus", None))
+        dark = name == "dark"
+        lm = getattr(self, "_live_map", None)
+        if lm is not None:
+            try:
+                from .live_map import DARK_QSS
+                lm.setStyleSheet(DARK_QSS if dark else "")
+                lm.canvas.dark = dark
+                lm.canvas.plot.setBackground(AE.plot_colours(name)["background"])
+                lm.canvas.redraw()
+            except Exception:
+                pass
+        v = getattr(self, "_viewer3d", None)
+        if v is not None:
+            v.scene.background = (0.09, 0.10, 0.12) if dark else (0.96, 0.96, 0.96)
+            v.redraw()
+        try:
+            self.section.glow.background_fn = lambda: AE.hex_rgb(AE.plot_colours(name)["background"])
+            self.section.glow.refresh()
+        except Exception:
+            pass
+        self.theme = name
+        self.statusBar().showMessage(f"Theme: {name} ({n} views restyled)", 3000)
+        return n
+
+    def set_antialias(self, on):
+        from . import theme as TH
+        n = TH.set_antialias(on)
+        self.section.redraw()
+        return n
+
     # ------------------------------------------------------------ glow (PLAN 39)
     def load_glow_settings(self):
         from .. import glow as GLW
@@ -875,6 +982,53 @@ class MainWindow(QtWidgets.QMainWindow):
             self.section.export_figure(path, with_glow=not str(choice).startswith("Export without"))
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Export section image", str(e))
+            return None
+        self.statusBar().showMessage(f"Saved {path}", 5000)
+        return path
+
+    def reassign_colours(self):
+        """PLAN 40j: recolour every unlocked horizon / fault with maximally distinct colours avoiding the seismic
+        colour table; the change goes out on the map bus (DataChanged horizons / faults)."""
+        from .. import aesthetics as AE
+        ca = AE.ColourAssigner(self.project)
+        lut = self.section._glow_lut()
+        n = 0
+        for kind, coll in (("horizon", self.project.horizons), ("fault", self.project.faults)):
+            cols = ca.reassign([(o.name, tuple(o.color)) for o in coll.items], kind, lut)
+            for o in coll.items:
+                if tuple(o.color) != tuple(cols[o.name]):
+                    o.color = tuple(cols[o.name])
+                    n += 1
+            if hasattr(coll, "dirty"):
+                coll.dirty = True
+        self.horizon_dock.refresh()
+        self.fault_dock.refresh()
+        self._horizons_changed()
+        self._faults_changed()
+        return n
+
+    def export_page_dialog(self):
+        """PLAN 40i: page preset + title block + scale bar + legend; templates saved in the project."""
+        from .. import aesthetics as AE
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export section figure", "",
+                                                        "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")
+        if not path:
+            return None
+        page, ok = QtWidgets.QInputDialog.getItem(self, "Figure", "Page", list(AE.PAGES), 0, False)
+        if not ok:
+            return None
+        title, ok = QtWidgets.QInputDialog.getText(self, "Figure", "Title:", text=self.section._title_text())
+        if not ok:
+            return None
+        t = AE.load_template(self.project, "last")
+        t.update(page=page, title=title, project=self.project.name,
+                 dpi=300 if path.lower().endswith(".pdf") else t.get("dpi", 150),
+                 glow=bool(self.glow_state.settings["export_glow"]))
+        AE.save_template(self.project, "last", t)
+        try:
+            self.section.export_page(path, t)
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "Export section figure", str(e))
             return None
         self.statusBar().showMessage(f"Saved {path}", 5000)
         return path

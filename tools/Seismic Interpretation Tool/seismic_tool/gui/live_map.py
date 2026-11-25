@@ -277,6 +277,8 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         self._draw_mode = None  # 'lasso' | 'arbitrary' while drawing on the map
         self._n_arbitrary = 0
         self.state = LM.MapState.load(project)
+        self._zoom, self._zoom_timer = None, None  # 40g eased zoom
+        self.sun = None
         self.styled = None
         self.messages = []
         self._lasso = False
@@ -311,6 +313,12 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         self.act_arb.setToolTip("Click points along a line, double-click to open the arbitrary section")
         self.act_arb.triggered.connect(lambda *_: self.start_arbitrary())
         tb.addAction(self.act_arb)
+        a = QtGui.QAction("Zoom to selection", self)  # PLAN 40g: eased zoom
+        a.triggered.connect(lambda *_: self.zoom_to_selection())
+        tb.addAction(a)
+        a = QtGui.QAction("Sun...", self)  # PLAN 40a: hillshade sun dial for every grid layer of this view
+        a.triggered.connect(lambda *_: self._sun_dialog())
+        tb.addAction(a)
         self.act_ws = QtGui.QAction("Well section", self)
         self.act_ws.setToolTip("Draw a line: the wells along it become a cross section in the Well Correlation Tool")
         self.act_ws.triggered.connect(lambda *_: self.start_well_section())
@@ -1031,6 +1039,70 @@ class LiveMapWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage(msg, 6000)
         except Exception:
             pass
+
+    # ---------------------------------------------------------------- smooth zoom (PLAN 40g)
+    def zoom_to(self, box, speed="Normal"):
+        """Eased zoom / pan to box (x0, x1, y0, y1); never blocks (QTimer frames), speed Off jumps."""
+        from .. import aesthetics as AE
+        v = self.canvas.view() or tuple(box)
+        tgt = AE.zoom_range(v, box)
+        vb = self.canvas.plot.getPlotItem().getViewBox()
+
+        def frame(r):
+            try:
+                vb.setRange(xRange=(r[0], r[1]), yRange=(r[2], r[3]), padding=0)
+            except Exception:
+                pass
+            self.canvas.view_override = None
+        self._zoom = AE.Tween(v, tgt, AE.SPEEDS.get(speed, 0.5), on_frame=frame)
+        if not self._zoom.done:
+            if getattr(self, "_zoom_timer", None) is None:
+                self._zoom_timer = QtCore.QTimer(self)
+                self._zoom_timer.setInterval(16)
+                self._zoom_timer.timeout.connect(lambda *_: self._zoom_step())
+            self._zoom_timer.start()
+        return tgt
+
+    def _zoom_step(self, now=None):
+        z = getattr(self, "_zoom", None)
+        if z is None or z.done:
+            if getattr(self, "_zoom_timer", None) is not None:
+                self._zoom_timer.stop()
+            return None
+        return z.step(now)
+
+    def zoom_to_selection(self, speed="Normal"):
+        if self.styled is None:
+            return None
+        sel = np.flatnonzero(self.styled["selected"] & self.styled["visible"])
+        if not len(sel):
+            return None
+        x, y = np.asarray(self.styled["x"], float)[sel], np.asarray(self.styled["y"], float)[sel]
+        pad = max(500.0, 0.1 * max(np.ptp(x), np.ptp(y)))
+        return self.zoom_to((x.min() - pad, x.max() + pad, y.min() - pad, y.max() + pad), speed)
+
+    # ---------------------------------------------------------------- sun (PLAN 40a)
+    def set_sun(self, sun, publish=True):
+        """Light the Live Map's grids with this sun, save it with the view, tell the 3D Viewer (bus display 'sun')."""
+        from .. import aesthetics as AE
+        self.sun = sun
+        n = AE.apply_sun(self.canvas.stack, sun) if getattr(self.canvas, "stack", None) is not None else 0
+        sun.save(self.project, "livemap")
+        try:
+            self.canvas.redraw()
+        except Exception:
+            pass
+        if publish:
+            self.bus.publish("display", "livemap", kind="sun", sun=sun.to_dict())
+        return n
+
+    def _sun_dialog(self):
+        from .. import aesthetics as AE
+        from .sundial import SunDialog
+        d = SunDialog(AE.Sun.load(self.project, "livemap"), self, on_change=lambda s: self.set_sun(s, False))
+        if d.exec():
+            self.set_sun(d.value())
+        return d
 
     def closeEvent(self, ev):
         try:

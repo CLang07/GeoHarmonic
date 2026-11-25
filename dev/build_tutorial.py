@@ -409,7 +409,111 @@ def exp_glow_halo(ctx, path):
     return _glow_section(ctx, path, "halo")
 
 
-EXPORTS = {"glow_off": exp_glow_off, "glow_on": exp_glow_on, "glow_halo": exp_glow_halo, "view3d": exp_view3d, "fix_after": exp_view3d, "livemap": exp_livemap, "horizon_map": exp_horizon_map,
+def _aes_section(ctx):
+    import numpy as np
+    proj = ctx.project()
+    vol = proj.volume("Synth")
+    i = len(vol.inlines) // 2
+    return proj, vol, i, int(vol.inlines[i]), np.asarray(vol.inline(int(vol.inlines[i])), float)
+
+
+def exp_aes_hillshade(ctx, path):
+    """40a: the demo horizon as a time-structure map, colour fill lit by the sun (aesthetics.shaded_grid) on the
+    figure export (aesthetics.compose_figure)."""
+    import numpy as np
+    from seismic_tool import aesthetics as AE
+    from seismic_tool.gui.colormaps import lut
+    proj, vol, i, il, data = _aes_section(ctx)
+    z = np.asarray(proj.horizons.get("Top").data["3D:Synth"], float)
+    L = lut("Viridis-style")
+    plain = AE.shaded_grid(z, L, 25.0, 25.0, AE.Sun(on=False))
+    lit = AE.shaded_grid(z, L, 25.0, 25.0, AE.Sun(315, 35, ve=4, strength=0.7), positive_down=True)
+
+    def draw(ax):
+        ax.imshow(np.concatenate([plain, np.zeros((z.shape[0], 3, 4), np.uint8), lit], axis=1), origin="lower",
+                  interpolation="nearest")
+        ax.set_axis_off()
+    AE.compose_figure(path, draw=draw, template={"title": "Top - time structure: plain (left) / hillshaded (right)",
+                                                  "subtitle": "Sun az 315, el 35, VE 4, blend 70 %",
+                                                  "project": "demo", "dpi": 80, "scale_bar": False})
+    return [(0.27, 0.5, "Plain colour fill"), (0.72, 0.5, "Same map lit by the sun (hillshade)"),
+            (0.5, 0.94, "Title block")], "the figure export (Export section figure / compose_figure) with the 40a " \
+        "hillshade on the demo horizon"
+
+
+def exp_aes_corender(ctx, path):
+    import numpy as np
+    from seismic_tool import aesthetics as AE
+    from seismic_tool import attributes as A
+    from seismic_tool import blend as B
+    from seismic_tool import colortables as CT
+    from seismic_tool.gui.colormaps import lut
+    proj, vol, i, il, data = _aes_section(ctx)
+    t = CT.get("Seismic (red-white-blue)")
+    lo, hi = t.levels(data)
+    base = B.lut_rgba(data.T, t.lut(), lo, hi)
+    env = np.asarray(A.section_attribute(vol, "Envelope", "Inline", il), float)
+    if env.shape != data.T.shape:
+        env = env.T
+    co = AE.corender(base, env, lut("Grey"), "transparency", 0.8, invert_alpha=True)
+
+    def draw(ax):
+        ax.imshow(np.concatenate([base, np.zeros((base.shape[0], 4, 4), np.uint8), co], axis=1), aspect="auto",
+                  interpolation="nearest")
+        ax.set_axis_off()
+    AE.compose_figure(path, draw=draw, template={"title": f"Inline {il}: amplitude (left) / envelope co-rendered "
+                                                 "(right, transparency by value)", "project": "demo", "dpi": 80,
+                                                 "scale_bar": False})
+    return [(0.27, 0.5, "Amplitude, red-white-blue"), (0.72, 0.5, "Envelope over it, low values transparent")], \
+        "View > Co-render ... (aesthetics.corender) on the demo inline, shown with the figure export"
+
+
+def _aes_theme(ctx, path, theme):
+    import numpy as np
+    from seismic_tool import aesthetics as AE
+    from seismic_tool import glow as G
+    from seismic_tool.gui.colormaps import lut
+    proj, vol, i, il, data = _aes_section(ctx)
+    curves = []
+    for name, col in (("Top", (255, 220, 0)), ("Deep", (0, 230, 90))):
+        h = proj.horizons.get(name)
+        if h is not None and h.data.get("3D:Synth") is not None:
+            curves.append({"x": np.asarray(vol.xlines, float), "y": np.asarray(h.data["3D:Synth"], float)[i],
+                           "colour": col, "width": 2, "kind": "horizon", "name": name})
+    AE.compose_figure(path, draw=lambda ax: G.draw_section(ax, data, vol.xlines, vol.times, curves,
+                                                           lut("Seismic (red-white-blue)"), 99.0, G.GlowSettings(),
+                                                           True, 80),
+                      template={"title": f"Inline {il} - {theme} theme", "subtitle": "File > Export section figure",
+                                "project": "demo", "author": "Chris", "dpi": 80, "theme": theme},
+                      legend=[(c["name"], c["colour"]) for c in curves],
+                      colourbar=(lut("Seismic (red-white-blue)"), -1, 1, "amplitude (relative)"), x_extent=2500.0)
+    return [(0.45, 0.5, "Section with glowing horizons"), (0.5, 0.94, "Title block (title, project, author, date)"),
+            (0.12, 0.86, "Scale bar"), (0.88, 0.45, "Colour bar + legend")], \
+        "File > Export section figure (the code behind it) on the demo inline, " + theme + " theme"
+
+
+def exp_aes_dark(ctx, path):
+    return _aes_theme(ctx, path, "dark")
+
+
+def exp_aes_light(ctx, path):
+    return _aes_theme(ctx, path, "light")
+
+
+def exp_aes_wc(ctx, path):
+    from well_correlation.export import export_section
+    from well_correlation.project import Project
+    p = Project.open(ctx.nz_project())
+    p.display.update(gr_fill="gradient", patterns=True, crossover=True)
+    wells = p.section_wells()[:4] if hasattr(p, "section_wells") else list(p.wells)[:4]
+    export_section(p, wells, path)
+    return [(0.08, 0.45, "Lithology column with patterns"), (0.3, 0.5, "GR gradient fill (sand yellow -> shale)"),
+            (0.5, 0.3, "Neutron-density crossover shading")], \
+        "the Well Correlation Tool's section export with View > Track style turned on (bundled NZ wells)"
+
+
+EXPORTS = {"aes_hillshade": exp_aes_hillshade, "aes_corender": exp_aes_corender, "aes_dark": exp_aes_dark,
+           "aes_light": exp_aes_light, "aes_wc": exp_aes_wc, "glow_off": exp_glow_off, "glow_on": exp_glow_on, "glow_halo": exp_glow_halo, "view3d": exp_view3d, "fix_after": exp_view3d, "livemap": exp_livemap, "horizon_map": exp_horizon_map,
            "seis_section": exp_seis_section, "wc_section": exp_wc_section}
 
 
@@ -471,6 +575,9 @@ TITLES = {
     "basin": "Basin model dialog", "inversion": "Seismic inversion dialog", "analytics": "Analytics window",
     "dashboard": "Dashboard window", "glow_off": "Before: horizons and a fault without glow",
     "glow_on": "After: Glow mode", "glow_halo": "After: Halo mode",
+    "aes_hillshade": "Hillshaded horizon map", "aes_corender": "Co-rendered envelope over amplitude",
+    "aes_dark": "Exported figure, dark theme", "aes_light": "Exported figure, light theme",
+    "aes_wc": "Styled correlation panel",
 }
 
 
