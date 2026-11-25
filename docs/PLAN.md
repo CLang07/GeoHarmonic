@@ -782,5 +782,42 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Run end: HANDOFF + WHATS_NEW "3D module" section with step-by-step Windows instructions (open the 3D window, load
    F3, add horizons and wells, build the grid).
 
+38. **PC test fixes + illustrated tutorial** - status: todo (added 2026-11-25 after the first install on Chris's PC; HIGHEST PRIORITY open item)
+   First install on Chris's Windows PC (25 Nov 2026, Install GeoHarmonic.bat; Anaconda Python 3.11.3, per-tool .venv,
+   PySide6 6.5.3, pyqtgraph 0.13.7, numpy 2.4.6): Well Correlation self-test PASSED + GUI test (real Qt offscreen)
+   PASSED (218 checks, 0 failures); Seismic self-test PASSED (~1,000 checks) but GUI test FAILED; Mistie self-test
+   PASSED. Fix both problems below, then write an illustrated tutorial.
+   38a. 3D Viewer crash (blocker). Seismic GUI test stopped in test_scene3d.run_gui -> cv.paintGL() -> gui/view3d.py
+        paintGL `f.glClearColor(...)`: AttributeError 'QOpenGLShaderProgram' object has no attribute 'glClearColor'.
+        Cause: initializeGL caches `self.f = self.context().functions()`; that wrapper is not owned by Python and its
+        pointer is reused by the shader program created next. Fix: never cache it - fetch `self.context().functions()`
+        in every initializeGL / paintGL / resizeGL (or own a QOpenGLFunctions); audit every other cached Qt/GL handle
+        in view3d.py and other OpenGL code. Regression test under real Qt offscreen (create, initializeGL, paintGL x2,
+        resize, paintGL; skip cleanly without a GL context and exercise the software fallback). guitest_runner /
+        selftest.run_gui: an exception in one test module is recorded as FAIL with traceback and the rest still run.
+   38b. NumPy 2 vs PySide6 6.5.3 (shiboken6 6.5.3 built for NumPy 1.x warns at every start): pin `"numpy<2"` for both
+        Qt tools in Install GeoHarmonic.bat (and any requirements file) on every run so existing .venvs downgrade;
+        check the code uses no numpy-2-only API and works on numpy 1.26.
+   38c. Offscreen noise "QFontDatabase: Cannot find font directory": set QT_QPA_FONTDIR to C:\Windows\Fonts on Windows
+        in guitest_runner.
+   38d. Illustrated tutorial: docs/TUTORIAL.html (self-contained, images embedded) + docs/TUTORIAL.md with images in
+        docs/tutorial/. Reader: Chris (Kingdom / Petrel / HRS / PaleoScan user, novice programmer): click-by-click
+        steps, exact menu names, shortcuts and file names. (1) Install + update (Update_GeoHarmonic.bat on the
+        Desktop, Install GeoHarmonic.bat, Run all tests.bat, Set up F3 project.bat, where results / logs are).
+        (2) One chapter per tool / module in working order (Well Correlation + petrophysics, Mistie, Seismic viewer +
+        picking + autotracking, RGT / Wheeler, well tie, velocity + DDC + velocity volume, map hub + Live Map + bus,
+        basin model, inversion (+ resolution / AVO), analytics + dashboard, automated fault mapping, 3D Viewer, 3D
+        interpretation, framework + 3D grid, properties + volumetrics, prospects / migration / spacing): what it is
+        for (vs Kingdom / Petrel), HOW IT LOOKS (real screenshots captured by the build from the actual windows, with
+        numbered callouts + legend - never mock-ups; if a window cannot be rendered here, say so in the caption), HOW
+        IT WORKS (numbered steps), RESULTS (screenshot + the numbers the tests verify), known limits, troubleshooting.
+        (3) "Fixes in this release": the PC results table, each bug in plain words, the change, before / after, how
+        to confirm (Update_GeoHarmonic.bat, then Install GeoHarmonic.bat -> "ALL GOOD"). PNGs <= 1400 px wide, HTML
+        < ~25 MB. START HERE.txt: "Open docs\TUTORIAL.html in your web browser"; installer creates desktop shortcut
+        "GeoHarmonic - Tutorial".
+   38e. Tests + upkeep: regression tests for a-c; dev/build_tutorial.py regenerates every screenshot and both tutorial
+        files in one command (CLAUDE.md rule: re-run it at the end of any later run that changes a window, and add a
+        chapter for every new module); WHATS_NEW section with a short "test this first".
+
 Later (Chris back): run `dev/bench.py --gb 5..20` on the PC and fix what it shows (overview volume only if zoomed-out display is slow); Maui 3D subset cut (`--subset in.sgy out.sgy --il a b --xl c d --tmax`) from the 4.1 GB
 MAUI-3D PR2301 T-RMIG SEG-Y; mistie integration with the 2D lines; Tui-1/Amokura-1 wells.
