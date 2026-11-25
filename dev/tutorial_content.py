@@ -546,6 +546,41 @@ is 1 pass, edge protection on, a strength slider, and the difference panel is al
         trouble=["*Difference shows reflectors*: strength 50-70 %, 1 pass, guard 0.6 with `skip`, or a protect zone.",
                  "*Preview is slow*: the preview reads +/-12 inlines around the line; use a smaller SOF window."],
     ),
+    # ------------------------------------------------------------------------------------------------ survey blend
+    dict(
+        id="surveyblend", title="14e. Survey horizon and grid blending (overlapping surveys)",
+        purpose="""\
+Two unmerged surveys that overlap never tie perfectly, even after the mistie correction (shift / phase / amplitude)
+and depth conversion with each survey's velocities. A priority cut leaves a step at the seam; a fixed-width feather
+smears geology. This blends only the RESIDUAL misfit with an adaptive width: width = |residual| / the slope you
+allow (e.g. 2 m/km: a 4 m misfit gets 2 km, a 20 m misfit 10 km). Faults are barriers, so throw is kept, and well
+tops are re-tied exactly afterwards.""",
+        shots=["surveyblend"],
+        steps=[
+            "Bulk-tie the surveys first (**Interpret > Mistie analysis**), and set up the velocity model "
+            "(**Interpret > Velocity model + depth conversion**) if you blend in depth.",
+            "**Interpret > Survey horizon blending (adaptive seam, overlapping surveys)...**: choose the *Horizon*, "
+            "*Survey A (priority)* and *Survey B*, *Domain* (Depth via the velocity model, or Time).",
+            "*Method*: **Hybrid** (default: residual surface into survey B, then a narrow feather), *Residual surface*, "
+            "*Feather*, or *Priority cut* (no blending). *Allowed added slope* (default 2) in m/km, ft/mile or ms/km; "
+            "*Min / Max width* and *Edge trim* (outer traces dropped) under Advanced.",
+            "Tick *Faults are barriers* and *Re-tie well tops* (uses the WellTable column `Top <horizon>`).",
+            "**Preview**; *Show*: merged grid, residual before, weight, width, added slope, correction; untick "
+            "*Show blended* to compare with the priority cut. The readout says e.g. *Blend width 0.8-6.2 km, overlap "
+            "fully used on 87 % of seam* - wide = the surveys disagree there (an interpretation flag).",
+            "**Export...**: merged grid + QC maps as ZMAP+ files; the merged grid, width and added-slope maps are "
+            "added to the map hub (Live Map) layers.",
+        ],
+        results="The picture is the build's synthetic test case. The tests check:",
+        results_re=[r"^PASS 42[a-n]"],
+        limits=["Blends two surveys at a time (merge the result with the next survey).",
+                "Depth mode uses one velocity model for both surveys (per-survey velocities: next version); it is "
+                "not yet a step inside the depth-conversion dialog.",
+                "Fault barriers come from the fault sticks' top points (one trace per fault)."],
+        trouble=["*Width at the maximum everywhere*: the surveys still differ a lot - check the mistie tie first.",
+                 "*'gap' in the readout*: part of the seam has no overlap - that stretch is interpolation, not "
+                 "blending."],
+    ),
     # ------------------------------------------------------------------------------------------------ 3D interp
     dict(
         id="interp3d", title="15. 3D interpretation (picking, tracking, volume rendering, geobodies)",

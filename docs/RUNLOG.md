@@ -558,11 +558,55 @@ those additions were skipped). It is finished; no todo / partial items are left.
 - Next: no PLAN items left - add new ones (candidates: follow-ups on items 31-38, result screenshots per workflow,
   a guided F3 walk-through chapter).
 
-## Run 8 - 2026-11-25 (scheduled, started 20:21 UTC) - IN PROGRESS
-- Added PLAN items 39 Glow / Halo, 40 Aesthetics, 41 Seismic Conditioning, 42 Survey horizon blending. Building 39 first.
-- 39 Glow / Halo DONE (Seismic v0.62.0) - selftest PASSED (1083), guitest (Qt mock) PASSED, WC selftest + guitest
-  PASSED, Mistie selftest PASSED. Next: 40 Aesthetics.
-- 40 Aesthetics DONE (Seismic v0.63.0, Well Correlation v0.14.0) - Seismic selftest PASSED (1150), guitest PASSED,
-  WC selftest + guitest PASSED, Mistie PASSED. Next: 41 Seismic Conditioning.
-- 41 Seismic Conditioning DONE (Seismic v0.64.0) - Seismic selftest PASSED (1185), guitest PASSED (442).
-  Next: 42 Survey horizon blending.
+## 2026-11-25 (scheduled run 8, 20:21-21:30 UTC) - items 39, 40, 41, 42: ALL PLAN ITEMS DONE
+All open PLAN items are done (39 Glow / Halo, 40 Aesthetics, 41 Seismic Conditioning, 42 Survey blending - added to
+PLAN.md at the start of this run from your 25 Nov requests). Seismic v0.65.0, Well Correlation v0.14.0.
+- 39 Glow / Halo: G (Display > Glow on/off) toggles a glow under horizons, faults, wells on the section; Display > Glow
+  settings (Glow / Halo / Off, width, intensity, 1-4 falloff layers, colour, halo auto black / white against the
+  colour table, active-only, hover); right-click a horizon / fault > Glow > On / Off / Use global / Colour; the
+  active / selected object glows stronger in every window via the map bus (new 'display' topic); Live Map glow on
+  selected wells, section lines, red glow on mistie hotspots; 3D Viewer two-pass glow (outlines, shell on the active
+  surface, fatter well tubes, plane outlines; driver without wide lines -> notice, no crash); File > Export section
+  image (with / without glow), 3D screenshot asks too; > 2,000 objects -> active-only + status note.
+- 40 Aesthetics: colour-table library (Kingdom-style, high contrast, perceptual viridis / cividis / magma-style built
+  in OKLab, CVD-safe marked) + View > Colour bar editor (drag points, save to project, JSON / CSV); Live Map Sun...
+  (sun dial hillshade, same sun lights 3D horizons); View > Co-render (alpha / multiply / transparency) also on 3D
+  planes and map grids; View > Theme Dark / Light + Anti-aliasing (dark is the default at start-up); 3D Display...
+  (EDL + fog in screenshots / software view, fog in OpenGL, semi-transparent faults with edges, fly-to speed);
+  Live Map Zoom to selection (eased); Well tool View > Track style (GR gradient fill, lithology patterns, pay flags,
+  N-D crossover, templates); File > Export section figure (title block, scale bar, colour bar, legend; 16:9 / Letter
+  / A4 / poster); automatic distinct horizon / fault colours (+ ICS colours, lock, reassign).
+- 41 Seismic Conditioning: Seismic > Conditioning - spike removal, Ormsby / Butterworth bandpass, FX decon, GST dips +
+  planarity, structure-oriented filter (dip-steered median / alpha-trimmed / mean, planarity guard, Kuwahara edge
+  protection, 1-3 passes, strength), footprint notches, presets (Interpretation / Light for inversion / Fault-
+  attribute input / yours), preview original | conditioned | difference + RMS removed % + signal-leakage warning,
+  protect zones, full-volume run in bricks (new volume + history, difference volume, SEG-Y, Cancel); the inversion
+  window prefers Light volumes and warns on SOF volumes. Defaults set from your F3 inline-425 test (1 pass,
+  protection on).
+- 42 Survey blending: Interpret > Survey horizon blending - adaptive seam blend of one horizon from two overlapping
+  surveys (width = |residual| / allowed slope, hybrid / residual / feather / cut, faults as barriers, well tops
+  re-tied, gap flags, QC maps + readout, ZMAP+ / map-hub export).
+- Files: new seismic_tool glow.py, colortables.py, aesthetics.py, conditioning.py, surveyblend.py, gui/glow.py,
+  gui/theme.py, gui/sundial.py, gui/colorbar_editor.py, gui/conditioning_dialog.py, gui/surveyblend_dialog.py, tests
+  test_glow / test_aesthetics / test_conditioning / test_surveyblend; well_correlation trackstyle.py +
+  test_trackstyle.py; changed main_window, section_panel, live_map, view3d, scene3d, mapbus, maplayers,
+  inversion_dialog, horizon_dock, fault_dock, gui/colormaps, __main__; WC section.py, lithology.py,
+  gui/main_window.py, gui/section_view.py; docs PLAN / HANDOFF / WHATS_NEW / TUTORIAL (chapters 14b-14e, 9 new
+  pictures), dev/build_tutorial.py + tutorial_content.py. Installer unchanged.
+- Tests (here, Qt mock - no real Qt / GPU): Seismic selftest PASSED (1206 checks), Seismic guitest PASSED (447), Well
+  Correlation selftest PASSED + guitest PASSED, Mistie selftest PASSED.
+- Known limitations: nothing ran on real Qt / OpenGL here - the glow pass, themes, DPI and the new dialogs need your
+  PC; EDL / shadows only in screenshots / the software view; conditioning SEG-Y uses standard GeoHarmonic headers,
+  no anisotropic-diffusion engine, protect zones are IL / XL boxes; blending uses one velocity model for both
+  surveys and is not yet a step of the depth-conversion dialog; tutorial pictures for these items use the demo cube /
+  synthetic test cases (no F3 here). Follow-ups are listed per item in PLAN.md.
+- Test this first (Windows):
+  1. Double-click Update_GeoHarmonic.bat (no need to rerun Install GeoHarmonic.bat - the installer did not change;
+     run it only if you want the tutorial rebuilt with real screenshots). Then Run all tests.bat -> ALL GOOD.
+  2. Start the Seismic tool: it now opens in the dark theme; View > Theme > Light and back.
+  3. F3 inline with horizons + Fault A: press G (glow off / on), Display > Glow settings > Halo; picking with P / F
+     still works on glowing lines.
+  4. View > 3D Viewer: glowing outlines; status bar must not say "Glow off: ..." (if it does, send Claude the text).
+  5. Seismic > Conditioning on F3 inline 425 > Preview: compare the difference panel with your prototype.
+  6. File > Export section figure > 16:9 slide > PDF.
+- Next: no PLAN items left - add new ones to resume (candidates: the follow-ups listed in items 39-42).

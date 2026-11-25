@@ -548,7 +548,47 @@ def exp_conditioning(ctx, path):
         "the Conditioning preview computation (conditioning.apply_chain) on the demo cube, shown with the figure export"
 
 
-EXPORTS = {"conditioning": exp_conditioning, "aes_hillshade": exp_aes_hillshade, "aes_corender": exp_aes_corender, "aes_dark": exp_aes_dark,
+def exp_surveyblend(ctx, path):
+    """42: the blend of the synthetic two-survey test case (surveyblend.blend) - priority cut vs hybrid blend,
+    width and added-slope QC maps - on the figure export."""
+    import numpy as np
+    from seismic_tool import aesthetics as AE
+    from seismic_tool import surveyblend as SB
+    from seismic_tool.test_surveyblend import scene
+    g, X, Y, T, za, zb, rtrue, faults, fx = scene()
+    r = SB.blend(g, [SB.Survey("A", za, 1), SB.Survey("B", zb, 2)], slope=2.0, method="hybrid", w_min=500.0,
+                 w_max=12000.0, faults=faults)
+    import matplotlib.pyplot as plt
+
+    def draw(ax):
+        ax.set_axis_off()
+        fig = ax.figure
+        bx = ax.get_position()
+        panels = [("Priority cut (step at the seam)", r.cut - T, "RdBu_r", (-20, 20)),
+                  ("Hybrid blend (2 m/km)", r.z - T, "RdBu_r", (-20, 20)),
+                  ("Blend width (m)", r.qc["width"], "viridis", None),
+                  ("Added slope across the seam (m/km)", r.qc["added_slope"] * 1000, "magma", (0, 2.2))]
+        w = bx.width / 4
+        for k, (title, arr, cm, lim) in enumerate(panels):
+            a = fig.add_axes([bx.x0 + k * w + 0.01, bx.y0, w - 0.02, bx.height])
+            im = a.imshow(arr, origin="lower", cmap=cm, vmin=None if lim is None else lim[0],
+                          vmax=None if lim is None else lim[1], extent=[0, 5, 0, 12])
+            a.set_title(title, fontsize=9)
+            a.set_xlabel("km", fontsize=8)
+            a.tick_params(labelsize=7)
+            a.axvline(fx / 1000, color="k", lw=0.8, ls="--")
+            fig.colorbar(im, ax=a, fraction=0.05)
+    AE.compose_figure(path, draw=draw, template={
+        "title": "Survey blending: surveys A (south, priority) and B (north), 1 km overlap, fault at 3.5 km",
+        "subtitle": "Maps show (merged - truth): the cut leaves a 4-18 m step; the blend spreads it at <= 2 m/km. "
+                    + r.readout, "project": "test case", "dpi": 80, "scale_bar": False})
+    return [(0.15, 0.45, "Priority cut: step at the seam"), (0.38, 0.45, "Blended: misfit spread gently"),
+            (0.62, 0.45, "Width: wide where the surveys disagree"), (0.85, 0.45, "Added slope stays <= 2 m/km")], \
+        "Interpret > Survey horizon blending (surveyblend.blend) on the synthetic test case of the build (two surveys, " \
+        "residual tilt + bump, a fault across the seam)"
+
+
+EXPORTS = {"surveyblend": exp_surveyblend, "conditioning": exp_conditioning, "aes_hillshade": exp_aes_hillshade, "aes_corender": exp_aes_corender, "aes_dark": exp_aes_dark,
            "aes_light": exp_aes_light, "aes_wc": exp_aes_wc, "glow_off": exp_glow_off, "glow_on": exp_glow_on, "glow_halo": exp_glow_halo, "view3d": exp_view3d, "fix_after": exp_view3d, "livemap": exp_livemap, "horizon_map": exp_horizon_map,
            "seis_section": exp_seis_section, "wc_section": exp_wc_section}
 
@@ -615,6 +655,7 @@ TITLES = {
     "aes_dark": "Exported figure, dark theme", "aes_light": "Exported figure, light theme",
     "aes_wc": "Styled correlation panel",
     "conditioning": "Conditioning preview: original | conditioned | difference",
+    "surveyblend": "Survey blending: cut vs blend, width and added-slope maps",
 }
 
 

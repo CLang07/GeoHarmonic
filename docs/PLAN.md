@@ -980,7 +980,7 @@ is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built ag
         difference panel, a protect polygon over the 1200-1350 ms faulted interval, with before/after/difference
         screenshots.
 
-42. **Survey horizon and grid blending** - status: todo
+42. **Survey horizon and grid blending** - status: done (run 8, 2026-11-25, Seismic v0.65.0: `surveyblend.py`, `gui/surveyblend_dialog.py` (Interpret > Survey horizon blending), test_surveyblend.py. Follow-ups: per-survey velocity models in depth mode (one model now) and the blend as the last step of the depth-conversion dialog; two surveys per run; added-slope guarantee is across the seam (the along-seam part follows the residual itself, shown in its own map); fault barriers from stick top points; live re-blend on a moved top is `Blender.update` (not yet wired to the 17c DDC watcher); threaded run in the dialog (runs in the GUI thread now - fine for map-size grids))
    Adaptive seam blend for unmerged overlapping surveys. Logically after item 17 / 37 (depth horizons per survey);
    built after item 41. Merging happens in depth (each survey depth-converted with its own velocities, then blended);
    time-domain blending stays available. The mistie tool (item 10, `mistie.py` shift/phase/amplitude,

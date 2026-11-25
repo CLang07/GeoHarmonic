@@ -762,6 +762,15 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
 - GUI `gui/conditioning_dialog.py` (Seismic > Conditioning), protect zones in display['conditioning_protect'] and
   on the bus (data 'polygons', style 'protect'); inversion_dialog.sof_warning.
 
+## Survey blending (PLAN 42)
+- `surveyblend.py`: MasterGrid (covering / resample via inverse il-xl affine / index), geodesic (8-neighbour chamfer
+  distance + nearest-seed label, barrier cells never crossed), erode / edge (map border is not an edge),
+  rasterize_polylines + fault_blocks, blend(grid, [Survey A (priority 1), Survey B], slope, unit, method, w_min,
+  w_max, faults, wells) -> BlendResult(z, cut, qc, readout, width, residual); tie_wells (Wendland kernel, every well a
+  centre -> exact under bilinear sampling); correct_points; Blender (per-horizon update). Added slope is measured
+  ACROSS the seam (projected on the distance gradient) - the along-seam part is the residual's own variation.
+- GUI `gui/surveyblend_dialog.py` (Interpret > Survey horizon blending); depth via section.depth_model().depth_of_time.
+
 ## Illustrated tutorial (PLAN 38d/e)
 - `python3 dev/build_tutorial.py` -> docs/TUTORIAL.md, docs/TUTORIAL.html (self-contained, base64 images),
   docs/tutorial/*.png. Text: `dev/tutorial_content.py` (one dict per chapter: purpose, shots, steps, results_re =

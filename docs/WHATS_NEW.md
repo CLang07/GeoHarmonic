@@ -1007,3 +1007,20 @@ Fixes from your first install (25 Nov): the Seismic GUI test FAILED at the 3D Vi
 2. Add zone: your faulted interval, 1200-1350 ms, strength 0 > Preview: no change inside the box.
 3. Run full volume (tick difference volume): note the time on your PC; Cancel once to check it cleans up.
 4. Interpret > Seismic inversion: the volume box should pick the Light volume and warn on the SOF one.
+
+## Survey horizon and grid blending (PLAN item 42, Seismic v0.65.0 - run 8, 25 Nov 2026)
+- **Interpret > Survey horizon blending (adaptive seam, overlapping surveys)...** - merges one horizon picked on two
+  overlapping surveys after the mistie tie: resample to a common master grid, edge trim, robust (median) residual
+  along the seam, adaptive width = |residual| / allowed slope (m/km, ft/mile or ms/km, min / max clamp), methods
+  priority cut / feather / residual surface / hybrid (default), width > overlap -> residual surface into survey B,
+  no-overlap stretches flagged as gaps, faults as barriers (geodesic distances per fault block - throw kept), well
+  tops re-tied exactly (compact-kernel correction), dynamic update of one horizon (`Blender.update`), picks can be
+  corrected before gridding (`correct_points`).
+- QC: residual before / after, weight, width, added slope across the seam (proves the tolerance), total added
+  slope, seam gradient, residual histogram, well-tie table, readout; export ZMAP+ + map-hub layers + bus event.
+
+### Test this first (blending)
+1. Two overlapping surveys with the same horizon picked: Interpret > Survey horizon blending > Preview with
+   Priority cut, then Hybrid 2 m/km - the step at the seam should disappear without a visible ramp.
+2. Show > Width: wide stretches = where the surveys disagree most (worth a look at the picks).
+3. Export > load the merged ZMAP+ in Kingdom / Petrel and compare with the priority cut.

@@ -308,6 +308,8 @@ class MainWindow(QtWidgets.QMainWindow):
                   lambda *_: self.fault_mapping())
         self._act(m, "&Velocity model + depth conversion...", self.velocity_model)
         self._act(m, "Velocity &volume depth conversion (advanced)...", lambda *_: self.velocity_volume())
+        self._act(m, "Survey horizon &blending (adaptive seam, overlapping surveys)...",
+                  lambda *_: self.survey_blend())
         self._act(m, "Structural framework + 3D &grid (GRDECL)...", lambda *_: self.framework())
         self._act(m, "Well &prognosis / geosteering...", self.prognosis)
         self._act(m, "&Basin model (burial, thermal, maturity, Wheeler)...", self.basin_model)
@@ -1484,6 +1486,15 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg = InversionDialog(self.project, self, self.run_job, new_volumes, vol)
         dlg.show()
         self._inversion_dialog = dlg
+        return dlg
+
+    def survey_blend(self):
+        """Interpret > Survey horizon blending (PLAN 42): merge one horizon of two overlapping surveys."""
+        from .surveyblend_dialog import SurveyBlendDialog
+        dlg = SurveyBlendDialog(self.project, self, self.run_job, self.mapbus, self.basemap.stack,
+                                depth_model_fn=lambda: self.section.depth_model())
+        dlg.show()
+        self._blend_dialog = dlg
         return dlg
 
     def conditioning(self):
