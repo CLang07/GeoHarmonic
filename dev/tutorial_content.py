@@ -532,7 +532,10 @@ is 1 pass, edge protection on, a strength slider, and the difference panel is al
             "Runs in the background (progress, time left, Cancel in the status bar); the new volume appears in the "
             "seismic window, 3D Viewer, attributes, tracking and fault mapping.",
         ],
-        results="The picture is the preview computation on the demo cube. The tests (synthetic cube with dipping "
+        results="The picture is the preview computation on the noise-free demo cube - a case for the warning: there "
+                "is no noise to remove, the demo reflectors sit on whole samples (staircase), and the difference "
+                "panel shows reflector energy, so the preview says *too aggressive* (RMS removed > 35 %). On real, "
+                "noisy data the difference should look like random noise. The tests (synthetic cube with dipping "
                 "reflectors, noise, a fault, footprint stripes and spikes) check:",
         results_re=[r"^PASS 41[a-n]"],
         limits=["SEG-Y export writes GeoHarmonic's standard headers (inline / crossline / X / Y), not a copy of the "

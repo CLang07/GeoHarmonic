@@ -6,7 +6,7 @@ Steps (each a function on a block (n_il, n_xl, ns) in physical units, dt in ms):
                 spectral balancing (whitening) inside the band, off by default
     fxdecon     f-x Wiener prediction in sliding, overlapping windows (time and space), along crosslines, inlines or
                 both; filter length, frequency range, mix-back %
-    sof         structure-oriented filter: dip-steered neighbours (gradient-structure-tensor dips, linear
+    sof         structure-oriented filter: dip-steered neighbours (gradient-structure-tensor dips, cubic
                 interpolation in time) in an IL x XL window; median / alpha-trimmed mean / mean; edge protection =
                 planarity guard (shrink or skip where confidence is low) + Kuwahara sub-window (lowest variance);
                 1-3 passes with dips re-estimated; strength 0-100 %
@@ -268,18 +268,24 @@ def dip_attributes(pi, pj, dt_ms, il_spacing=25.0, xl_spacing=25.0):
     return np.degrees(np.arctan2(gj, gi)) % 360.0, np.hypot(gi, gj)
 
 
-def _shifted(a, di, dj, shift):
-    """Neighbour trace (i+di, j+dj) (edge-replicated) sampled at t + shift (samples, linear interpolation)."""
+def _shifted(a, di, dj, pi, pj):
+    """Neighbour trace (i+di, j+dj) sampled along the dip: t + pi * di + pj * dj (samples, cubic interpolation).
+    At the survey edge the neighbour index is clipped and so is its offset (the replicated edge trace is shifted by
+    its true distance - otherwise edge traces get smeared)."""
     ni, nj, ns = a.shape
     ii = np.clip(np.arange(ni) + di, 0, ni - 1)
     jj = np.clip(np.arange(nj) + dj, 0, nj - 1)
     nb = a[ii][:, jj]
+    shift = pi * (ii - np.arange(ni))[:, None, None] + pj * (jj - np.arange(nj))[None, :, None]
     tk = np.arange(ns)[None, None, :] + shift
     tk = np.clip(tk, 0, ns - 1)
-    k0 = np.floor(tk).astype(np.int64)
-    k1 = np.minimum(k0 + 1, ns - 1)
-    w = tk - k0
-    return np.take_along_axis(nb, k0, 2) * (1 - w) + np.take_along_axis(nb, k1, 2) * w
+    k1 = np.floor(tk).astype(np.int64)
+    u = tk - k1
+    # Keys cubic convolution (a = -0.5): linear interpolation low-passes a 4 ms wavelet by 5-10 % per shift and
+    # would show up as signal in the difference panel; cubic keeps clean dipping events (tested)
+    take = lambda k: np.take_along_axis(nb, np.clip(k, 0, ns - 1), 2)
+    p0, p1, p2, p3 = take(k1 - 1), take(k1), take(k1 + 1), take(k1 + 2)
+    return p1 + 0.5 * u * (p2 - p0 + u * (2 * p0 - 5 * p1 + 4 * p2 - p3 + u * (3 * (p1 - p2) + p3 - p0)))
 
 
 def _reduce(stack, how, alpha):
@@ -318,7 +324,7 @@ def sof_pass(a, pi, pj, plan, p, max_mb=None):
 def _sof_pass(a, pi, pj, plan, p):
     hi, hj = int(p["half_il"]), int(p["half_xl"])
     offs = [(di, dj) for di in range(-hi, hi + 1) for dj in range(-hj, hj + 1)]
-    stack = np.stack([_shifted(a, di, dj, pi * di + pj * dj) for di, dj in offs]).astype(np.float32)
+    stack = np.stack([_shifted(a, di, dj, pi, pj) for di, dj in offs]).astype(np.float32)
     how, alpha = p.get("filter", "median"), float(p.get("alpha", 0.2))
     if p.get("kuwahara", True):
         # four overlapping quadrant sub-windows (each holds the centre): keep the one with the lowest variance
@@ -566,7 +572,11 @@ def qc_metrics(original, conditioned, dt_ms=4.0, rms_warn=35.0, leak_warn=0.35):
     rms_o = float(np.sqrt(np.mean(o * o))) or 1e-30
     removed = 100.0 * float(np.sqrt(np.mean(d * d))) / rms_o
     half = (1, 1, 10) if o.ndim == 3 else (2, 10)
-    leak = float(np.mean(np.abs(local_correlation(d, c, half))))
+    # in-phase AND quadrature: a filter that shifts / reshapes events leaves a difference that looks like the time
+    # derivative of the reflectors (90 deg out of phase) - plain correlation would miss it
+    r1 = local_correlation(d, c, half)
+    r2 = local_correlation(d, np.gradient(c, axis=-1), half)
+    leak = float(np.mean(np.sqrt(r1 * r1 + r2 * r2)))
     fo, ao = amplitude_spectrum(o, dt_ms)
     _, ac = amplitude_spectrum(c, dt_ms)
     warns = []
