@@ -921,7 +921,7 @@ is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built ag
    40l. Docs: WHATS_NEW, test checklist, tutorial chapter with before/after screenshots on F3 (hillshaded horizon,
         coherence co-render, dark vs light theme, styled correlation panel, exported figure).
 
-41. **Seismic Conditioning workflow** - status: todo
+41. **Seismic Conditioning workflow** - status: done (run 8, 2026-11-25, Seismic v0.64.0: `conditioning.py`, `gui/conditioning_dialog.py` (Seismic > Conditioning), inversion SOF warning, test_conditioning.py. Follow-ups: first F3 run on the PC (time, RMS removed vs the 47 % prototype); SEG-Y export uses the standard GeoHarmonic headers, not a copy of the original trace headers; anisotropic-diffusion SOF engine not built (41h); protect zones entered as IL / XL boxes + time gate (core takes any polygon; drawing on the Live Map + showing them in 3D still to do); spike locations not yet drawn on the Live Map (returned by run_volume); multi-core: single process (numpy threads only))
    Full post-stack conditioning (after a structure-oriented filter test on F3). Stack: numpy + PySide6; scipy only if
    importable, numpy fallbacks. Volumes read on demand in bricks (existing volume store / SEG-Y), never loaded whole.
    Test volume F3 (~651 IL x 951 XL x 462 samples). Prototype on F3 inline 425 (dip-steered median, GST dips sigma 1 /

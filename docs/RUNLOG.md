@@ -564,3 +564,5 @@ those additions were skipped). It is finished; no todo / partial items are left.
   PASSED, Mistie selftest PASSED. Next: 40 Aesthetics.
 - 40 Aesthetics DONE (Seismic v0.63.0, Well Correlation v0.14.0) - Seismic selftest PASSED (1150), guitest PASSED,
   WC selftest + guitest PASSED, Mistie PASSED. Next: 41 Seismic Conditioning.
+- 41 Seismic Conditioning DONE (Seismic v0.64.0) - Seismic selftest PASSED (1185), guitest PASSED (442).
+  Next: 42 Survey horizon blending.

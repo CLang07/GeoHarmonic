@@ -501,6 +501,48 @@ title block for slides and reports.""",
         trouble=["*Map looks flat*: Sun... > raise Vertical exaggeration (time maps in ms need 3-10).",
                  "*Theme did not change a window*: close and reopen that window."],
     ),
+    # ------------------------------------------------------------------------------------------------ conditioning
+    dict(
+        id="conditioning", title="14d. Seismic conditioning (spikes, bandpass, FX decon, SOF, footprint)",
+        purpose="""\
+Post-stack conditioning like Petrel's structural smoothing / PaleoScan's SOF / OpendTect's dip-steered median: a
+chain of steps with presets, a live preview with the difference panel, protect zones for geology you must not
+smooth, and a full-volume run in the background that writes a NEW volume (the original is never changed). Your F3
+test (2 passes, +/-2 IL x +/-3 XL) removed ~47 % of the RMS incl. real small faults at 1200-1350 ms - so the default
+is 1 pass, edge protection on, a strength slider, and the difference panel is always shown.""",
+        shots=["conditioning"],
+        steps=[
+            "Seismic tool: open the line you want to judge (e.g. F3 inline 425), then **Seismic > Conditioning (spikes, "
+            "bandpass, FX decon, SOF, footprint)...**.",
+            "*Input volume*: the volume (its conditioning history is shown in brackets). *Preset*: **Interpretation** "
+            "(spike removal > bandpass > FX decon > SOF > footprint), **Light (for inversion)** (spikes > bandpass - "
+            "the inversion window picks these volumes by default and warns on SOF volumes) or **Fault-attribute "
+            "input** (spikes > SOF with strong edge protection).",
+            "Edit the chain: tick steps on / off, **Add** / **Remove** / **Up** / **Down**; select a step to see its "
+            "parameters (JSON) - e.g. SOF `half_il`, `half_xl`, `filter` (median / alpha / mean), `passes`, `guard` "
+            "(planarity threshold), `guard_mode` (shrink / skip), `kuwahara`, `strength` (0-1); bandpass `kind` "
+            "(ormsby / butterworth) and `f` corners; FX decon window, `filter_len`, `fmin` / `fmax`, `mix`; then "
+            "**Apply parameters**. **Save preset...** keeps the chain in the project.",
+            "**Preview**: original | conditioned | difference on one colour scale (zoom one, all follow), spectra "
+            "before / after, *RMS removed %* and *signal leakage*. A warning appears when more than 35 % of the RMS "
+            "is removed or the difference shows reflectors - then lower the strength or add a protect zone.",
+            "**Add zone...**: inline / crossline range + time gate + strength inside (0 = skip) - e.g. over the "
+            "1200-1350 ms small-fault interval. Zones go to the Live Map as polygons.",
+            "**Run full volume...**: name of the new volume; tick *Also write the difference volume* / *Export SEG-Y*. "
+            "Runs in the background (progress, time left, Cancel in the status bar); the new volume appears in the "
+            "seismic window, 3D Viewer, attributes, tracking and fault mapping.",
+        ],
+        results="The picture is the preview computation on the demo cube. The tests (synthetic cube with dipping "
+                "reflectors, noise, a fault, footprint stripes and spikes) check:",
+        results_re=[r"^PASS 41[a-n]"],
+        limits=["SEG-Y export writes GeoHarmonic's standard headers (inline / crossline / X / Y), not a copy of the "
+                "original trace headers.",
+                "Anisotropic diffusion (alternative SOF engine) is not built; AGC is available as a display-only step.",
+                "Protect zones are rectangles in inline / crossline + a time gate (drawn polygons: next version).",
+                "Full F3 run time: expect tens of minutes for SOF on 2 cores (the test cube runs in seconds)."],
+        trouble=["*Difference shows reflectors*: strength 50-70 %, 1 pass, guard 0.6 with `skip`, or a protect zone.",
+                 "*Preview is slow*: the preview reads +/-12 inlines around the line; use a smaller SOF window."],
+    ),
     # ------------------------------------------------------------------------------------------------ 3D interp
     dict(
         id="interp3d", title="15. 3D interpretation (picking, tracking, volume rendering, geobodies)",

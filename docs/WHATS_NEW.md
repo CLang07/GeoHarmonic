@@ -981,3 +981,29 @@ Fixes from your first install (25 Nov): the Seismic GUI test FAILED at the 3D Vi
 4. File > Export section figure > 16:9 slide > PDF: title block, scale bar, colour bar, legend on one page.
 5. Well tool: View > Track style > GR gradient fill + Lithology patterns on the NZ wells.
 6. On your 4K screen at 150 %: text and lines sharp (not blurry), toolbar icons not tiny.
+
+## Seismic Conditioning workflow (PLAN item 41, Seismic v0.64.0 - run 8, 25 Nov 2026)
+- **Seismic > Conditioning (spikes, bandpass, FX decon, SOF, footprint)...** - chain of steps (on / off, add, remove,
+  reorder, parameters), presets *Interpretation*, *Light (for inversion)*, *Fault-attribute input* + your own (saved
+  in the project).
+- Steps (`conditioning.py`, numpy only): spike removal (N x local RMS -> neighbour median, count + locations);
+  zero-phase Ormsby / Butterworth bandpass (+ optional spectral balancing, off); FX deconvolution (f-x Wiener
+  prediction, overlapping windows, inline + crossline, mix-back); dips + planarity from the gradient structure tensor
+  (item 3 code); structure-oriented filter (dip-steered median / alpha-trimmed / mean, planarity guard shrink / skip,
+  Kuwahara edge protection, 1-3 passes, strength 0-100 %); footprint removal (kx-ky notches found on the acquisition
+  axes or user notches, shallow gate); AGC display-only.
+- Defaults follow your F3 inline-425 test: 1 pass, edge protection on, strength blend, difference always shown;
+  warning when > 35 % RMS is removed or the difference shows coherent reflectors (signal-leakage score).
+- Preview on the current inline / crossline / time slice: original | conditioned | difference (one colour scale,
+  linked zoom), spectra before / after, metrics. Protect zones (inline / crossline box + time gate + strength).
+- Full-volume run: bricks with halos (tested: identical to whole-volume processing), bounded memory (the SOF gather
+  is built a few inlines at a time), background job with progress / time left / Cancel; NEW volume with the chain in
+  its history (+ optional difference volume, SEG-Y); announced on the map bus; the inversion window defaults to a
+  Light volume and warns on SOF volumes.
+
+### Test this first (conditioning)
+1. F3 inline 425: Seismic > Conditioning > Interpretation > Preview. Compare the difference panel at 1200-1350 ms
+   and on the salt flank (1500-1800 ms) with your prototype; read RMS removed % (expect well under 47 %).
+2. Add zone: your faulted interval, 1200-1350 ms, strength 0 > Preview: no change inside the box.
+3. Run full volume (tick difference volume): note the time on your PC; Cancel once to check it cleans up.
+4. Interpret > Seismic inversion: the volume box should pick the Light volume and warn on the SOF one.

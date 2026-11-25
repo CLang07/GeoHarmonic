@@ -246,6 +246,9 @@ def run():
         _guarded(check, 'test_glow.run(check, tmp)', lambda: test_glow.run(check, os.path.join(tmp, "glow")))
         from . import test_aesthetics
         _guarded(check, 'test_aesthetics.run(check, tmp)', lambda: test_aesthetics.run(check, os.path.join(tmp, "aes")))
+        from . import test_conditioning
+        _guarded(check, 'test_conditioning.run(check, tmp)', lambda: test_conditioning.run(check, os.path.join(tmp, "cond")))
+        _guarded(check, 'test_conditioning.run_volume_test(check, tmp)', lambda: test_conditioning.run_volume_test(check, os.path.join(tmp, "condvol")))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -364,6 +367,8 @@ def run_gui():
         _guarded(check, 'test_glow.run_gui(check, tmp)', lambda: test_glow.run_gui(check, os.path.join(tmp, "glowgui")))
         from . import test_aesthetics
         _guarded(check, 'test_aesthetics.run_gui(check, tmp)', lambda: test_aesthetics.run_gui(check, os.path.join(tmp, "aesgui")))
+        from . import test_conditioning
+        _guarded(check, 'test_conditioning.run_gui(check, tmp)', lambda: test_conditioning.run_gui(check, os.path.join(tmp, "condgui")))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

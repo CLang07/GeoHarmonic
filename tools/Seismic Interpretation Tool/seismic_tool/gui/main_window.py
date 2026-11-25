@@ -316,6 +316,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act(m, "&Dashboard (wells, laterals coloured by attribute)...", self.dashboard)
         m.addSeparator()
         self._act(m, "&Undo (horizon or fault edit)", self.horizon_dock.undo, "Ctrl+Z")
+        m = mb.addMenu("&Seismic")  # PLAN 41
+        self._act(m, "&Conditioning (spikes, bandpass, FX decon, SOF, footprint)...",
+                  lambda *_: self.conditioning())
         m = mb.addMenu("&View")
         self._act(m, "Live &Map (styled wells, filters, linked table + crossplot)...", lambda *_: self.live_map(),
                   "Ctrl+Shift+M")
@@ -1481,6 +1484,20 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg = InversionDialog(self.project, self, self.run_job, new_volumes, vol)
         dlg.show()
         self._inversion_dialog = dlg
+        return dlg
+
+    def conditioning(self):
+        """Seismic > Conditioning (PLAN 41): chain + presets, preview on the current line, full-volume run."""
+        from .conditioning_dialog import ConditioningDialog
+
+        def new_volume(name):
+            if self.project.path:
+                self.project.save()
+            self._refresh()
+            self.section.refresh_sources()
+        dlg = ConditioningDialog(self.project, self.section, self, self.run_job, new_volume, self.mapbus)
+        dlg.show()
+        self._conditioning_dialog = dlg
         return dlg
 
     def basin_model(self):

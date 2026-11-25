@@ -752,6 +752,16 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
 - Well Correlation `trackstyle.py` (patterns, gradient fill, net / pay, crossover, templates) + SectionLayout
   `style_images`; display keys gr_fill ('gradient'), patterns, pay {show, cutoffs}, crossover.
 
+## Seismic conditioning (PLAN 41)
+- `conditioning.py`: steps on blocks (n_il, n_xl, ns) physical units, dt ms: remove_spikes, bandpass (ormsby /
+  butterworth, whiten), fx_section / fxdecon (spatial windows laid out on the GLOBAL inline axis via il_offset /
+  il_total so bricks == whole volume), dips (rgt.dip.dip_3d_block), sof / sof_pass (chunked gather, SOF_MAX_MB),
+  remove_footprint (global: whole time slices, second pass over sample chunks), agc, protect_weights, chains /
+  presets (display['conditioning_presets']), chain_halo, apply_chain, qc_metrics (leakage = mean |local corr| of
+  difference vs output), run_volume (new store + project volume with 'history'; has_sof / history_text).
+- GUI `gui/conditioning_dialog.py` (Seismic > Conditioning), protect zones in display['conditioning_protect'] and
+  on the bus (data 'polygons', style 'protect'); inversion_dialog.sof_warning.
+
 ## Illustrated tutorial (PLAN 38d/e)
 - `python3 dev/build_tutorial.py` -> docs/TUTORIAL.md, docs/TUTORIAL.html (self-contained, base64 images),
   docs/tutorial/*.png. Text: `dev/tutorial_content.py` (one dict per chapter: purpose, shots, steps, results_re =

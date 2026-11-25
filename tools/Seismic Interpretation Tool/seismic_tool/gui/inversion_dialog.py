@@ -39,6 +39,20 @@ class InversionDialog(QtWidgets.QDialog):
         top.addWidget(QtWidgets.QLabel("Seismic volume"))
         top.addWidget(self.vol_combo, 1)
         lay.addLayout(top)
+        # PLAN 41a: default to a 'Light (for inversion)' conditioned volume; warn on structure-oriented-filtered input
+        self.sof_label = QtWidgets.QLabel("")
+        self.sof_label.setStyleSheet("color: #c06000")
+        lay.addWidget(self.sof_label)
+        try:
+            from .. import conditioning as CND
+            light = [v["name"] for v in project.volumes if CND.history(project, v["name"])
+                     and not CND.has_sof(project, v["name"])]
+            if light:
+                self.vol_combo.setCurrentText(light[-1])
+        except Exception:
+            pass
+        self.vol_combo.currentTextChanged.connect(lambda n: self.sof_warning(n))
+        self.sof_warning(self.vol_combo.currentText())
         tabs = QtWidgets.QTabWidget()
         lay.addWidget(tabs, 1)
         # ---- LFM
@@ -678,3 +692,18 @@ class InversionDialog(QtWidgets.QDialog):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export SEG-Y", f"{name}.sgy", "SEG-Y (*.sgy *.segy)")
         if path:
             self.export_segy(name, path, threaded=True)
+
+
+def _sof_warning(self, name):
+    """PLAN 41a: SOF volumes change amplitudes - the inversion wants a Light (spike + bandpass) volume."""
+    try:
+        from .. import conditioning as CND
+        msg = ("Warning: this volume went through a structure-oriented filter - amplitudes are altered. Use a "
+               "'Light (for inversion)' conditioned volume.") if CND.has_sof(self.project, str(name)) else ""
+    except Exception:
+        msg = ""
+    self.sof_label.setText(msg)
+    return msg
+
+
+InversionDialog.sof_warning = _sof_warning

@@ -512,7 +512,43 @@ def exp_aes_wc(ctx, path):
         "the Well Correlation Tool's section export with View > Track style turned on (bundled NZ wells)"
 
 
-EXPORTS = {"aes_hillshade": exp_aes_hillshade, "aes_corender": exp_aes_corender, "aes_dark": exp_aes_dark,
+def exp_conditioning(ctx, path):
+    """41: Seismic > Conditioning preview logic (conditioning.apply_chain, Interpretation preset) on the demo inline:
+    original | conditioned | difference on one colour scale, with the QC numbers in the subtitle."""
+    import numpy as np
+    from seismic_tool import aesthetics as AE
+    from seismic_tool import conditioning as C
+    from seismic_tool.gui.colormaps import lut
+    proj = ctx.project()
+    vol = proj.volume("Synth")
+    i = vol.nil // 2
+    h = 6
+    blk = np.asarray(vol.ilxl[max(0, i - h):i + h + 1], np.float32) * vol.inv
+    chain = [s for s in C.preset("Interpretation") if s["type"] != "footprint"]
+    out = C.apply_chain(blk, chain, vol.dt * 1000.0, offset=(max(0, i - h), 0), include_global=False,
+                        il_total=vol.nil)
+    k = i - max(0, i - h)
+    o, c = blk[k], out[k]
+    q = C.qc_metrics(o, c, vol.dt * 1000.0)
+    lim = float(np.percentile(np.abs(o), 99)) or 1.0
+    from matplotlib.colors import ListedColormap
+    cm = ListedColormap(lut("Seismic (red-white-blue)")[:, :3] / 255.0)
+
+    def draw(ax):
+        gap = np.full((o.shape[1], 3), np.nan)
+        img = np.concatenate([o.T, gap, c.T, gap, (c - o).T], axis=1)
+        ax.imshow(img, aspect="auto", cmap=cm, vmin=-lim, vmax=lim, interpolation="nearest")
+        ax.set_axis_off()
+    AE.compose_figure(path, draw=draw, template={
+        "title": f"Inline {int(vol.inlines[i])}: original | conditioned (Interpretation preset) | difference",
+        "subtitle": f"RMS removed {q['rms_removed_pct']:.1f} %, signal leakage {q['leakage']:.2f} - same colour scale",
+        "project": "demo", "dpi": 80, "scale_bar": False})
+    return [(0.2, 0.45, "Original"), (0.5, 0.45, "Conditioned"), (0.8, 0.45, "Difference (should look like noise)"),
+            (0.5, 0.94, "QC numbers: RMS removed, signal leakage")], \
+        "the Conditioning preview computation (conditioning.apply_chain) on the demo cube, shown with the figure export"
+
+
+EXPORTS = {"conditioning": exp_conditioning, "aes_hillshade": exp_aes_hillshade, "aes_corender": exp_aes_corender, "aes_dark": exp_aes_dark,
            "aes_light": exp_aes_light, "aes_wc": exp_aes_wc, "glow_off": exp_glow_off, "glow_on": exp_glow_on, "glow_halo": exp_glow_halo, "view3d": exp_view3d, "fix_after": exp_view3d, "livemap": exp_livemap, "horizon_map": exp_horizon_map,
            "seis_section": exp_seis_section, "wc_section": exp_wc_section}
 
@@ -578,6 +614,7 @@ TITLES = {
     "aes_hillshade": "Hillshaded horizon map", "aes_corender": "Co-rendered envelope over amplitude",
     "aes_dark": "Exported figure, dark theme", "aes_light": "Exported figure, light theme",
     "aes_wc": "Styled correlation panel",
+    "conditioning": "Conditioning preview: original | conditioned | difference",
 }
 
 
