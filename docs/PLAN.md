@@ -596,8 +596,8 @@ all consume their per-zone results. Design decisions (Chris can override):
    a synthetic analytic linear-flow well, economics against a hand-computed cash flow.
 
 ## Phase 3 - Live Map + 3D module (added 2026-11-24, interactive session)
-Chris asked for these on 2026-11-24. Order: 31 (Live Map) first, then the 3D module 32 -> 33 -> 34 -> 35. Full design
-notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D Module plan item".
+Chris asked for these on 2026-11-24. Order: 31 (Live Map), 32 (automated fault mapping), then the 3D module 33 -> 34 -> 35 -> 36. Full design
+notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D Module plan item" (3D items renumbered 33-36).
 - The Live Map EXTENDS the item-21 Map hub (layers, gridding, cartography, GIS package, QGIS link already exist) - do
   not rebuild what item 21 has; add the shared map bus and the missing interaction.
 - Standing rule: every tool integrates with the Live Map through the shared map bus (selection, filters, active
@@ -638,65 +638,102 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Tests: map bus, shapefile reader (tiny .shp built in tests), styling rules, filters, gridding; GUI wiring under
    dev/fakeqt; HANDOFF + WHATS_NEW note on opening the Live Map on Windows (step-by-step).
 
-32. **3D viewer (Petrel-style 3D window)** - status: todo
-   32a. 3D window core: QOpenGLWidget canvas (orbit / pan / zoom, vertical exaggeration slider, axis box with
+32. **Automated fault mapping (PaleoScan AFE-style + fault likelihood)** - status: todo
+   Chris asked for this on 2026-11-24: the PaleoScan-style features must include fault mapping. Builds on item 2
+   (manual sticks / fault surfaces), item 4 (RGT, fault-aware), item 11 (coherence, dip-steered variance), items
+   26-27 (fault growth, fault seal). numpy only, chunked out-of-core, Cancel + progress on every job.
+   32a. Fault attributes: fault likelihood (Hale 2013 style - semblance along structure-oriented windows, raised to a
+        power and scanned over fault strike and dip, smoothed along the candidate plane), plus fault strike and fault
+        dip volumes; thinned fault likelihood (TFL, ridges only); ant-track-style enhancement of any edge attribute
+        (coherence / variance / TFL). Stored as float16/uint8 volumes, viewable like any attribute.
+   32b. RGT fault throw attribute (PaleoScan's signature method): vertical displacement of iso-RGT surfaces across
+        discontinuities -> fault throw cube; throw-weighted fault probability so large faults are kept and noise is
+        dropped.
+   32c. Automatic fault extraction: TFL / throw maxima -> fault points with strike + dip -> link into fault patches
+        ("fault skins": grow from high-likelihood seeds, link neighbours with compatible strike/dip) -> triangulated
+        fault surfaces stored as the same fault objects as item 2; auto-generate editable sticks on every Nth
+        inline/crossline so manual editing works as before. Handles crossing and conjugate faults (separate by
+        orientation), minimum size, likelihood threshold.
+   32d. Fault QC + filtering: stereonet (lower-hemisphere poles, Kamb/density contours) and rose diagram of all
+        patches; filter by dip, azimuth, size, likelihood and throw by brushing the stereonet; Fault Merging Assistant
+        (suggest merges from proximity + orientation + throw continuity; merge / split / rename in 2D and 3D views);
+        bulk delete of small patches; fault table (name, area, mean strike/dip, max throw, horizons cut).
+   32e. Throw and displacement: throw along each fault from horizon cut-offs and from cross-correlation slip across
+        the fault (Hale fault slip), throw-distribution map on the fault plane (feeds the 27b Allan diagram / SGR),
+        throw-distance and throw-depth plots (feeds 26a growth analysis), displacement-length QC flag for unrealistic
+        faults.
+   32f. Fault mapping on horizons and maps: automatic hanging-wall / footwall cut-off lines and fault (heave)
+        polygons per horizon, downthrown ticks, fault-block labels; pushed to the Live Map (31) and used as barriers by
+        gridding, the horizon autotracker (item 1) and RGT linking (item 4); a fault-polygon editor on the map.
+   32g. 2D and 2D-3D: fault likelihood + auto fault segments on 2D lines; fault-cut correlation assistant that links
+        fault cuts between intersecting 2D lines and the 3D into one named fault by position, strike, dip and throw
+        sense (Chris's 2D/3D merge workflow); fault polygons from 2D-only data.
+   32h. Optional ML: CNN fault probability (FaultSeg-style) inference only if an optional backend (torch / onnxruntime)
+        imports, installed by `Install 3D extras (optional).bat`; numpy TFL stays the default and the tested path.
+   Tests: synthetic volume with planar normal faults of known strike/dip/throw plus a crossing conjugate pair and noise ->
+   TFL peaks within 1 trace of the true planes, strike/dip within 5 deg, one skin per fault (crossing pair separated),
+   throw within 1 sample; stereonet filter keeps the right patches; merge assistant joins two halves of one fault and
+   not two neighbouring faults; fault polygons close and do not overlap; 2D cut correlation links the right cuts.
+
+33. **3D viewer (Petrel-style 3D window)** - status: todo
+   33a. 3D window core: QOpenGLWidget canvas (orbit / pan / zoom, vertical exaggeration slider, axis box with
         IL/XL/time labels, background + lighting, saved camera views), object tree (visibility, opacity, colour bar per
         object), window state saved in the project. Clear message + 2D fallback if OpenGL context creation fails.
-   32b. Seismic slices: inline, crossline and time-slice planes draggable through the volume, read on demand from the
+   33b. Seismic slices: inline, crossline and time-slice planes draggable through the volume, read on demand from the
         existing store (inline store / crossline copy from item 15), decimated while dragging, full resolution on
         release; colour tables and clip shared with the 2D viewer; 2D lines as vertical curtains along navigation.
         F3 Netherlands (~651 x 951 x 462, ~1 GB float32) is the test volume - never load it whole.
-   32c. Interpretation objects: horizons as triangulated surfaces coloured by time/depth or any attribute; fault
+   33c. Interpretation objects: horizons as triangulated surfaces coloured by time/depth or any attribute; fault
         sticks + fault surfaces (item 2); well paths (vertical + deviated, laterals.py) with logs as tubes/ribbons and
         tops as discs; culture layers and grids draped on a surface or at a chosen level.
-   32d. Map bus links: active inline/crossline in the seismic viewer moves the 3D plane and vice versa; Live Map
+   33d. Map bus links: active inline/crossline in the seismic viewer moves the 3D plane and vice versa; Live Map
         selection highlights wells in 3D; DataChanged updates 3D objects immediately; plane positions on the Live Map.
-   32e. Output: screenshot PNG with legend; turntable GIF (PIL), MP4 only if ffmpeg exists.
+   33e. Output: screenshot PNG with legend; turntable GIF (PIL), MP4 only if ffmpeg exists.
    Tests: slice extraction vs store, surface triangulation (NaN holes, faults), tube mesh along a deviated well,
    camera math; GUI wiring under dev/fakeqt with OpenGL calls mocked.
 
-33. **3D interpretation (picking, autotracking, volume rendering, geobodies)** - status: todo
-   33a. Pick horizon points and fault sticks directly on 3D planes (ray-plane intersection); picks go to the same
+34. **3D interpretation (picking, autotracking, volume rendering, geobodies)** - status: todo
+   34a. Pick horizon points and fault sticks directly on 3D planes (ray-plane intersection); picks go to the same
         horizon/fault objects as the 2D viewer (item 1/2), undo shared.
-   33b. Seeded autotracking from the 3D window using the item-1 tracker, in a background worker with progress and
+   34b. Seeded autotracking from the 3D window using the item-1 tracker, in a background worker with progress and
         Cancel; tracked area grows live in 3D and on the Live Map; undo per tracking run.
-   33c. Volume rendering: opacity-curve rendering of amplitude / attribute / RGT volumes on a decimated or user-boxed
+   34c. Volume rendering: opacity-curve rendering of amplitude / attribute / RGT volumes on a decimated or user-boxed
         sub-volume (3D texture, GPU-memory check); warning on integrated graphics.
-   33d. Geobody extraction: threshold an amplitude/attribute volume, numpy connected-component labelling (chunked,
+   34d. Geobody extraction: threshold an amplitude/attribute volume, numpy connected-component labelling (chunked,
         out-of-core), body list with volume + cell count, display as surfaces (marching cubes in numpy), outlines to
         the Live Map as polygons.
-   33e. Inversion (item 19), attribute (item 11) and RGT / stratal-slice (item 5) volumes load as 3D volumes/slices;
+   34e. Inversion (item 19), attribute (item 11) and RGT / stratal-slice (item 5) volumes load as 3D volumes/slices;
         horizon attribute extractions shown on 3D surfaces.
    Tests: ray-plane pick maps to the right il/xl/sample; geobody labelling on a synthetic with two known bodies
    (counts + volumes exact); marching-cubes closed surface for a sphere; tracking from 3D seeds = item-1 result.
 
-34. **Structural framework + 3D grid** - status: todo
-   34a. Fault modeling: fault surfaces from sticks (interpolated triangulated surfaces) with editing (add/remove
+35. **Structural framework + 3D grid** - status: todo
+   35a. Fault modeling: fault surfaces from sticks and the item-32 auto-extracted faults (triangulated surfaces) with editing (add/remove
         sticks, smooth); fault polygons per horizon from fault-horizon intersections, shared with Live Map gridding.
-   34b. Horizon modeling: grid horizons per fault block (reuse item-21/31g gridding with faults as barriers),
+   35b. Horizon modeling: grid horizons per fault block (reuse item-21/31g gridding with faults as barriers),
         truncate against faults, conformable / erosional rules between horizons, consistency checks (no crossings).
-   34c. Framework in time or depth; depth version from the item-17 DDC model, rebuilt when the velocity model
+   35c. Framework in time or depth; depth version from the item-17 DDC model, rebuilt when the velocity model
         changes (DataChanged).
-   34d. 3D grid: stair-stepped fault grid between depth-converted horizons - areal cell size + rotation, zones between
+   35d. 3D grid: stair-stepped fault grid between depth-converted horizons - areal cell size + rotation, zones between
         horizons, layering per zone (proportional, follow top, follow base, constant thickness), fault-block and zone
         index per cell; quality report (cell volumes, zero/negative-thickness cells). Full corner-point grid with
         complex fault juxtaposition is OUT of scope.
-   34e. Output: grid + zones to Eclipse GRDECL (runs in the free OPM Flow simulator); surfaces to ZMAP+/XYZ.
+   35e. Output: grid + zones to Eclipse GRDECL (runs in the free OPM Flow simulator); surfaces to ZMAP+/XYZ.
    Tests: synthetic faulted layer-cake -> grid cell counts, zone thicknesses and fault-block throw correct; GRDECL
    round-trip; no crossing horizons after truncation.
 
-35. **Property modeling + volumetrics** - status: todo
-   35a. Log upscaling to the cells each well passes through (arithmetic / harmonic / geometric / most-of), using the
+36. **Property modeling + volumetrics** - status: todo
+   36a. Log upscaling to the cells each well passes through (arithmetic / harmonic / geometric / most-of), using the
         item-20 petrophysics curves; QC plot raw vs upscaled.
-   35b. Data analysis per zone: experimental variograms (major / minor / vertical), interactive model fit,
+   36b. Data analysis per zone: experimental variograms (major / minor / vertical), interactive model fit,
         histograms, trends (reuse item-17b variogram code).
-   35c. Facies modeling: sequential indicator simulation + indicator kriging per zone; optional seismic attribute /
+   36c. Facies modeling: sequential indicator simulation + indicator kriging per zone; optional seismic attribute /
         inversion volume as a soft trend.
-   35d. Petrophysical modeling: kriging and sequential Gaussian simulation (numpy), conditioned to facies; multiple
+   36d. Petrophysical modeling: kriging and sequential Gaussian simulation (numpy), conditioned to facies; multiple
         realizations with fixed seeds.
-   35e. Volumetrics: GRV, NTG, porosity, Sw, Bo/Bg with OWC/GOC per zone and fault block; P90/P50/P10 from
+   36e. Volumetrics: GRV, NTG, porosity, Sw, Bo/Bg with OWC/GOC per zone and fault block; P90/P50/P10 from
         realizations; link to item-28 prospect volumetrics; per-block values on the Live Map; WellTable/report output.
-   35f. Output: property grids to GRDECL; volumetrics to CSV.
+   36f. Output: property grids to GRDECL; volumetrics to CSV.
    Tests: upscaling on a hand case; kriging exact at data points; SGS reproduces the input histogram and variogram
    within tolerance; volumetrics vs a hand-computed box reservoir.
    Run end: HANDOFF + WHATS_NEW "3D module" section with step-by-step Windows instructions (open the 3D window, load
