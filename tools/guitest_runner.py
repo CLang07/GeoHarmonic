@@ -15,18 +15,16 @@ import os
 import runpy
 import sys
 
-pkg = sys.argv[1]
-minutes = int(sys.argv[2]) if len(sys.argv) > 2 else 15
-sys.path.insert(0, os.getcwd())
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
-try:
-    sys.stdout.reconfigure(line_buffering=True)
-    sys.stderr.reconfigure(line_buffering=True)
-except Exception:
-    pass
-print(f"(GUI test watchdog: stops after {minutes} min and reports where it was stuck)")
-faulthandler.dump_traceback_later(minutes * 60, exit=True)
+
+def font_dir(environ=None, platform=None):
+    """Font folder for offscreen Qt (PLAN 38c): without it Qt prints 'QFontDatabase: Cannot find font directory'.
+    Windows: %WINDIR%\\Fonts.  Elsewhere: leave Qt's default (returns None)."""
+    environ = os.environ if environ is None else environ
+    platform = sys.platform if platform is None else platform
+    if not platform.startswith("win"):
+        return None
+    d = os.path.join(environ.get("WINDIR", r"C:\Windows"), "Fonts")
+    return d
 
 
 def _note(kind, args):
@@ -70,10 +68,40 @@ def _patch_modals():
         "PySide6.QtGui", fromlist=["QColor"]).QColor())[1])
 
 
-try:
-    _patch_modals()
-except Exception as e:  # Qt missing or broken: let the test itself report it
-    print(f"(could not prepare Qt for the GUI test: {e})")
+def main():
+    pkg = sys.argv[1]
+    minutes = int(sys.argv[2]) if len(sys.argv) > 2 else 15
+    sys.path.insert(0, os.getcwd())
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
 
-sys.argv = [pkg, "--guitest"]
-runpy.run_module(pkg, run_name="__main__", alter_sys=True)
+    _fd = font_dir()
+    if _fd and os.path.isdir(_fd) and "QT_QPA_FONTDIR" not in os.environ:
+        os.environ["QT_QPA_FONTDIR"] = _fd
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+    print(f"(GUI test watchdog: stops after {minutes} min and reports where it was stuck)")
+    faulthandler.dump_traceback_later(minutes * 60, exit=True)
+
+    try:
+        _patch_modals()
+    except Exception as e:  # Qt missing or broken: let the test itself report it
+        print(f"(could not prepare Qt for the GUI test: {e})")
+    sys.argv = [pkg, "--guitest"]
+    try:
+        runpy.run_module(pkg, run_name="__main__", alter_sys=True)
+    except SystemExit:
+        raise
+    except BaseException:  # PLAN 38a: a crash outside the per-module guards still ends as a readable FAIL
+        import traceback
+        print(traceback.format_exc().rstrip())
+        print("FAIL GUI test stopped by the exception above")
+        print("GUI TEST FAILED")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

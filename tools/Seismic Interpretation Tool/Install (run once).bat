@@ -7,7 +7,7 @@ if not exist "%PY%" set "PY=python"
 if not exist ".venv\Scripts\python.exe" "%PY%" -m venv .venv
 if not exist ".venv\Scripts\python.exe" goto novenv
 echo Installing packages - a few minutes the first time...
-".venv\Scripts\python.exe" -m pip install numpy matplotlib "PySide6==6.5.3" "pyqtgraph==0.13.7"
+".venv\Scripts\python.exe" -m pip install "numpy<2" matplotlib "PySide6==6.5.3" "pyqtgraph==0.13.7"
 echo.
 echo Checking Qt...
 ".venv\Scripts\python.exe" -c "from PySide6 import QtWidgets; import pyqtgraph; print('Qt OK - PySide6', __import__('PySide6').__version__)"

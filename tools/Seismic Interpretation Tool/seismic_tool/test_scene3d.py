@@ -158,6 +158,64 @@ def run(check, tmp):
     return sc
 
 
+def real_qt():
+    """True when the real PySide6 is imported (Chris's PC), False under dev/fakeqt."""
+    import PySide6
+    return "fakeqt" not in (getattr(PySide6, "__file__", "") or "").replace("\\", "/")
+
+
+def run_gl_real(check, mw, vol):
+    """PLAN 38a regression under real Qt (offscreen): create the canvas, initializeGL, paintGL twice, resize,
+    paintGL again, grab the framebuffer.  Without a usable GL context: skip and check the software fallback."""
+    from PySide6 import QtWidgets
+    from .gui import view3d as V3
+    app = QtWidgets.QApplication.instance()
+    g = V3.Viewer3D(mw.project, "Synth", mw.mapbus)
+    cv = g.canvas
+    check("f" not in vars(cv), "38a: the GL canvas keeps no cached QOpenGLFunctions (self.f)")
+    g.show()
+    for _ in range(5):
+        app.processEvents()
+    ctx = cv.context() if hasattr(cv, "context") else None
+    if ctx is None or not ctx.isValid() or cv.program is None:
+        print(f"SKIP 38a: no OpenGL context here ({getattr(cv, 'gl_error', None) or 'context not created'})"
+              " - checking the software fallback instead")
+        if not getattr(cv, "gl_error", None):
+            cv.gl_error = "no OpenGL context (test)"
+        check(g._check_gl() and g.software, "38a: no GL context -> software fallback window")
+        g.close()
+        g.bus.unsubscribe("view3d")
+        return
+    errors = []
+    try:
+        cv.makeCurrent()
+        cv.initializeGL()
+        cv.paintGL()
+        cv.paintGL()
+        n1 = len(cv.buffers)
+        cv.resize(640, 480)
+        cv.resizeGL(640, 480)
+        cv.paintGL()
+        g.set_plane("Inline", int(vol.inlines[3]))
+        cv.paintGL()
+        cv.doneCurrent()
+    except Exception as e:  # the PC failure was an AttributeError here
+        errors.append(f"{type(e).__name__}: {e}")
+    check(not errors and cv.program is not None,
+          "38a: real OpenGL - initializeGL, paintGL x2, resize, paintGL" + (f" ({errors[0]})" if errors else ""))
+    check(len(cv.buffers) == len(g.scene.draw_list()) and n1 > 0 if not errors else False,
+          "38a: real OpenGL - one GL buffer per mesh after a plane change")
+    try:
+        img = cv.grabFramebuffer()
+        ok = not img.isNull() and img.width() > 0
+    except Exception as e:
+        ok = False
+        print(f"(grabFramebuffer: {e})")
+    check(ok, "38a: real OpenGL - grabFramebuffer returns the rendered image")
+    g.close()
+    g.bus.unsubscribe("view3d")
+
+
 def run_gui(check, tmp):
     """33 GUI: 3D Viewer from the main window - planes, objects, map bus links both ways, screenshot, state."""
     from .gui.main_window import MainWindow
@@ -217,17 +275,23 @@ def run_gui(check, tmp):
     check(isinstance(V3.HAVE_GL, bool), f"33a GUI: OpenGL available here: {V3.HAVE_GL} (software fallback tested)")
     # the OpenGL path: initialise + paint with whatever Qt provides (the mock here, a real context on the PC)
     if V3.HAVE_GL:
-        g = V3.Viewer3D(mw.project, "Synth", mw.mapbus)
-        cv = g.canvas
-        cv.initializeGL()
-        if cv.program is None:  # Qt mock: link() is falsy - drive the draw code with mock objects anyway
-            cv.program = V3.QOpenGLShaderProgram()
-            cv.f = V3.QOpenGLShaderProgram()
-        cv.paintGL()
-        n_buf = len(cv.buffers)
-        check(n_buf == len(g.scene.draw_list()), f"33a GUI: OpenGL draw path uploads one buffer per mesh ({n_buf})")
-        g.set_plane("Inline", int(vol.inlines[3]))
-        cv.paintGL()
-        check(len(cv.buffers) == len(g.scene.draw_list()), "33a GUI: replaced meshes release their GL buffers")
-        g.bus.unsubscribe("view3d")
+        if real_qt():
+            run_gl_real(check, mw, vol)
+        else:
+            g = V3.Viewer3D(mw.project, "Synth", mw.mapbus)
+            cv = g.canvas
+            check("f" not in vars(cv), "38a: the GL canvas keeps no cached QOpenGLFunctions (self.f)")
+            cv.initializeGL()
+            if cv.program is None:  # Qt mock: link() is falsy - drive the draw code with mock objects anyway
+                cv.program = V3.QOpenGLShaderProgram()
+            cv.paintGL()
+            n_buf = len(cv.buffers)
+            check(n_buf == len(g.scene.draw_list()), f"33a GUI: OpenGL draw path uploads one buffer per mesh ({n_buf})")
+            g.set_plane("Inline", int(vol.inlines[3]))
+            cv.paintGL()
+            check(len(cv.buffers) == len(g.scene.draw_list()), "33a GUI: replaced meshes release their GL buffers")
+            cv.resizeGL(640, 480)
+            cv.paintGL()
+            check(len(cv.buffers) == len(g.scene.draw_list()), "38a: resizeGL + paintGL again (mock)")
+            g.bus.unsubscribe("view3d")
     mw.maplink.close()

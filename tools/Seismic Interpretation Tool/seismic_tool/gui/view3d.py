@@ -81,12 +81,30 @@ class GLCanvas(QOpenGLWidget):
         self.on_click = None  # callable(px, py, w, h): a click without dragging (3D picking, item 34)
 
     # ---------------------------------------------------------------- GL
+    def _funcs(self):
+        """The GL function table of the CURRENT context, fetched fresh on every call (PLAN 38a).
+
+        Never cache it: `context().functions()` returns a wrapper Python does not own - Qt can reuse its address
+        for the next object (on Chris's PC the shader program), so a cached `self.f` turned into a
+        QOpenGLShaderProgram and paintGL died with "no attribute 'glClearColor'".  Returns None without a context."""
+        ctx = self.context()
+        if ctx is None:
+            return None
+        f = ctx.functions()
+        if f is None or not hasattr(f, "glClearColor"):  # defensive: build a table Python owns for this call
+            f = QtGui.QOpenGLFunctions(ctx)
+            f.initializeOpenGLFunctions()
+        return f
+
     def initializeGL(self):
         try:
-            self.f = self.context().functions()
-            self.f.glEnable(GL_DEPTH_TEST)
-            self.f.glEnable(GL_BLEND)
-            self.f.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            f = self._funcs()
+            if f is None:
+                raise RuntimeError("no OpenGL context")
+            f.glEnable(GL_DEPTH_TEST)
+            f.glEnable(GL_BLEND)
+            f.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            self.buffers = {}  # a (re)created context owns no buffers yet
             p = QOpenGLShaderProgram(self)
             p.addShaderFromSourceCode(_enum(QOpenGLShader, "ShaderTypeBit", "Vertex"), VS)
             p.addShaderFromSourceCode(_enum(QOpenGLShader, "ShaderTypeBit", "Fragment"), FS)
@@ -112,10 +130,21 @@ class GLCanvas(QOpenGLWidget):
         self.buffers[key] = (b, 0, len(mesh))
         return b
 
+    def resizeGL(self, w, h):
+        f = self._funcs()  # QOpenGLWidget sets the viewport itself; this only keeps the table fresh + checks it
+        if f is not None and self.program is not None:
+            try:
+                r = float(self.devicePixelRatioF()) if hasattr(self, "devicePixelRatioF") else 1.0
+                f.glViewport(0, 0, int(max(1, w) * r), int(max(1, h) * r))
+            except Exception:
+                pass
+
     def paintGL(self):
         if self.program is None:
             return
-        f = self.f
+        f = self._funcs()
+        if f is None:
+            return
         bg = self.scene.background
         f.glClearColor(bg[0], bg[1], bg[2], 1.0)
         f.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)

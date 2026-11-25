@@ -164,10 +164,19 @@ def main(argv=None):
 
         from .petro import test_petro
         tmp = tempfile.mkdtemp(prefix="wc_guitest_")
+        import traceback
+
+        def guarded(name, fn):  # PLAN 38a: one crashing module is a FAIL with traceback, the rest still run
+            try:
+                fn()
+            except Exception as e:  # noqa: BLE001
+                print(traceback.format_exc().rstrip())
+                check(False, f"{name} crashed: {type(e).__name__}: {e}")
+
         try:
-            test_petro.run_gui(check, tmp)
+            guarded("test_petro.run_gui", lambda: test_petro.run_gui(check, tmp))
             from . import test_maplink
-            test_maplink.run_gui(check, tmp)
+            guarded("test_maplink.run_gui", lambda: test_maplink.run_gui(check, tmp))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         print("GUI TEST PASSED" if ok[0] else "GUI TEST FAILED")

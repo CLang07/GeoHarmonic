@@ -6,6 +6,17 @@ import tempfile
 import numpy as np
 
 
+
+def _guarded(check, name, fn):
+    """Run one test module; a crash is recorded as a FAIL with its traceback and the next module still runs
+    (PLAN 38a: on Chris's PC one exception in the 3D Viewer test hid every GUI check after it)."""
+    import traceback
+    try:
+        fn()
+    except Exception as e:  # noqa: BLE001 - report, keep going
+        print(traceback.format_exc().rstrip())
+        check(False, f"{name.split('(')[0]} crashed: {type(e).__name__}: {e}")
+
 def _ieee2ibm(x):
     """float32 -> IBM float bits (uint32) for test files."""
     x = np.asarray(x, np.float64)
@@ -104,130 +115,132 @@ def run():
         check(np.allclose(l.data(), tr2) and l.has_coords and abs(l.x[60] - 600) < 1e-6, "2D line + nav")
         # ---- horizons: snapping, 3D/2D autotracking, ties, undo, save/load
         from . import test_horizons
-        test_horizons.run(check, tmp)
+        _guarded(check, 'test_horizons.run(check, tmp)', lambda: test_horizons.run(check, tmp))
         # ---- faults: sticks, surfaces, section cuts, tracker barrier
         from . import test_faults
-        test_faults.run(check, tmp)
+        _guarded(check, 'test_faults.run(check, tmp)', lambda: test_faults.run(check, tmp))
         # ---- RGT step A: dip field
         from . import test_dip
-        test_dip.run(check, tmp)
+        _guarded(check, 'test_dip.run(check, tmp)', lambda: test_dip.run(check, tmp))
         # ---- RGT step B: mesh + global solve
         from . import test_rgt
-        test_rgt.run(check, tmp)
+        _guarded(check, 'test_rgt.run(check, tmp)', lambda: test_rgt.run(check, tmp))
         # ---- RGT step C: horizon stack, Wheeler, stratal slices
         from . import test_stack
-        test_stack.run(check, tmp)
+        _guarded(check, 'test_stack.run(check, tmp)', lambda: test_stack.run(check, tmp))
         # ---- RGT step D: local editing
         from . import test_edit
-        test_edit.run(check, tmp)
+        _guarded(check, 'test_edit.run(check, tmp)', lambda: test_edit.run(check, tmp))
         # ---- wells on seismic: time-depth, tops, synthetics, ties
         from . import test_welltie
-        test_welltie.run(check, tmp)
+        _guarded(check, 'test_welltie.run(check, tmp)', lambda: test_welltie.run(check, tmp))
         # ---- horizon maps
         from . import test_maps
-        test_maps.run(check, tmp)
+        _guarded(check, 'test_maps.run(check, tmp)', lambda: test_maps.run(check, tmp))
         # ---- 2D-3D / 2D-2D mistie
         from . import test_mistie
-        test_mistie.run(check, tmp)
+        _guarded(check, 'test_mistie.run(check, tmp)', lambda: test_mistie.run(check, tmp))
         # ---- seismic attributes
         from . import test_attributes
-        test_attributes.run(check, tmp)
+        _guarded(check, 'test_attributes.run(check, tmp)', lambda: test_attributes.run(check, tmp))
         # ---- velocity model + depth conversion
         from . import test_velocity
-        test_velocity.run(check, tmp)
+        _guarded(check, 'test_velocity.run(check, tmp)', lambda: test_velocity.run(check, tmp))
         # ---- dynamic depth conversion (item 17)
         from . import test_ddc
         os.makedirs(os.path.join(tmp, "ddc"))
-        test_ddc.run(check, os.path.join(tmp, "ddc"))
-        test_ddc.run_dynamic(check, os.path.join(tmp, "ddc"))
-        test_ddc.run_gridding(check, os.path.join(tmp, "ddc"))
-        test_ddc.run_prognosis(check, os.path.join(tmp, "ddc"))
-        test_ddc.run_scenarios(check, os.path.join(tmp, "ddc"))
+        _guarded(check, 'test_ddc.run(check, os.path.join(tmp, "ddc"))', lambda: test_ddc.run(check, os.path.join(tmp, "ddc")))
+        _guarded(check, 'test_ddc.run_dynamic(check, os.path.join(tmp, "ddc"))', lambda: test_ddc.run_dynamic(check, os.path.join(tmp, "ddc")))
+        _guarded(check, 'test_ddc.run_gridding(check, os.path.join(tmp, "ddc"))', lambda: test_ddc.run_gridding(check, os.path.join(tmp, "ddc")))
+        _guarded(check, 'test_ddc.run_prognosis(check, os.path.join(tmp, "ddc"))', lambda: test_ddc.run_prognosis(check, os.path.join(tmp, "ddc")))
+        _guarded(check, 'test_ddc.run_scenarios(check, os.path.join(tmp, "ddc"))', lambda: test_ddc.run_scenarios(check, os.path.join(tmp, "ddc")))
         # ---- analytics
         from . import test_analytics
-        test_analytics.run(check, tmp)
+        _guarded(check, 'test_analytics.run(check, tmp)', lambda: test_analytics.run(check, tmp))
         from . import test_engineering
-        test_engineering.run(check, tmp)
+        _guarded(check, 'test_engineering.run(check, tmp)', lambda: test_engineering.run(check, tmp))
         from . import test_models
-        test_models.run(check, tmp)
+        _guarded(check, 'test_models.run(check, tmp)', lambda: test_models.run(check, tmp))
         from . import test_explain
-        test_explain.run(check, tmp)
+        _guarded(check, 'test_explain.run(check, tmp)', lambda: test_explain.run(check, tmp))
         from . import test_qc
-        test_qc.run(check, tmp)
+        _guarded(check, 'test_qc.run(check, tmp)', lambda: test_qc.run(check, tmp))
         from . import test_laterals
-        test_laterals.run(check, tmp)
+        _guarded(check, 'test_laterals.run(check, tmp)', lambda: test_laterals.run(check, tmp))
         from . import test_hardening
-        test_hardening.run(check, tmp)
+        _guarded(check, 'test_hardening.run(check, tmp)', lambda: test_hardening.run(check, tmp))
         from . import test_tie
         os.makedirs(os.path.join(tmp, "tie16"))
-        test_tie.run(check, os.path.join(tmp, "tie16"))
+        _guarded(check, 'test_tie.run(check, os.path.join(tmp, "tie16"))', lambda: test_tie.run(check, os.path.join(tmp, "tie16")))
         from . import test_basin
         os.makedirs(os.path.join(tmp, "basin"))
-        test_basin.run(check, os.path.join(tmp, "basin"))
+        _guarded(check, 'test_basin.run(check, os.path.join(tmp, "basin"))', lambda: test_basin.run(check, os.path.join(tmp, "basin")))
         from . import test_inversion
         os.makedirs(os.path.join(tmp, "inversion"))
-        test_inversion.run(check, os.path.join(tmp, "inversion"))
+        _guarded(check, 'test_inversion.run(check, os.path.join(tmp, "inversion"))', lambda: test_inversion.run(check, os.path.join(tmp, "inversion")))
         from . import test_maplayers
-        test_maplayers.run(check, tmp)
-        test_maplayers.run_hub(check, tmp)
-        test_maplayers.run_carto(check, tmp)
+        _guarded(check, 'test_maplayers.run(check, tmp)', lambda: test_maplayers.run(check, tmp))
+        _guarded(check, 'test_maplayers.run_hub(check, tmp)', lambda: test_maplayers.run_hub(check, tmp))
+        _guarded(check, 'test_maplayers.run_carto(check, tmp)', lambda: test_maplayers.run_carto(check, tmp))
         from . import test_propgrid
-        test_propgrid.run(check, tmp)
+        _guarded(check, 'test_propgrid.run(check, tmp)', lambda: test_propgrid.run(check, tmp))
         from . import test_addwells
         os.makedirs(os.path.join(tmp, "addwells"))
-        test_addwells.run(check, os.path.join(tmp, "addwells"))
+        _guarded(check, 'test_addwells.run(check, os.path.join(tmp, "addwells"))', lambda: test_addwells.run(check, os.path.join(tmp, "addwells")))
         from . import test_crosscheck
-        test_crosscheck.run(check, tmp)
+        _guarded(check, 'test_crosscheck.run(check, tmp)', lambda: test_crosscheck.run(check, tmp))
         from . import test_gis
-        test_gis.run(check, tmp)
-        test_gis.run_export(check, tmp)
+        _guarded(check, 'test_gis.run(check, tmp)', lambda: test_gis.run(check, tmp))
+        _guarded(check, 'test_gis.run_export(check, tmp)', lambda: test_gis.run_export(check, tmp))
         from . import test_qgislink
-        test_qgislink.run(check, tmp)
+        _guarded(check, 'test_qgislink.run(check, tmp)', lambda: test_qgislink.run(check, tmp))
         from . import test_blend
-        test_blend.run(check, tmp)
+        _guarded(check, 'test_blend.run(check, tmp)', lambda: test_blend.run(check, tmp))
         from . import test_resolution
-        test_resolution.run(check, tmp)
-        test_resolution.run_seeds(check, tmp)
-        test_resolution.run_predictive(check, tmp)
+        _guarded(check, 'test_resolution.run(check, tmp)', lambda: test_resolution.run(check, tmp))
+        _guarded(check, 'test_resolution.run_seeds(check, tmp)', lambda: test_resolution.run_seeds(check, tmp))
+        _guarded(check, 'test_resolution.run_predictive(check, tmp)', lambda: test_resolution.run_predictive(check, tmp))
         from . import test_avo
-        test_avo.run(check, tmp)
+        _guarded(check, 'test_avo.run(check, tmp)', lambda: test_avo.run(check, tmp))
         from . import test_structure
-        test_structure.run(check, tmp)
+        _guarded(check, 'test_structure.run(check, tmp)', lambda: test_structure.run(check, tmp))
         from . import test_migration
-        test_migration.run(check, tmp)
+        _guarded(check, 'test_migration.run(check, tmp)', lambda: test_migration.run(check, tmp))
         from . import test_prospect
-        test_prospect.run(check, tmp)
+        _guarded(check, 'test_prospect.run(check, tmp)', lambda: test_prospect.run(check, tmp))
         from . import test_spacing
-        test_spacing.run(check, tmp)
+        _guarded(check, 'test_spacing.run(check, tmp)', lambda: test_spacing.run(check, tmp))
         from . import test_depletion
-        test_depletion.run(check, tmp)
+        _guarded(check, 'test_depletion.run(check, tmp)', lambda: test_depletion.run(check, tmp))
         from . import test_mapbus
-        test_mapbus.run(check, tmp)
+        _guarded(check, 'test_mapbus.run(check, tmp)', lambda: test_mapbus.run(check, tmp))
         from . import test_livemap
-        test_livemap.run(check, tmp)
-        test_livemap.run_culture(check, tmp)
-        test_livemap.run_seismic(check, tmp)
-        test_livemap.run_wellsection(check, tmp)
-        test_livemap.run_livegrid(check, tmp)
-        test_livemap.run_livedepth(check, os.path.join(tmp, "livedepth"))
-        test_livemap.run_output(check, tmp)
-        test_livemap.run_paths(check, tmp)
+        _guarded(check, 'test_livemap.run(check, tmp)', lambda: test_livemap.run(check, tmp))
+        _guarded(check, 'test_livemap.run_culture(check, tmp)', lambda: test_livemap.run_culture(check, tmp))
+        _guarded(check, 'test_livemap.run_seismic(check, tmp)', lambda: test_livemap.run_seismic(check, tmp))
+        _guarded(check, 'test_livemap.run_wellsection(check, tmp)', lambda: test_livemap.run_wellsection(check, tmp))
+        _guarded(check, 'test_livemap.run_livegrid(check, tmp)', lambda: test_livemap.run_livegrid(check, tmp))
+        _guarded(check, 'test_livemap.run_livedepth(check, os.path.join(tmp, "livedepth"))', lambda: test_livemap.run_livedepth(check, os.path.join(tmp, "livedepth")))
+        _guarded(check, 'test_livemap.run_output(check, tmp)', lambda: test_livemap.run_output(check, tmp))
+        _guarded(check, 'test_livemap.run_paths(check, tmp)', lambda: test_livemap.run_paths(check, tmp))
         from . import test_faultlik
-        test_faultlik.run(check, tmp)
-        test_faultlik.run_volume(check, tmp)
-        test_faultlik.run_skins(check, tmp)
-        test_faultlik.run_throw_2d(check, tmp)
+        _guarded(check, 'test_faultlik.run(check, tmp)', lambda: test_faultlik.run(check, tmp))
+        _guarded(check, 'test_faultlik.run_volume(check, tmp)', lambda: test_faultlik.run_volume(check, tmp))
+        _guarded(check, 'test_faultlik.run_skins(check, tmp)', lambda: test_faultlik.run_skins(check, tmp))
+        _guarded(check, 'test_faultlik.run_throw_2d(check, tmp)', lambda: test_faultlik.run_throw_2d(check, tmp))
         from . import test_velvolume
-        test_velvolume.run(check, os.path.join(tmp, "vv"))
+        _guarded(check, 'test_velvolume.run(check, os.path.join(tmp, "vv"))', lambda: test_velvolume.run(check, os.path.join(tmp, "vv")))
         from . import test_scene3d
-        test_scene3d.run(check, tmp)
+        _guarded(check, 'test_scene3d.run(check, tmp)', lambda: test_scene3d.run(check, tmp))
         from . import test_geobody
-        test_geobody.run(check, tmp)
-        test_geobody.run_volume(check, tmp)
+        _guarded(check, 'test_geobody.run(check, tmp)', lambda: test_geobody.run(check, tmp))
+        _guarded(check, 'test_geobody.run_volume(check, tmp)', lambda: test_geobody.run_volume(check, tmp))
         from . import test_framework
-        test_framework.run(check, tmp)
+        _guarded(check, 'test_framework.run(check, tmp)', lambda: test_framework.run(check, tmp))
         from . import test_propmodel
-        test_propmodel.run(check, tmp)
+        _guarded(check, 'test_propmodel.run(check, tmp)', lambda: test_propmodel.run(check, tmp))
+        from . import test_pcfixes
+        _guarded(check, 'test_pcfixes.run(check, tmp)', lambda: test_pcfixes.run(check, tmp))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -250,98 +263,98 @@ def run_gui():
     from . import test_horizons
     tmp = tempfile.mkdtemp(prefix="seis_guitest_")
     try:
-        test_horizons.run_gui(check, tmp)
+        _guarded(check, 'test_horizons.run_gui(check, tmp)', lambda: test_horizons.run_gui(check, tmp))
         from . import test_faults
-        test_faults.run_gui(check, tmp)
+        _guarded(check, 'test_faults.run_gui(check, tmp)', lambda: test_faults.run_gui(check, tmp))
         from . import test_dip
-        test_dip.run_gui(check, tmp)
+        _guarded(check, 'test_dip.run_gui(check, tmp)', lambda: test_dip.run_gui(check, tmp))
         from . import test_rgt
-        test_rgt.run_gui(check, tmp)
+        _guarded(check, 'test_rgt.run_gui(check, tmp)', lambda: test_rgt.run_gui(check, tmp))
         from . import test_stack
-        test_stack.run_gui(check, tmp)
+        _guarded(check, 'test_stack.run_gui(check, tmp)', lambda: test_stack.run_gui(check, tmp))
         from . import test_edit
-        test_edit.run_gui(check, tmp)
+        _guarded(check, 'test_edit.run_gui(check, tmp)', lambda: test_edit.run_gui(check, tmp))
         from . import test_welltie
-        test_welltie.run_gui(check, tmp)
+        _guarded(check, 'test_welltie.run_gui(check, tmp)', lambda: test_welltie.run_gui(check, tmp))
         from . import test_maps
-        test_maps.run_gui(check, tmp)
+        _guarded(check, 'test_maps.run_gui(check, tmp)', lambda: test_maps.run_gui(check, tmp))
         from . import test_mistie
-        test_mistie.run_gui(check, tmp)
+        _guarded(check, 'test_mistie.run_gui(check, tmp)', lambda: test_mistie.run_gui(check, tmp))
         from . import test_attributes
-        test_attributes.run_gui(check, tmp)
+        _guarded(check, 'test_attributes.run_gui(check, tmp)', lambda: test_attributes.run_gui(check, tmp))
         from . import test_velocity
         os.makedirs(os.path.join(tmp, "velgui"))
-        test_velocity.run_gui(check, os.path.join(tmp, "velgui"))
+        _guarded(check, 'test_velocity.run_gui(check, os.path.join(tmp, "velgui"))', lambda: test_velocity.run_gui(check, os.path.join(tmp, "velgui")))
         from . import test_ddc
         os.makedirs(os.path.join(tmp, "ddcgui"))
-        test_ddc.run_gui(check, os.path.join(tmp, "ddcgui"))
-        test_ddc.run_gui_dynamic(check, os.path.join(tmp, "ddcgui"))
-        test_ddc.run_gui_gridding(check, os.path.join(tmp, "ddcgui"))
-        test_ddc.run_gui_prognosis(check, os.path.join(tmp, "ddcgui"))
-        test_ddc.run_gui_scenarios(check, os.path.join(tmp, "ddcgui"))
+        _guarded(check, 'test_ddc.run_gui(check, os.path.join(tmp, "ddcgui"))', lambda: test_ddc.run_gui(check, os.path.join(tmp, "ddcgui")))
+        _guarded(check, 'test_ddc.run_gui_dynamic(check, os.path.join(tmp, "ddcgui"))', lambda: test_ddc.run_gui_dynamic(check, os.path.join(tmp, "ddcgui")))
+        _guarded(check, 'test_ddc.run_gui_gridding(check, os.path.join(tmp, "ddcgui"))', lambda: test_ddc.run_gui_gridding(check, os.path.join(tmp, "ddcgui")))
+        _guarded(check, 'test_ddc.run_gui_prognosis(check, os.path.join(tmp, "ddcgui"))', lambda: test_ddc.run_gui_prognosis(check, os.path.join(tmp, "ddcgui")))
+        _guarded(check, 'test_ddc.run_gui_scenarios(check, os.path.join(tmp, "ddcgui"))', lambda: test_ddc.run_gui_scenarios(check, os.path.join(tmp, "ddcgui")))
         from . import test_explain
         os.makedirs(os.path.join(tmp, "angui"))
-        test_explain.run_gui(check, os.path.join(tmp, "angui"))
+        _guarded(check, 'test_explain.run_gui(check, os.path.join(tmp, "angui"))', lambda: test_explain.run_gui(check, os.path.join(tmp, "angui")))
         from . import test_qc
-        test_qc.run_gui(check, tmp)
+        _guarded(check, 'test_qc.run_gui(check, tmp)', lambda: test_qc.run_gui(check, tmp))
         from . import test_engineering
-        test_engineering.run_gui(check, tmp)
+        _guarded(check, 'test_engineering.run_gui(check, tmp)', lambda: test_engineering.run_gui(check, tmp))
         from . import test_laterals
-        test_laterals.run_gui(check, tmp)
+        _guarded(check, 'test_laterals.run_gui(check, tmp)', lambda: test_laterals.run_gui(check, tmp))
         from . import test_hardening
-        test_hardening.run_gui(check, tmp)
+        _guarded(check, 'test_hardening.run_gui(check, tmp)', lambda: test_hardening.run_gui(check, tmp))
         from . import test_tie
-        test_tie.run_gui(check, tmp)
+        _guarded(check, 'test_tie.run_gui(check, tmp)', lambda: test_tie.run_gui(check, tmp))
         from . import test_basin
         os.makedirs(os.path.join(tmp, "basingui"))
-        test_basin.run_gui(check, os.path.join(tmp, "basingui"))
+        _guarded(check, 'test_basin.run_gui(check, os.path.join(tmp, "basingui"))', lambda: test_basin.run_gui(check, os.path.join(tmp, "basingui")))
         from . import test_inversion
         os.makedirs(os.path.join(tmp, "invgui"))
-        test_inversion.run_gui(check, os.path.join(tmp, "invgui"))
+        _guarded(check, 'test_inversion.run_gui(check, os.path.join(tmp, "invgui"))', lambda: test_inversion.run_gui(check, os.path.join(tmp, "invgui")))
         from . import test_maplayers
-        test_maplayers.run_gui(check, tmp)
-        test_maplayers.run_gui_hub(check, tmp)
+        _guarded(check, 'test_maplayers.run_gui(check, tmp)', lambda: test_maplayers.run_gui(check, tmp))
+        _guarded(check, 'test_maplayers.run_gui_hub(check, tmp)', lambda: test_maplayers.run_gui_hub(check, tmp))
         from . import test_propgrid
-        test_propgrid.run_gui(check, tmp)
+        _guarded(check, 'test_propgrid.run_gui(check, tmp)', lambda: test_propgrid.run_gui(check, tmp))
         from . import test_addwells
         os.makedirs(os.path.join(tmp, "addwellsgui"))
-        test_addwells.run_gui(check, os.path.join(tmp, "addwellsgui"))
+        _guarded(check, 'test_addwells.run_gui(check, os.path.join(tmp, "addwellsgui"))', lambda: test_addwells.run_gui(check, os.path.join(tmp, "addwellsgui")))
         from . import test_crosscheck
         os.makedirs(os.path.join(tmp, "ccgui"))
-        test_crosscheck.run_gui(check, os.path.join(tmp, "ccgui"))
+        _guarded(check, 'test_crosscheck.run_gui(check, os.path.join(tmp, "ccgui"))', lambda: test_crosscheck.run_gui(check, os.path.join(tmp, "ccgui")))
         from . import test_gis
-        test_gis.run_gui(check, tmp)
+        _guarded(check, 'test_gis.run_gui(check, tmp)', lambda: test_gis.run_gui(check, tmp))
         from . import test_qgislink
-        test_qgislink.run_gui(check, tmp)
+        _guarded(check, 'test_qgislink.run_gui(check, tmp)', lambda: test_qgislink.run_gui(check, tmp))
         from . import test_blend
-        test_blend.run_gui(check, tmp)
+        _guarded(check, 'test_blend.run_gui(check, tmp)', lambda: test_blend.run_gui(check, tmp))
         from . import test_structure
-        test_structure.run_gui(check, tmp)
+        _guarded(check, 'test_structure.run_gui(check, tmp)', lambda: test_structure.run_gui(check, tmp))
         from . import test_migration
-        test_migration.run_gui(check, tmp)
+        _guarded(check, 'test_migration.run_gui(check, tmp)', lambda: test_migration.run_gui(check, tmp))
         from . import test_spacing
-        test_spacing.run_gui(check, tmp)
+        _guarded(check, 'test_spacing.run_gui(check, tmp)', lambda: test_spacing.run_gui(check, tmp))
         from . import test_mapbus
-        test_mapbus.run_gui(check, tmp)
+        _guarded(check, 'test_mapbus.run_gui(check, tmp)', lambda: test_mapbus.run_gui(check, tmp))
         from . import test_livemap
-        test_livemap.run_gui(check, tmp)
-        test_livemap.run_gui_culture(check, tmp)
-        test_livemap.run_gui_seismic(check, tmp)
-        test_livemap.run_gui_wellsection(check, tmp)
-        test_livemap.run_gui_livegrid(check, tmp)
-        test_livemap.run_gui_output(check, tmp)
+        _guarded(check, 'test_livemap.run_gui(check, tmp)', lambda: test_livemap.run_gui(check, tmp))
+        _guarded(check, 'test_livemap.run_gui_culture(check, tmp)', lambda: test_livemap.run_gui_culture(check, tmp))
+        _guarded(check, 'test_livemap.run_gui_seismic(check, tmp)', lambda: test_livemap.run_gui_seismic(check, tmp))
+        _guarded(check, 'test_livemap.run_gui_wellsection(check, tmp)', lambda: test_livemap.run_gui_wellsection(check, tmp))
+        _guarded(check, 'test_livemap.run_gui_livegrid(check, tmp)', lambda: test_livemap.run_gui_livegrid(check, tmp))
+        _guarded(check, 'test_livemap.run_gui_output(check, tmp)', lambda: test_livemap.run_gui_output(check, tmp))
         from . import test_faultlik
-        test_faultlik.run_gui(check, tmp)
+        _guarded(check, 'test_faultlik.run_gui(check, tmp)', lambda: test_faultlik.run_gui(check, tmp))
         from . import test_velvolume
-        test_velvolume.run_gui(check, os.path.join(tmp, "vvgui"))
+        _guarded(check, 'test_velvolume.run_gui(check, os.path.join(tmp, "vvgui"))', lambda: test_velvolume.run_gui(check, os.path.join(tmp, "vvgui")))
         from . import test_scene3d
-        test_scene3d.run_gui(check, tmp)
+        _guarded(check, 'test_scene3d.run_gui(check, tmp)', lambda: test_scene3d.run_gui(check, tmp))
         from . import test_geobody
-        test_geobody.run_gui(check, tmp)
+        _guarded(check, 'test_geobody.run_gui(check, tmp)', lambda: test_geobody.run_gui(check, tmp))
         from . import test_framework
-        test_framework.run_gui(check, tmp)
+        _guarded(check, 'test_framework.run_gui(check, tmp)', lambda: test_framework.run_gui(check, tmp))
         from . import test_propmodel
-        test_propmodel.run_gui(check, tmp)
+        _guarded(check, 'test_propmodel.run_gui(check, tmp)', lambda: test_propmodel.run_gui(check, tmp))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

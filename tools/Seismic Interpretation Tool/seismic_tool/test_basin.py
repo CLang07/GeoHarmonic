@@ -268,7 +268,7 @@ def run_thermal(check, tmp):
     # independent check: constant heating -> integral in temperature with fine quadrature
     H = 2.0 / M.SEC_MY
     Tk = np.linspace(283.15, 473.15, 200001)
-    I = np.array([np.trapezoid(M.EASY_A * np.exp(-E / M.R_KCAL / Tk), Tk) / H for E in M.EASY_E]) \
+    I = np.array([getattr(np, "trapezoid", getattr(np, "trapz", None))(M.EASY_A * np.exp(-E / M.R_KCAL / Tk), Tk) / H for E in M.EASY_E]) \
         if hasattr(np, "trapezoid") else np.array([np.trapz(M.EASY_A * np.exp(-E / M.R_KCAL / Tk), Tk) / H
                                                     for E in M.EASY_E])
     ref = np.exp(-1.6 + 3.7 * np.sum(M.EASY_F * (1 - np.exp(-I))))

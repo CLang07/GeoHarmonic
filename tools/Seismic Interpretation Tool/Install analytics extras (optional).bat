@@ -6,6 +6,6 @@ if not exist .venv\Scripts\python.exe (
   pause
   exit /b 1
 )
-.venv\Scripts\python.exe -m pip install xgboost scikit-learn shap
+.venv\Scripts\python.exe -m pip install "numpy<2" xgboost scikit-learn shap
 .venv\Scripts\python.exe -m seismic_tool --check-ml
 pause

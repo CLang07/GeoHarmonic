@@ -782,7 +782,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Run end: HANDOFF + WHATS_NEW "3D module" section with step-by-step Windows instructions (open the 3D window, load
    F3, add horizons and wells, build the grid).
 
-38. **PC test fixes + illustrated tutorial** - status: todo (added 2026-11-25 after the first install on Chris's PC; HIGHEST PRIORITY open item)
+38. **PC test fixes + illustrated tutorial** - status: partial (run 7: 38a-c done - view3d GL function table fetched fresh, guarded GUI test modules, numpy<2 pin, QT_QPA_FONTDIR; tests in test_pcfixes.py + test_scene3d.run_gl_real. Left: 38d tutorial, 38e builder)
    First install on Chris's Windows PC (25 Nov 2026, Install GeoHarmonic.bat; Anaconda Python 3.11.3, per-tool .venv,
    PySide6 6.5.3, pyqtgraph 0.13.7, numpy 2.4.6): Well Correlation self-test PASSED + GUI test (real Qt offscreen)
    PASSED (218 checks, 0 failures); Seismic self-test PASSED (~1,000 checks) but GUI test FAILED; Mistie self-test

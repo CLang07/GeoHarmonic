@@ -117,11 +117,11 @@ echo       Creating its private Python environment (.venv)...
 "%PY%" -m venv "%TDIR%\.venv" >> "%LOG%" 2>&1
 if not exist "%VPY%" goto tool_venvfail
 :tool_havevenv
-echo       Installing numpy, matplotlib, PySide6 6.5.3, pyqtgraph 0.13.7...
+echo       Installing numpy 1.x, matplotlib, PySide6 6.5.3, pyqtgraph 0.13.7...
 "%VPY%" -m pip install --upgrade pip >> "%LOG%" 2>&1
-"%VPY%" -m pip install numpy matplotlib "PySide6==6.5.3" "pyqtgraph==0.13.7" >> "%LOG%" 2>&1
+"%VPY%" -m pip install "numpy<2" matplotlib "PySide6==6.5.3" "pyqtgraph==0.13.7" >> "%LOG%" 2>&1
 if errorlevel 1 goto tool_pipfail
-"%VPY%" -c "from PySide6 import QtWidgets; import pyqtgraph; import PySide6; print('Qt OK - PySide6', PySide6.__version__)" >> "%LOG%" 2>&1
+"%VPY%" -c "from PySide6 import QtWidgets; import pyqtgraph; import PySide6; import numpy; print('Qt OK - PySide6', PySide6.__version__, '- numpy', numpy.__version__)" >> "%LOG%" 2>&1
 if errorlevel 1 goto tool_qtfail
 echo       Qt OK
 pushd "%TDIR%"
