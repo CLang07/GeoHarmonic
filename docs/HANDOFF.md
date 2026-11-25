@@ -597,6 +597,25 @@ Chris runs each tool from its folder on Windows: `Install (run once).bat` create
   fault traces, depth via the velocity-volume model when built else the layer-cake, make_grid, export, bus
   'velocities' -> rebuild). Tests `test_framework.py` (run, run_gui).
 
+- Property modelling + volumetrics (item 36, v0.60): `propmodel.py` - `cell_centres` (X, Y, Zc, top, bot), `column_of`,
+  `upscale_well` (arithmetic / harmonic / geometric / most-of, QC rows), `cells_to_array`, `variogram_3d` (azimuth +-
+  tol or vertical, pair-sampled above 2M pairs), `fit_variogram` (range scan + LS sill / nugget), `histogram`,
+  `zone_stats`, `Vario(sill, r_major, r_minor, r_vert in CELLS, azimuth, nugget, kind)` with `scaled`, `cov`, `template`
+  (offsets inside the range ellipsoid sorted by distance = the search neighbourhood), `_sk_weights`, `krige`,
+  `normal_score` (+ Acklam `_norm_ppf`), `sgs` (random path, SK in normal scores, optional facies mask, `ref` = target
+  distribution), `indicator_kriging`, `sis` (tau-model soft trend), `volumetrics` (per zone x block, contacts scalar or
+  {block: depth}, oil between GOC and OWC, gas above GOC; m3, bbl, scf), `totals`, `realization_stats` (P90 = 10th
+  percentile), `block_summary`, `write_csv`. `gui/propmodel_dialog.PropertyDialog(project, grid, parent, bus, stack)`
+  (upscale / project_wells (petro curves or raw logs along the trajectories) / variogram / simulate / volumetrics ->
+  bus 'layers' points 'Volumetrics per block' / export). Tests `test_propmodel.py` (run, run_gui).
+- **3D module on Windows, step by step** (items 33-36): 1. `Seismic Interpretation Tool.bat`, open the F3 project
+  (`Set up F3 project.bat` builds it). 2. View > 3D Viewer (Ctrl+Shift+3) - planes, horizons, faults, wells appear;
+  if the title shows "software rendering" OpenGL did not start (report the graphics card). 3. Interpret > Automated
+  fault mapping to get faults if needed. 4. Interpret > Velocity model (layer-cake) and / or Velocity volume.
+  5. Interpret > Structural framework + 3D grid: 1. Framework, 2. Depth, 3. 3D grid, Export GRDECL (ResInsight / OPM
+  Flow). 6. 4. Properties + volumetrics: Upscale logs (PHIE from the Petrophysics results), Variogram, Simulate,
+  Volumetrics (enter contacts in code for now), Export. No extra installs are needed (PySide6 OpenGL + numpy).
+
 ## Well Correlation Tool (v0.4.0, stable - Chris uses it)
 las.py (LAS reader), curves.py (alias families GR/RDEEP/RSHAL/RHOB/NPHI/DT/PE/SP/CALI, compositing,
 flatline removal), geo.py (NZTM2000 projection, min curvature), project.py (Project.open, wells, tops,

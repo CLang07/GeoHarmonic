@@ -21,6 +21,7 @@ class FrameworkDialog(QtWidgets.QDialog):
         self.layering = None
         self.cell = None
         self.model_t = self.model = self.grid = None
+        self.prop_dialog = None
         self.message = ""
         lay = QtWidgets.QVBoxLayout(self)
         self.info = QtWidgets.QLabel(f"Horizons: {', '.join(self.horizons) or '-'}; faults: {', '.join(self.faults) or '-'}")
@@ -30,7 +31,8 @@ class FrameworkDialog(QtWidgets.QDialog):
         for text, fn in (("1. Framework (time)", lambda *_: self.build()),
                          ("2. Depth (current depth model)", lambda *_: self.depth()),
                          ("3. 3D grid", lambda *_: self.make_grid()),
-                         ("Export GRDECL...", lambda *_: self._export_dialog())):
+                         ("Export GRDECL...", lambda *_: self._export_dialog()),
+                         ("4. Properties + volumetrics...", lambda *_: self.properties())):
             b = QtWidgets.QPushButton(text)
             b.clicked.connect(fn)
             row.addWidget(b)
@@ -106,6 +108,17 @@ class FrameworkDialog(QtWidgets.QDialog):
                   f"active cells, {q['fault_blocks']} fault blocks, zero-thickness {q['zero_thickness']}, "
                   f"negative {q['negative_thickness']}")
         return q
+
+    def properties(self):
+        """PLAN 36 dialog on this grid."""
+        from .propmodel_dialog import PropertyDialog
+        if self.grid is None:
+            self.make_grid()
+        st = getattr(getattr(self.parent(), "basemap", None), "stack", None)
+        dlg = PropertyDialog(self.project, self.grid, self, self.bus, st)
+        dlg.show()
+        self.prop_dialog = dlg
+        return dlg
 
     def export(self, path, surfaces_folder=None):
         if self.grid is None:

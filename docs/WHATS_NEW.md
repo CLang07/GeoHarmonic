@@ -874,3 +874,19 @@ Test first: Dashboard > Wells from project (a pad of laterals) > Spacing + ellip
 ### Test this first (framework)
 1. F3 with 3+ horizons and the main faults: 1. Framework - check the block count in the message.
 2. 2. Depth, 3. 3D grid, Export GRDECL; open the .grdecl in ResInsight (free) and look at the zones and fault blocks.
+
+## Property modelling + volumetrics (PLAN item 36, Seismic v0.60.0 - run 6, 25 Nov 2026)
+- Framework dialog > **4. Properties + volumetrics**: upscale well logs into the 3D grid (arithmetic / harmonic /
+  geometric, 'most of' for facies), experimental variograms + fit, facies by sequential indicator simulation (with an
+  optional seismic / inversion probability trend), porosity by sequential Gaussian simulation (several realizations,
+  fixed seeds, optionally only inside a facies), volumetrics per zone and fault block with OWC / GOC and Bo / Bg,
+  P90 / P50 / P10 over the realizations, per-block STOIIP labels on the Live Map, GRDECL with PORO + a CSV table.
+
+## 3D module - step by step on Windows (items 33-36)
+1. Open the F3 project in the Seismic Interpretation Tool (or run `Set up F3 project.bat` first).
+2. View > 3D Viewer: check the planes, horizons, faults and wells; Pick horizon / Pick fault work by clicking (no
+   dragging) on a plane; Track grows the horizon from those seeds.
+3. Interpret > Velocity model (and optionally Velocity volume) so the framework can go to depth.
+4. Interpret > Structural framework + 3D grid: 1. Framework, 2. Depth, 3. 3D grid, Export GRDECL - open it in the
+   free ResInsight to look at zones and fault blocks.
+5. 4. Properties + volumetrics: Upscale logs, Variogram, Simulate (10 realizations), Volumetrics, Export.

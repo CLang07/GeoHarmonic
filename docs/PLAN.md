@@ -765,7 +765,7 @@ notes: Claude project docs "GeoHarmonic Live Map plan item" and "GeoHarmonic 3D 
    Tests: synthetic faulted layer-cake -> grid cell counts, zone thicknesses and fault-block throw correct; GRDECL
    round-trip; no crossing horizons after truncation.
 
-36. **Property modeling + volumetrics** - status: todo
+36. **Property modeling + volumetrics** - status: done (run 6, 2026-11-25, Seismic v0.60.0: `propmodel.py`, `gui/propmodel_dialog.py` (Framework dialog > 4. Properties + volumetrics). Follow-ups: SGS / SIS speed on full-field grids (Python loop per cell: fine to ~100k cells, then needs batching); interactive variogram fitting plot; Sw modelling as its own property (constant 0.3 when none); a full 3D-module walk-through on F3 with Chris)
    36a. Log upscaling to the cells each well passes through (arithmetic / harmonic / geometric / most-of), using the
         item-20 petrophysics curves; QC plot raw vs upscaled.
    36b. Data analysis per zone: experimental variograms (major / minor / vertical), interactive model fit,

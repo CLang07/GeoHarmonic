@@ -468,7 +468,46 @@ on the PC: all self-tests and GUI tests pass (Well Correlation, Seismic 1,057 ch
 - Next: Lesson 4 (F3) of the tutorial; PLAN Phase 3 (items 31-36).
 
 
-## 2026-11-25 (scheduled run 6, started 07:18 UTC) - Live Map (item 31) - run in progress
-- PLAN: added item 37 "Velocity-volume depth conversion" (placed after 32, before the 3D items; 35c consumes it).
-  Live Map (31) and 3D Viewer (33) already existed, so those one-time additions were skipped.
-- Checkpoint 1: 31a map bus + retrofit of Seismic / Well Correlation / Mistie tools (all self-tests + GUI tests pass).
+## 2026-11-25 (scheduled run 6, 07:18-08:45 UTC) - items 31, 32, 37, 33, 34, 35, 36: ALL PLAN ITEMS DONE
+All open PLAN items are finished; nothing is left in todo / partial. No real Qt / OpenGL here - everything GUI-side
+ran under the Qt mock, so the first real-Qt look on the PC matters most (checklist below).
+- PLAN: added item 37 "Velocity-volume depth conversion" (placed after 32, before the 3D items: 35c uses it). The Live
+  Map (31) and 3D Viewer (33) items already existed, so those one-time additions were skipped.
+- 31 Live Map (Seismic v0.54, Well Correlation v0.13, Mistie 2.1): shared map bus (`mapbus.py`: selection, filters,
+  active line / inline / well / section, DataChanged, WellTable column store; cross-process through
+  `<well project>_mapbus/` events.jsonl + state.json + welltable.csv) and retrofit of all three tools; View > Live Map
+  (dark, Spotfire-style well styling incl. rule colours, filters, lasso, linked table / crossplot / histogram, scale
+  bar, north arrow, readout, culture presets + GeoJSON, current-section line, arbitrary line, shotpoints, mistie
+  markers, well sections into the correlation tool, live gridding with fault barriers, live depth maps, layers from
+  other modules, PNG / PDF and GIS / ZMAP+ export).
+- 32 Automated fault mapping (v0.55): fault likelihood / TFL / strike / dip volumes, fault skins (crossing faults kept
+  apart), table + filters + stereonet / rose + merge assistant, faults with sticks, throws (RGT or correlation),
+  fault polygons on horizons (gridding barriers), 2D-line cuts correlated across lines. Interpret menu.
+- 37 Velocity-volume depth conversion (v0.56): well-tie velocities along the horizon framework (+ optional Dix trend
+  from stacking velocities), maps tie every top exactly, calibrated volume, dynamic re-tie, blind test vs layer-cake.
+- 33 3D Viewer (v0.57): OpenGL window (PySide6 only) with software fallback; planes (coarse while dragging), horizons,
+  faults, wells + tops, culture, VE, saved views, screenshot, turntable GIF; linked both ways through the bus.
+- 34 3D interpretation (v0.58): pick horizons / fault sticks on planes, track from 3D seeds, volume rendering,
+  geobodies (+ outlines on the Live Map), any volume on the planes.
+- 35 Framework + 3D grid (v0.59): fault traces, per-block horizons + rules, depth, stair-stepped grid, GRDECL / ZMAP+.
+- 36 Properties + volumetrics (v0.60): upscaling, variograms, SIS / SGS, volumetrics P90 / P50 / P10, GRDECL / CSV.
+- Files (new): seismic_tool/mapbus.py, livemap.py, livegrid.py, faultlik.py, faultskin.py, velvolume.py, scene3d.py,
+  geobody.py, framework.py, propmodel.py, gis/geojson.py, gis/zmap.py, gui/maplink.py, live_map.py, faultmap_dialog.py,
+  velvolume_dialog.py, view3d.py, framework_dialog.py, propmodel_dialog.py + test_* for each; well_correlation/
+  maplink.py + test_maplink.py; mistie_tool/maplink.py; dev/fakeqt PySide6.QtOpenGL / QtOpenGLWidgets mocks.
+  Changed: main windows of all three tools, basemap / layers_dock / maplayers / mapexport / gis vector + export,
+  mistie / basin dialogs, synth.py, selftests. Docs: PLAN, HANDOFF (incl. 3D step-by-step), WHATS_NEW, CLAUDE.md unchanged.
+- Tests: Seismic selftest PASSED (1017 checks), Seismic --guitest under the Qt mock PASSED (383), Well Correlation
+  selftest PASSED (188) + guitest PASSED (30), Mistie selftest PASSED (incl. the map-bus link).
+- Known limitations: no real Qt / GPU run yet (3D Viewer OpenGL path only exercised with mocks); SGS / SIS are per-cell
+  Python loops (fine to ~100k cells); fault orientation uses a structure-tensor estimate instead of a brute-force scan;
+  polygon fills ignore holes; the Dashboard keeps its own selection model; follow-ups are listed on each PLAN item.
+- Test this first (Windows, after pulling dev):
+  1. `Run all tests.bat` - all self-tests and GUI tests (real Qt offscreen) must pass.
+  2. Seismic tool on F3: View > 3D Viewer - OpenGL or "software rendering"? Drag the Inline slider, orbit, zoom.
+  3. View > Live Map: style wells by a column + a rule, add a filter, lasso; open the Well Correlation Tool on the same
+     well project and select a well there - it must light up in both seismic windows.
+  4. Interpret > Automated fault mapping on F3: 1. volumes (note the time), 2. extract, 3. create faults.
+  5. Interpret > Velocity volume (advanced): build, blind test vs layer-cake.
+  6. Interpret > Structural framework + 3D grid > 1-3, Export GRDECL, open in ResInsight; 4. Properties + volumetrics.
+- Next: no PLAN items left - add new ones (candidates: the follow-ups noted on items 31-37, a guided F3 walk-through).
