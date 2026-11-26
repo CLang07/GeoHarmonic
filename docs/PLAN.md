@@ -1024,3 +1024,70 @@ is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built ag
         residual ~0; fault throw preserved within tolerance; every top ties within 0.1 m; a picking spike doesn't
         widen the blend; width > overlap switches to residual surface; a moved top re-blends only that horizon;
         priority cut reproduced exactly when blending is off. fakeqt; WHATS_NEW + test checklist.
+
+## Phase 5 - PC retest fixes (added 2026-11-26, after the second install test on Chris's PC)
+
+43. **PC retest fixes + F3 worked-example tutorial** - status: todo
+   Second install on Chris's Windows PC (26 Nov 2026; Anaconda Python 3.11.3, per-tool .venv, PySide6 6.5.3,
+   pyqtgraph 0.13.7, numpy 1.26.4 now pinned): Well Correlation self-test + real-Qt GUI test PASSED (228 checks);
+   Mistie self-test PASSED; Seismic self-test FAILED (1 of ~1,275) and Seismic GUI test FAILED (2 of ~320). The 3D
+   Viewer fix, numpy<2 pin and per-module test guard all worked (all 33/34/36 GUI checks passed). Fix the bugs below
+   with a regression test each, then rebuild the tutorial as an F3 worked example.
+   43a. Survey blending window crashes on open: selftest -> test_surveyblend.run_gui -> mw.survey_blend() ->
+        gui/main_window.py line ~1496 `dlg.show()` -> TypeError: 'PySide6.QtWidgets.QComboBox' object is not
+        callable. An attribute named `show` (a QComboBox) shadows QWidget.show on the dialog. Rename the attribute
+        (e.g. self.show_combo) everywhere, and grep every dialog/window class for attributes that shadow QWidget /
+        QDialog methods (show, close, update, resize, move, hide, raise_, setVisible, size, pos, width, height,
+        layout, font, palette, style, windowTitle, accept, reject, exec) - add a test that instantiates every dialog
+        under real Qt offscreen and calls show()/close().
+   43b. Basin model / Wheeler off-by-one: test_basin.run_chrono -> rgt/stack.py wheeler() line ~143 `amp = seis[r,
+        k] * (1 - w) + seis[r, k + 1] * w` -> IndexError: index 300 is out of bounds for axis 1 with size 300 (on
+        numpy 1.26.4). Clip k to n-2 (and w to [0,1]) so the last sample interpolates correctly; check every similar
+        linear-interpolation index in rgt/, basin and stack code for the same edge case; test with a level exactly
+        at the last sample and beyond it, on numpy 1.26 and 2.x.
+   43c. Structural framework GUI: "FAIL 35 GUI: framework from the picks with the fault as a barrier (1 blocks)" -
+        the window path builds 1 fault block where the unit tests get 2. Find why the fault does not reach the
+        framework builder from the dialog (sticks/surface not passed, fault polygons not derived, wrong survey
+        extent) and fix; the GUI test must get 2 blocks.
+   43d. Live Map grid misplaced (found on Chris's PC on F3, 25 Nov): Live grid of horizon FS6 is drawn ~5-6 km east
+        of the 3D survey outline on screen and in Export map (grid starts near X 611,500 m instead of ~605,500 m and
+        runs past the east edge); the same FS6 time map on the seismic window's basemap is placed correctly. Likely
+        the Live Map grid layer ignores the survey's rotation/origin transform (inline/crossline -> X/Y) or uses an
+        axis-aligned bounding box. Fix so Live grid, contours and exports line up with the outline and the seismic
+        basemap; test on a rotated synthetic survey that a known grid node lands on its exact X/Y.
+   43e. Live Map Arbitrary line opens no section: clicking points then double-clicking (and Enter) draws a magenta
+        path that closes back on itself (a triangle) and no arbitrary section window opens. Fix: double-click (or
+        Enter / right-click) ends an open polyline (never closed) and opens the arbitrary section in the seismic
+        window; the path stays on the map as the section line. GUI test for it.
+   43f. Live Map rule colours: `X <= 615000 = lime` gave "Well style: invalid literal for int() with base 16: 'li' -
+        default style used". Accept all CSS/SVG named colours (QColor(name).isValid()) plus #rgb/#rrggbb; on an
+        unknown name show a clear message naming the bad colour instead of resetting the style. The legend also
+        showed "X ● other" for the second rule - label each rule correctly.
+   43g. Live Map filters: wells hidden by a filter keep their name labels on the map - hide labels with their
+        symbols (map, and export).
+   43h. F3 worked-example tutorial: one continuous worked example on the real F3 Netherlands project
+        (Documents\F3 Netherlands\F3 Netherlands.seisproj.json on Chris's PC; 3D volume 'F3 original', wells F02-1,
+        F03-2, F03-4, F06-1, horizons FS6, FS7, FS8, MFS4 ..., Fault A), in the order he would work: open project and
+        tour > Well Correlation of the 4 wells and tops > well ties > seismic conditioning (Interpretation preset on
+        inline 425, protect polygon 1200-1350 ms) > horizon/fault picking + autotracking > automated fault mapping >
+        RGT / Wheeler > velocity model + depth conversion (+ velocity volume) > Live Map (Live grid, styling,
+        filters, selection sync, arbitrary line, export) > glow/aesthetics > 3D Viewer + 3D interpretation >
+        structural framework + 3D grid > property modelling + volumetrics > prospects/migration. Each step: what it
+        is for (vs Kingdom/Petrel), numbered clicks with exact menu names, screenshots with numbered callouts, the
+        result with real numbers from F3, and what to look for. Keep the per-tool reference chapters, but every
+        chapter gets screenshots (fill the missing ones: RGT/Wheeler, 3D interpretation, prospects/migration/
+        spacing). Remove the "fixes" claims that no longer apply and add a "Fixes in this release" section for a-g
+        with before/after.
+   43i. Where screenshots come from: F3 is only on Chris's PC (not in the build environment). Extend
+        dev/build_tutorial.py with an F3 mode that the installer's tutorial step runs on his PC when that project
+        exists (falls back to the synthetic demo project when it doesn't, with captions saying which). The build
+        environment validates the F3 script end to end on a small synthetic F3-like project (same names, rotated
+        survey, 4 wells, Fault A) so it runs cleanly on the PC; long operations in the F3 script use small windows/
+        sub-volumes so the tutorial step finishes in well under 15 minutes, with a progress line per chapter and a
+        log file; a failure in one chapter is captioned and the rest continue.
+   43j. Output: docs/TUTORIAL.html (self-contained) + docs/TUTORIAL.md, plus the PC-built copy in tutorial_local/;
+        PNGs <= 1400 px; desktop shortcut "GeoHarmonic - Tutorial" opens the PC-built copy; optional PDF export of
+        the tutorial (letter size) if matplotlib/Qt can print it, for reading on a phone.
+   43k. Tests: regression tests for a-g (all under real Qt offscreen where they touch windows); the tutorial
+        builder's F3 mode runs on the synthetic F3-like project in CI with every chapter producing at least one
+        picture; WHATS_NEW section + short "test this first".
