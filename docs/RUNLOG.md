@@ -610,3 +610,6 @@ PLAN.md at the start of this run from your 25 Nov requests). Seismic v0.65.0, We
   5. Seismic > Conditioning on F3 inline 425 > Preview: compare the difference panel with your prototype.
   6. File > Export section figure > 16:9 slide > PDF.
 - Next: no PLAN items left - add new ones to resume (candidates: the follow-ups listed in items 39-42).
+
+## Run 9 - 2026-11-26 (scheduled, started 20:34 UTC) - IN PROGRESS
+- Item 43 (PC retest fixes + F3 worked-example tutorial). Checkpoint 1: 43a-g fixed + test_retest.py; tutorial next.

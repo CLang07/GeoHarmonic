@@ -251,6 +251,8 @@ def run():
         _guarded(check, 'test_conditioning.run_volume_test(check, tmp)', lambda: test_conditioning.run_volume_test(check, os.path.join(tmp, "condvol")))
         from . import test_surveyblend
         _guarded(check, 'test_surveyblend.run(check, tmp)', lambda: test_surveyblend.run(check, os.path.join(tmp, "sblend")))
+        from . import test_retest
+        _guarded(check, 'test_retest.run(check, tmp)', lambda: test_retest.run(check, os.path.join(tmp, "retest")))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("SELFTEST PASSED" if ok else "SELFTEST FAILED")
@@ -373,6 +375,8 @@ def run_gui():
         _guarded(check, 'test_conditioning.run_gui(check, tmp)', lambda: test_conditioning.run_gui(check, os.path.join(tmp, "condgui")))
         from . import test_surveyblend
         _guarded(check, 'test_surveyblend.run_gui(check, tmp)', lambda: test_surveyblend.run_gui(check, os.path.join(tmp, "sblendgui")))
+        from . import test_retest
+        _guarded(check, 'test_retest.run_gui(check, tmp)', lambda: test_retest.run_gui(check, os.path.join(tmp, "retestgui")))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("GUI TEST PASSED" if ok else "GUI TEST FAILED")

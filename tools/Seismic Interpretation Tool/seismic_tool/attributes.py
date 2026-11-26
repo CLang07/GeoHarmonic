@@ -112,10 +112,9 @@ def semblance(block, dt_ms, window_ms=24.0, dip_i=None, dip_j=None):
                 sh += di * np.asarray(dip_i)[i0:i1, j0:j1]
             if dip_j is not None:
                 sh += dj * np.asarray(dip_j)[i0:i1, j0:j1]
-            src = np.clip(t[None, None, :] + sh, 0, ns - 1.000001)
-            k = np.floor(src).astype(int)
-            w = src - k
-            nb = np.take_along_axis(nb, k, 2) * (1 - w) + np.take_along_axis(nb, k + 1, 2) * w
+            from .lininterp import lin_index
+            k, k1, w = lin_index(t[None, None, :] + sh, ns)  # PLAN 43b
+            nb = np.take_along_axis(nb, k, 2) * (1 - w) + np.take_along_axis(nb, k1, 2) * w
         ssum += nb
         esum += nb * nb
     n = max(1, int(round(window_ms / dt_ms)) | 1)

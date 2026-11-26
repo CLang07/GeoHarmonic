@@ -1553,11 +1553,10 @@ class SectionPanel(QtWidgets.QWidget):
                     tau, times = self._ymap
                     tk = (np.asarray(c[1], float) - times[0]) / (times[1] - times[0])
                     ok = np.isfinite(tk)
-                    tk = np.clip(np.where(ok, tk, 0), 0, len(times) - 1.000001)
-                    k0 = np.floor(tk).astype(int)
-                    w = tk - k0
+                    from ..lininterp import lin_index
+                    k0, k1, w = lin_index(tk, len(times))  # PLAN 43b
                     r = np.arange(len(tk))
-                    c = (c[0], np.where(ok, tau[r, k0] * (1 - w) + tau[r, k0 + 1] * w, np.nan))
+                    c = (c[0], np.where(ok, tau[r, k0] * (1 - w) + tau[r, k1] * w, np.nan))
                 it = pg.PlotCurveItem(np.asarray(c[0], float), np.asarray(c[1], float), connect="finite",
                                       pen=pg.mkPen(h.color, width=width))
             self.plot.addItem(it)

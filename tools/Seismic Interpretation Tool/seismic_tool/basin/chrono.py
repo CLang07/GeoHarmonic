@@ -173,11 +173,10 @@ def horizon_rgt(tau, times, horizon_t):
     ht = np.asarray(horizon_t, float)
     k = (ht - times[0]) / (times[1] - times[0])
     ok = np.isfinite(k) & (k >= 0) & (k <= len(times) - 1)
-    kc = np.clip(np.where(ok, k, 0), 0, len(times) - 1.000001)
-    k0 = np.floor(kc).astype(int)
-    w = kc - k0
+    from ..lininterp import lin_index
+    k0, k1, w = lin_index(np.where(ok, k, 0), len(times))  # PLAN 43b
     r = np.arange(len(ht))
-    per = np.where(ok, tau[r, k0] * (1 - w) + tau[r, k0 + 1] * w, np.nan)
+    per = np.where(ok, tau[r, k0] * (1 - w) + tau[r, k1] * w, np.nan)
     med = float(np.nanmedian(per)) if np.isfinite(per).any() else np.nan
     return med, per
 

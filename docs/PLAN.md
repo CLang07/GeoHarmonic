@@ -1027,7 +1027,7 @@ is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built ag
 
 ## Phase 5 - PC retest fixes (added 2026-11-26, after the second install test on Chris's PC)
 
-43. **PC retest fixes + F3 worked-example tutorial** - status: todo
+43. **PC retest fixes + F3 worked-example tutorial** - status: partial (run 9, 2026-11-26: 43a-g fixed with regression tests test_retest.py, Seismic v0.66.0 / Well Correlation v0.14.1; 43h-k tutorial in progress)
    Second install on Chris's Windows PC (26 Nov 2026; Anaconda Python 3.11.3, per-tool .venv, PySide6 6.5.3,
    pyqtgraph 0.13.7, numpy 1.26.4 now pinned): Well Correlation self-test + real-Qt GUI test PASSED (228 checks);
    Mistie self-test PASSED; Seismic self-test FAILED (1 of ~1,275) and Seismic GUI test FAILED (2 of ~320). The 3D

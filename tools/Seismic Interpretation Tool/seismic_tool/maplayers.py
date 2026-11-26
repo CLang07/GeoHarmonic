@@ -76,6 +76,9 @@ def save_grid(project, grid, layer_id):
     path = os.path.join(d, fn)
     vol = getattr(grid, "vol", None)
     vname = ""
+    sub = getattr(vol, "sub", None)  # PLAN 43d: Live grid on every n-th bin of the survey (livegrid.SurveyGrid)
+    if sub is not None:
+        vol = vol.parent
     if grid.kind == "ilxl" and vol is not None:
         for v in project.volumes:  # project.volume() caches the Volume3D objects
             try:
@@ -89,7 +92,8 @@ def save_grid(project, grid, layer_id):
     tmp = path + ".tmp.npz"
     np.savez_compressed(tmp, z=np.asarray(grid.z, np.float32), kind=np.array(grid.kind), unit=np.array(grid.unit or ""),
                         label=np.array(grid.label or ""), vol=np.array(vname),
-                        geo=np.array([grid.x0, grid.y0, grid.dx, grid.dy], float))
+                        geo=np.array([grid.x0, grid.y0, grid.dx, grid.dy], float),
+                        sub=np.array(sub if sub is not None else [], np.int64))
     os.replace(tmp, path)
     return fn
 
@@ -100,6 +104,9 @@ def load_grid(project, fn):
     with np.load(path, allow_pickle=False) as z:
         kind = str(z["kind"])
         vol = project.volume(str(z["vol"])) if kind == "ilxl" and str(z["vol"]) else None
+        if vol is not None and "sub" in z.files and len(z["sub"]) == 6:
+            from .livegrid import SurveyGrid
+            vol = SurveyGrid(vol, *[int(v) for v in z["sub"]])
         x0, y0, dx, dy = (float(v) for v in z["geo"])
         return MapGrid(z["z"].astype(np.float64), kind, str(z["unit"]), str(z["label"]), vol, x0, y0, dx, dy)
 

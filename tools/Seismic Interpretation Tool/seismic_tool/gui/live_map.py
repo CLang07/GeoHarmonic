@@ -112,17 +112,44 @@ class LiveMapCanvas(Basemap):
             self._overlay.append(it)
         for comp_xy in self._pie_items(styled):
             self._overlay.append(comp_xy)
-        v = self.view()
-        if v is not None:
-            for k in LM.labels_in_view(styled, v):
-                if styled["label"][k]:
-                    t = pg.TextItem(str(styled["label"][k]), color=(230, 230, 230) if self.dark else (20, 20, 20),
-                                    anchor=(-0.15, 1.1))
-                    t.setPos(float(styled["x"][k]), float(styled["y"][k]))
-                    t.setZValue(60)
-                    self.plot.addItem(t, ignoreBounds=True)
-                    self._overlay.append(t)
+        self.update_labels()
         return len(vis)
+
+    def label_ids(self, view=None):
+        """Ids of the wells labelled now: visible (not filtered out) and in view (PLAN 43g)."""
+        if self.styled is None:
+            return []
+        v = view if view is not None else self.view()
+        if v is None:
+            return []
+        return [self.styled["ids"][k] for k in LM.labels_in_view(self.styled, v) if self.styled["label"][k]]
+
+    def update_labels(self, view=None):
+        """PLAN 43g: the Live Map labels only the styled wells that pass the filters (the basemap's own name labels
+        for every project well stayed on the map when a filter hid the symbols)."""
+        for it in self._label_items:
+            try:
+                self.plot.removeItem(it)
+            except Exception:
+                pass
+        self._label_items = []
+        st = getattr(self, "styled", None)
+        if st is None:
+            return []
+        v = view if view is not None else self.view()
+        if v is None:
+            return []
+        out = []
+        for k in LM.labels_in_view(st, v):
+            if st["label"][k]:
+                t = pg.TextItem(str(st["label"][k]), color=(230, 230, 230) if self.dark else (20, 20, 20),
+                                anchor=(-0.15, 1.1))
+                t.setPos(float(st["x"][k]), float(st["y"][k]))
+                t.setZValue(60)
+                self.plot.addItem(t, ignoreBounds=True)
+                self._label_items.append(t)
+                out.append((st["ids"][k], float(st["x"][k]), float(st["y"][k])))
+        return out
 
     def _pie_items(self, styled):
         out = []
@@ -313,6 +340,11 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         self.act_arb.setToolTip("Click points along a line, double-click to open the arbitrary section")
         self.act_arb.triggered.connect(lambda *_: self.start_arbitrary())
         tb.addAction(self.act_arb)
+        for key in ("Return", "Enter"):  # PLAN 43e: Enter ends the line / polygon being drawn, Esc cancels it
+            sc = QtGui.QShortcut(QtGui.QKeySequence(key), self)
+            sc.activated.connect(lambda *_: self.finish_drawing())
+        sc = QtGui.QShortcut(QtGui.QKeySequence("Escape"), self)
+        sc.activated.connect(lambda *_: self.cancel_drawing())
         a = QtGui.QAction("Zoom to selection", self)  # PLAN 40g: eased zoom
         a.triggered.connect(lambda *_: self.zoom_to_selection())
         tb.addAction(a)
@@ -354,7 +386,7 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         # canvas signals
         self.canvas.cursorMoved.connect(lambda m: self.cursor_moved(m.get("x"), m.get("y")))
         self.canvas.wellClicked.connect(lambda n: self.well_clicked(n))
-        self.canvas.polygonDrawn.connect(lambda xy: self.drawn(xy[0], xy[1]))
+        self.canvas.poly_callback = lambda xy: self.drawn(xy[0], xy[1])  # PLAN 43e (was the polygonDrawn signal)
         self.canvas.openLine.connect(lambda n: self._open("2D", n))
         self.canvas.openInline.connect(lambda v, il, xl: self._open("3D", v, "Inline", il))
         self.canvas.mapClicked.connect(lambda x, y, tol: self.map_clicked(x, y, tol))
@@ -519,9 +551,8 @@ class LiveMapWindow(QtWidgets.QMainWindow):
 
     @staticmethod
     def parse_rules(text):
-        """'expr = #rrggbb; expr2 = red' -> [{rule, color}] (colour names: red green blue orange grey ...)."""
-        names = {"red": "#e15759", "green": "#59a14f", "blue": "#4e79a7", "orange": "#f28e2b", "yellow": "#edc948",
-                 "grey": "#bab0ac", "gray": "#bab0ac", "purple": "#b07aa1"}
+        """'expr = #rrggbb; expr2 = lime' -> [{rule, color}]: any CSS / SVG colour name or #rgb / #rrggbb (PLAN 43f).
+        An unknown colour raises ValueError naming it (the style is then left as it was)."""
         out = []
         for part in str(text or "").split(";"):
             if "=" not in part.replace("==", "").replace(">=", "").replace("<=", "").replace("!=", ""):
@@ -531,12 +562,29 @@ class LiveMapWindow(QtWidgets.QMainWindow):
             if rule.endswith(("<", ">", "!", "=")):
                 continue
             MB.parse_rule(rule)
-            out.append({"rule": rule, "color": names.get(col.lower(), col)})
+            try:
+                hexc = LM.colour_hex(col)
+            except ValueError:
+                hexc = None
+                try:  # anything else Qt itself knows
+                    q = QtGui.QColor(col)
+                    if q.isValid() is True:
+                        hexc = q.name()
+                except Exception:
+                    pass
+                if not isinstance(hexc, str):
+                    raise ValueError(f"rule '{rule}': unknown colour '{col}' (use a name such as lime, red, steelblue "
+                                     f"or #rrggbb)")
+            out.append({"rule": rule, "color": hexc})
         return out
 
     def apply_style_widgets(self):
         mode = self.c_mode.currentText()
-        rules = self.parse_rules(self.rules_edit.text()) if mode == "rules" else None
+        try:
+            rules = self.parse_rules(self.rules_edit.text()) if mode == "rules" else None
+        except ValueError as e:  # PLAN 43f: say which colour is wrong, keep the current style
+            self._say(f"Well style not changed: {e}")
+            return self.styled
         self.state.well_style["size"]["column"] = self.s_col.currentText() or None
         self.state.well_style["shape"]["column"] = self.sh_col.currentText() or None
         self.state.well_style["label"]["column"] = self.l_col.currentText() or None
@@ -570,10 +618,11 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         if self.styled is None:
             return ""
         leg = self.styled["legend"]
-        rows = [f"<span style='color:{LM.rgba_hex(c)}'>&#9679;</span> {lab}" for lab, c in leg["color"]]
+        import html as _html  # PLAN 43f: a rule such as 'X <= 615000' is text, not HTML (it hid the rows after it)
+        rows = [f"<span style='color:{LM.rgba_hex(c)}'>&#9679;</span> {_html.escape(str(lab))}" for lab, c in leg["color"]]
         if leg["size"]:
             rows.append(f"size: {leg['size'][0]} {leg['size'][1]:g} - {leg['size'][2]:g}")
-        rows += [f"{s} = {lab}" for lab, s in leg["shape"]]
+        rows += [f"{_html.escape(str(s))} = {_html.escape(str(lab))}" for lab, s in leg["shape"]]
         return "<br>".join(rows)
 
     # ---------------------------------------------------------------- filters (bus FilterService)
@@ -688,12 +737,17 @@ class LiveMapWindow(QtWidgets.QMainWindow):
             return self.arbitrary(xs, ys)
         if self._draw_mode == "well_section":
             return self.well_section_along(xs, ys)
-        return self.lasso(xs, ys)
+        if self._draw_mode == "lasso" or self._lasso:
+            self._draw_mode = None
+            return self.lasso(xs, ys)
+        # a polygon started from the Map layers panel (Add polygon): it alone gets it (PLAN 43e - the panel also
+        # received every arbitrary line / lasso and stored it as a closed polygon layer)
+        return self.layers.polygon_drawn(xs, ys)
 
     def start_well_section(self):
         self._draw_mode = "well_section"
         self.canvas.min_poly_points = 2
-        self.canvas.start_polygon()
+        self.canvas.start_polygon(closed=False)
         self.statusBar().showMessage("Well section: click along the wells, double-click the last point", 8000)
 
     def well_section_along(self, xs, ys, buffer=None):
@@ -719,11 +773,25 @@ class LiveMapWindow(QtWidgets.QMainWindow):
         self._say(f"Cross section '{name}': {', '.join(wells)} (opens in the Well Correlation Tool)")
         return wells
 
+    def finish_drawing(self):
+        """Enter: end the polyline / polygon being drawn (emits polygonDrawn -> drawn())."""
+        if self.canvas.drawing():
+            return self.canvas.finish_polygon()
+        return None
+
+    def cancel_drawing(self):
+        if self.canvas.drawing():
+            self.canvas.cancel_polygon()
+            self._draw_mode = None
+            self.canvas.min_poly_points = 3
+            self._say("Drawing cancelled")
+
     def start_arbitrary(self):
         self._draw_mode = "arbitrary"
         self.canvas.min_poly_points = 2
-        self.canvas.start_polygon()
-        self.statusBar().showMessage("Arbitrary line: click the points, double-click the last one", 8000)
+        self.canvas.start_polygon(closed=False)  # PLAN 43e: an open path, ended by double-click / Enter / right-click
+        self.statusBar().showMessage("Arbitrary line: click the points; double-click, Enter or right-click ends it "
+                                     "and opens the section (Esc cancels)", 10000)
 
     def arbitrary(self, xs, ys, name=None):
         """Open an arbitrary section along the drawn line (PLAN 31e) and show it as the active section."""
@@ -740,6 +808,12 @@ class LiveMapWindow(QtWidgets.QMainWindow):
                 dlg = self.open_arbitrary(name, list(xs), list(ys))
             except Exception as e:
                 self._say(f"Arbitrary line failed: {e}")
+            else:
+                if dlg is None:
+                    self._say(f"{name}: no section opened (needs a 3D volume under the line - see the seismic "
+                              f"window's status bar)")
+                else:
+                    self._say(f"{name}: arbitrary section opened ({len(xy)} points); the line stays on the map")
         return dlg if dlg is not None else xy
 
     # ---------------------------------------------------------------- live gridding (31g)

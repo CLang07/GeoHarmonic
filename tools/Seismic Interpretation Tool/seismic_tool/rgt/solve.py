@@ -47,10 +47,9 @@ class RGTParams:
 def interp_rows(D, rows, t):
     """D (n, ns); rows int array, t fractional sample index (same shape) -> linearly interpolated values."""
     ns = D.shape[1]
-    tc = np.clip(t, 0, ns - 1.000001)
-    k = np.floor(tc).astype(np.int64)
-    w = tc - k
-    return D[rows, k] * (1 - w) + D[rows, k + 1] * w
+    from ..lininterp import lin_index
+    k, k1, w = lin_index(t, ns)  # PLAN 43b
+    return D[rows, k] * (1 - w) + D[rows, k1] * w
 
 
 def refine_corr(S, ra, ta, rb, tb, half, lag):

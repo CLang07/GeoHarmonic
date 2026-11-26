@@ -301,9 +301,9 @@ class GlowSettingsDialog(QtWidgets.QDialog):
         self.enabled = QtWidgets.QCheckBox("Glow on (G toggles)")
         self.mode = QtWidgets.QComboBox()
         self.mode.addItems(["Glow", "Halo", "Off"])
-        self.width = QtWidgets.QDoubleSpinBox()
-        self.width.setRange(0.5, 40.0)
-        self.width.setSuffix(" px")
+        self.width_spin = QtWidgets.QDoubleSpinBox()
+        self.width_spin.setRange(0.5, 40.0)
+        self.width_spin.setSuffix(" px")
         self.intensity = QtWidgets.QSpinBox()
         self.intensity.setRange(0, 100)
         self.intensity.setSuffix(" %")
@@ -319,7 +319,7 @@ class GlowSettingsDialog(QtWidgets.QDialog):
         self.active_only = QtWidgets.QCheckBox("Glow only the active / selected object")
         self.hover = QtWidgets.QCheckBox("Hover highlight")
         self.export = QtWidgets.QCheckBox("Exports include glow (untick = export without glow)")
-        for lab, w in (("", self.enabled), ("Mode", self.mode), ("Width", self.width), ("Intensity", self.intensity),
+        for lab, w in (("", self.enabled), ("Mode", self.mode), ("Width", self.width_spin), ("Intensity", self.intensity),
                        ("Falloff layers", self.layers), ("Glow colour", self.colour), ("Halo colour", self.halo),
                        ("Halo width", self.halo_px), ("", self.active_only), ("", self.hover), ("", self.export)):
             f.addRow(lab, w)
@@ -338,7 +338,7 @@ class GlowSettingsDialog(QtWidgets.QDialog):
         s = self.settings
         self.enabled.setChecked(s["enabled"])
         self.mode.setCurrentIndex(G.MODES.index(s["mode"]))
-        self.width.setValue(s["width_px"])
+        self.width_spin.setValue(s["width_px"])
         self.intensity.setValue(int(round(100 * s["intensity"])))
         self.layers.setValue(s["layers"])
         self.colour.setCurrentIndex(G.COLOUR_MODES.index(s["colour"]))
@@ -353,7 +353,7 @@ class GlowSettingsDialog(QtWidgets.QDialog):
         ci = int(self.colour.currentIndex())
         hi = int(self.halo.currentIndex())
         out = dict(enabled=bool(self.enabled.isChecked()), mode=G.MODES[int(self.mode.currentIndex())],
-                   width_px=float(self.width.value()), intensity=float(self.intensity.value()) / 100.0,
+                   width_px=float(self.width_spin.value()), intensity=float(self.intensity.value()) / 100.0,
                    layers=int(self.layers.value()), colour=G.COLOUR_MODES[ci],
                    halo_colour=("auto", "white", "black", "custom")[hi], halo_px=float(self.halo_px.value()),
                    active_only=bool(self.active_only.isChecked()), hover=bool(self.hover.isChecked()),

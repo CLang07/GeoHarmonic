@@ -13,7 +13,7 @@ class MistieDialog(QtWidgets.QDialog):
         self.setWindowTitle("Mistie analysis (2D-3D and 2D-2D)")
         self.project = project
         self.on_apply = on_apply
-        self.window = None  # (t0, t1) ms; None = whole trace
+        self.time_window = None  # (t0, t1) ms; None = whole trace
         self.max_lag = 40.0
         self.robust = True
         self.ties, self.sol = [], {}
@@ -106,7 +106,7 @@ class MistieDialog(QtWidgets.QDialog):
 
     def _read(self):
         t0, t1 = float(self.t0.value()), float(self.t1.value())
-        self.window = (t0, t1) if t1 > t0 else None
+        self.time_window = (t0, t1) if t1 > t0 else None
         self.max_lag = float(self.lag.value()) or 40.0
         self.robust = bool(self.rob.isChecked())
         self.flex = bool(self.flex_chk.isChecked())
@@ -137,18 +137,18 @@ class MistieDialog(QtWidgets.QDialog):
         if self.horizon:
             self.ties = MI.horizon_ties(self.project, self.project.horizons.get(self.horizon))
         else:
-            self.ties = MI.all_ties(self.project, self.window, self.max_lag)
+            self.ties = MI.all_ties(self.project, self.time_window, self.max_lag)
         if self.overlaps:
-            self.ties += MI.overlap_ties(self.project, window_ms=self.window, max_lag_ms=self.max_lag)
+            self.ties += MI.overlap_ties(self.project, window_ms=self.time_window, max_lag_ms=self.max_lag)
         if self.groups or self.key_lines:
             self.sol, self.ties = MI.solve_grouped(names, self.ties, self.groups, self.key_lines, robust=self.robust)
         else:
             self.sol, self.ties = MI.solve_network(names, self.ties, robust=self.robust)
-        if self.time_variant and self.window:
+        if self.time_variant and self.time_window:
             for v in [v["name"] for v in self.project.volumes]:
                 for L in names:
                     try:
-                        tv = MI.time_variant_line(self.project, v, L, self.window[0], self.window[1])
+                        tv = MI.time_variant_line(self.project, v, L, self.time_window[0], self.time_window[1])
                     except Exception:
                         tv = None
                     if tv and L in self.sol:
@@ -161,7 +161,7 @@ class MistieDialog(QtWidgets.QDialog):
         if self.flex:
             lines = [k for k in self.sol if not k.startswith("3D:")]
             fx = MI.solve_flex(self.project, lines, self.ties, self.sol, getattr(self, "lam", 1.0),
-                               getattr(self, "knot_traces", 50), self.window, self.max_lag)
+                               getattr(self, "knot_traces", 50), self.time_window, self.max_lag)
             big = []
             for L, f in fx.items():
                 self.sol[L]["flex"] = f

@@ -11,6 +11,8 @@ import os
 
 import numpy as np
 
+from ..lininterp import lin_index
+
 
 def iso_times(tau, levels, times):
     """tau (T, ns) monotonic non-decreasing per row; levels (N,) -> times (T, N) where tau == level
@@ -136,11 +138,10 @@ def wheeler(seis, tau, levels, times, gap_frac=0.25):
     idx = (t - times[0]) / dt
     fin = np.isfinite(idx)
     ns = seis.shape[1]
-    ic = np.clip(np.where(fin, idx, 0), 0, ns - 1.000001)
-    k = np.floor(ic).astype(np.int64)
-    w = ic - k
+    k, k1, w = lin_index(idx, ns)  # PLAN 43b: k <= ns - 2 (a level at / below the last sample no longer overflows)
     r = np.arange(seis.shape[0])[:, None]
-    amp = seis[r, k] * (1 - w) + seis[r, k + 1] * w
+    amp = seis[r, k] * (1 - w) + seis[r, k1] * w
+    fin = fin & (idx >= -1e-6) & (idx <= ns - 1 + 1e-6)  # beyond the trace: no amplitude
     amp = np.where(fin & ~hiatus, amp, np.nan)
     return amp.T.astype(np.float32), hiatus.T
 

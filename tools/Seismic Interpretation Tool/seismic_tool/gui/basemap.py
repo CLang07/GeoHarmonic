@@ -52,6 +52,10 @@ class Basemap(QtWidgets.QWidget):
         self._label_items = []
         self._poly = None  # [(x, y)] while drawing a polygon (None = not drawing)
         self._poly_item = None
+        self._poly_closed = True
+        self._last_click = None
+        self.poly_callback = None  # callable((xs, ys)) instead of the polygonDrawn signal
+        self.poly_result = None
         self.selected_wells = []
         self._sel_items = []
         self.stack = None  # maplayers.LayerStack: when set, the map is drawn from the layer stack (PLAN 21a)
@@ -425,10 +429,31 @@ class Basemap(QtWidgets.QWidget):
             self._current.setData(np.asarray(xy[0], float), np.asarray(xy[1], float))
 
     # ------------------------------------------------------------------ polygon drawing + well selection (21b)
-    def start_polygon(self):
-        """Click vertices on the map; double-click (or finish_polygon()) closes it and emits polygonDrawn."""
+    def start_polygon(self, closed=True):
+        """Click vertices on the map; double-click, Enter or right-click (or finish_polygon()) ends it and emits
+        polygonDrawn.  closed=False draws an open polyline (arbitrary line / well section, PLAN 43e)."""
         self._poly = []
+        self._poly_closed = bool(closed)
+        self._last_click = None
+        try:  # the right-click menu would swallow the 'finish' click while drawing
+            self.plot.getPlotItem().getViewBox().setMenuEnabled(False)
+        except Exception:
+            pass
         self._draw_poly()
+
+    def drawing(self):
+        return self._poly is not None
+
+    def cancel_polygon(self):
+        self._poly = None
+        self._draw_poly()
+        self._menu_back()
+
+    def _menu_back(self):
+        try:
+            self.plot.getPlotItem().getViewBox().setMenuEnabled(True)
+        except Exception:
+            pass
 
     def add_polygon_point(self, x, y):
         if self._poly is not None:
@@ -438,9 +463,19 @@ class Basemap(QtWidgets.QWidget):
     def finish_polygon(self):
         pts, self._poly = self._poly, None
         self._draw_poly()
+        self._menu_back()
+        if pts:  # a double-click delivers its point twice (single + double click): drop repeated vertices
+            keep = [pts[0]]
+            for q in pts[1:]:
+                if math.hypot(q[0] - keep[-1][0], q[1] - keep[-1][1]) > 1e-6 * max(1.0, abs(q[0]) + abs(q[1])):
+                    keep.append(q)
+            pts = keep
         if pts and len(pts) >= self.min_poly_points:
             xs, ys = [p_[0] for p_ in pts], [p_[1] for p_ in pts]
-            self.polygonDrawn.emit((xs, ys))
+            if self.poly_callback is not None:  # direct call (Live Map, PLAN 43e) - also works under the Qt mock
+                self.poly_result = self.poly_callback((xs, ys))
+            else:
+                self.polygonDrawn.emit((xs, ys))
             return xs, ys
         return None
 
@@ -452,8 +487,9 @@ class Basemap(QtWidgets.QWidget):
                 pass
             self._poly_item = None
         if self._poly:
-            xs = [p_[0] for p_ in self._poly] + [self._poly[0][0]]
-            ys = [p_[1] for p_ in self._poly] + [self._poly[0][1]]
+            close = self._poly[:1] if self._poly_closed else []  # open polylines are never closed (PLAN 43e)
+            xs = [p_[0] for p_ in self._poly + close]
+            ys = [p_[1] for p_ in self._poly + close]
             self._poly_item = pg.PlotCurveItem(np.array(xs), np.array(ys), pen=pg.mkPen((200, 0, 200), width=2,
                                                                                          style=QtCore.Qt.DashLine))
             self.plot.addItem(self._poly_item)
@@ -490,17 +526,54 @@ class Basemap(QtWidgets.QWidget):
         wx, wy = self.wells.xy[k]
         return self.wells.names[k] if math.hypot(wx - x, wy - y) <= tol else None
 
+    def _is_double(self, ev):
+        """pyqtgraph does not always flag the second click of a double-click (a grabbing item takes the press):
+        also count two clicks within the platform double-click interval and a few pixels (PLAN 43e)."""
+        import time as _t
+        try:
+            if ev.double() is True:
+                return True
+        except Exception:
+            pass
+        now = _t.monotonic()
+        try:
+            sp = ev.screenPos()
+            pos = (float(sp.x()), float(sp.y()))
+            interval = QtWidgets.QApplication.doubleClickInterval() / 1000.0
+        except Exception:
+            pos, interval = None, 0.4
+        last, self._last_click = self._last_click, (now, pos)
+        if last is None or pos is None or last[1] is None or not isinstance(interval, float):
+            return False
+        return now - last[0] <= interval and math.hypot(pos[0] - last[1][0], pos[1] - last[1][1]) <= 6.0
+
+    def poly_click(self, x, y, button="left", double=False):
+        """One click while drawing (also the test entry point): left adds a vertex, a double-click adds it and
+        ends the shape, right ends it."""
+        if self._poly is None:
+            return None
+        if button == "right":
+            return self.finish_polygon()
+        self.add_polygon_point(x, y)
+        if double:
+            return self.finish_polygon()
+        return None
+
     def _clicked(self, ev):
-        if not self.project or ev.button() != QtCore.Qt.LeftButton:
+        if not self.project:
             return
         vb = self.plot.getPlotItem().getViewBox()
         if not vb.sceneBoundingRect().contains(ev.scenePos()):
             return
+        if self._poly is not None and ev.button() == QtCore.Qt.RightButton:
+            ev.accept()
+            self.poly_click(0.0, 0.0, "right")
+            return
+        if ev.button() != QtCore.Qt.LeftButton:
+            return
         pt = vb.mapSceneToView(ev.scenePos())
-        if self._poly is not None:  # drawing a polygon: clicks add vertices, double-click closes
-            self.add_polygon_point(pt.x(), pt.y())
-            if ev.double():
-                self.finish_polygon()
+        if self._poly is not None:  # drawing: clicks add vertices; double-click / Enter / right-click ends it
+            self.poly_click(pt.x(), pt.y(), "left", self._is_double(ev))
             return
         px = abs(vb.viewPixelSize()[0]) * 8  # click tolerance
         self.mapClicked.emit(float(pt.x()), float(pt.y()), float(px))

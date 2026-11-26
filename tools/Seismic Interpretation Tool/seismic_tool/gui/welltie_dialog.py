@@ -166,7 +166,7 @@ class WellTieDialog(QtWidgets.QDialog):
         self.library = TK.WaveletLibrary(self.library_path())
         self._refresh_library()
         self.state = TK.TieState()
-        self.window = None  # (top, base) ms of raw synthetic time, None = whole log
+        self.time_window = None  # (top, base) ms of raw synthetic time, None = whole log
         self.max_lag_ms, self.max_strain = 20.0, 0.10
         self.trace_offset = 0  # index among the traces around the well used for the tie (best trace)
         self._pending = None  # synthetic time of a half-picked event pair
@@ -212,7 +212,7 @@ class WellTieDialog(QtWidgets.QDialog):
 
     def _win_changed(self):
         a, b = float(self.win_top.value()), float(self.win_base.value())
-        self.window = (a, b) if b > a else None  # both 0 ("all") = whole log
+        self.time_window = (a, b) if b > a else None  # both 0 ("all") = whole log
         self.draw()
 
     def _tie_changed(self):
@@ -285,9 +285,9 @@ class WellTieDialog(QtWidgets.QDialog):
         """Samples inside the window. The window is read off the tie display, i.e. in tied (seismic) time; a
         window holding fewer than 10 samples is ignored (whole log) rather than crashing the tools."""
         t = self._data["t"]
-        if not self.window:
+        if not self.time_window:
             return np.ones(len(t), bool)
-        m = TK.window_mask(self.tied_times(), self.window)
+        m = TK.window_mask(self.tied_times(), self.time_window)
         if m.sum() < 10:
             self.info.setText("Window holds no synthetic samples - using the whole log")
             return np.ones(len(t), bool)

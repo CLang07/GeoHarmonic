@@ -94,8 +94,16 @@ def extend_trace(tr, dist):
     tr = np.asarray(tr, float)
     if len(tr) < 2:
         return tr
-    a = tr[0] - tr[1]
-    b = tr[-1] - tr[-2]
+    # PLAN 43c: end direction from a point at least 1 % of the trace length away (two near-duplicate end points
+    # from neighbouring triangles gave an arbitrary direction and the extension missed the grid edge)
+    L = float(np.sum(np.hypot(*np.diff(tr, axis=0).T)))
+    tol = max(1e-6, 0.01 * L)
+    d0 = np.hypot(*(tr - tr[0]).T)
+    d1 = np.hypot(*(tr - tr[-1]).T)
+    i0 = int(np.argmax(d0 >= tol)) if (d0 >= tol).any() else len(tr) - 1
+    i1 = int(len(tr) - 1 - np.argmax(d1[::-1] >= tol)) if (d1 >= tol).any() else 0
+    a = tr[0] - tr[i0]
+    b = tr[-1] - tr[i1]
     a = a / (np.linalg.norm(a) + 1e-12)
     b = b / (np.linalg.norm(b) + 1e-12)
     return np.vstack([tr[0] + dist * a, tr, tr[-1] + dist * b])
@@ -140,7 +148,7 @@ def fault_blocks(X, Y, faults):
     """Block id per node (ny, nx) from fault polylines [(xs, ys)] cutting the 4-neighbour node graph (any geometry)."""
     from .welltie import wc
     wc()
-    from well_correlation.carto import _seg_cross
+    from well_correlation.carto import seg_cut as _seg_cross  # half-open (PLAN 43c)
     ny, nx = X.shape
     cut_h = np.zeros((ny, nx - 1), bool)
     cut_v = np.zeros((ny - 1, nx), bool)
@@ -291,7 +299,7 @@ def cell_blocks(model, Xc, Yc):
         return np.zeros((ny, nx), int) + int(B[0, 0])
     from .welltie import wc
     wc()
-    from well_correlation.carto import _seg_cross
+    from well_correlation.carto import seg_cut as _seg_cross  # half-open (PLAN 43c)
     for di, dj in ((0, 0), (0, 1), (1, 0), (1, 1)):
         cx, cy = X[di:di + ny, dj:dj + nx], Y[di:di + ny, dj:dj + nx]
         cross = np.zeros((ny, nx), bool)

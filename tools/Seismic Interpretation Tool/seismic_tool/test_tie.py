@@ -331,12 +331,12 @@ def run_gui(check, tmp):
           "dialog: second event pair lands where clicked (click mapped back through the existing warp)")
     dlg.undo()
     tt = dlg.tied_times()
-    dlg.window = (float(tt[100]), float(tt[300]))
+    dlg.time_window = (float(tt[100]), float(tt[300]))
     m = dlg._win_mask()
     check(m.sum() == 201 and m[100] and m[300] and not m[99], "dialog: window read in tied (displayed) time")
-    dlg.window = (99990.0, 99999.0)
+    dlg.time_window = (99990.0, 99999.0)
     check(dlg._win_mask().all() and dlg.correlate() is not None, "dialog: empty window falls back to the whole log")
-    dlg.window = None
+    dlg.time_window = None
     dlg.save()
     tie = sp.display["well_ties"]["W-1"]
     td = sp.wellset().td_for("W-1")

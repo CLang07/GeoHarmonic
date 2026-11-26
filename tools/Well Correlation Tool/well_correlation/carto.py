@@ -273,6 +273,19 @@ def _seg_cross(ax, ay, bx, by, cx, cy, dx_, dy_):
     return (o1 * o2 < 0) & (o3 * o4 < 0)
 
 
+def seg_cut(ax, ay, bx, by, cx, cy, dx_, dy_):
+    """Half-open segment crossing for barriers (Seismic PLAN 43c): a point exactly on the other segment's line
+    counts as the negative side, so a fault vertex / node lying exactly on a grid edge / fault line still cuts
+    exactly one edge (the strict test above cut none and the fault leaked: 1 block instead of 2)."""
+    def orient(px, py, qx, qy, rx, ry):
+        return (qx - px) * (ry - py) - (qy - py) * (rx - px)
+    s1 = orient(ax, ay, bx, by, cx, cy) > 0
+    s2 = orient(ax, ay, bx, by, dx_, dy_) > 0
+    s3 = orient(cx, cy, dx_, dy_, ax, ay) > 0
+    s4 = orient(cx, cy, dx_, dy_, bx, by) > 0
+    return (s1 != s2) & (s3 != s4)
+
+
 def fault_blocks(nx, ny, x0, y0, dx, dy, faults):
     """Label grid nodes by fault block: 4-neighbour edges crossing a fault trace (polyline) are cut.
     Returns int array (ny, nx) of block ids."""
@@ -283,8 +296,8 @@ def fault_blocks(nx, ny, x0, y0, dx, dy, faults):
     cut_v = np.zeros((ny - 1, nx), bool)  # edge (i, j)-(i+1, j)
     for fx, fy in faults:
         for k in range(len(fx) - 1):
-            cut_h |= _seg_cross(XX[:, :-1], YY[:, :-1], XX[:, 1:], YY[:, 1:], fx[k], fy[k], fx[k + 1], fy[k + 1])
-            cut_v |= _seg_cross(XX[:-1], YY[:-1], XX[1:], YY[1:], fx[k], fy[k], fx[k + 1], fy[k + 1])
+            cut_h |= seg_cut(XX[:, :-1], YY[:, :-1], XX[:, 1:], YY[:, 1:], fx[k], fy[k], fx[k + 1], fy[k + 1])
+            cut_v |= seg_cut(XX[:-1], YY[:-1], XX[1:], YY[1:], fx[k], fy[k], fx[k + 1], fy[k + 1])
     lab = np.full((ny, nx), -1, int)
     nb = 0
     for i0 in range(ny):

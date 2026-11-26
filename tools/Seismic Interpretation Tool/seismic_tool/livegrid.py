@@ -146,6 +146,8 @@ class LiveGridder:
         px, py, v = self.points(name)
         if len(v) == 0:
             raise ValueError(f"{name}: no data points to grid")
+        if s["kind"] == "horizon" and str(s.get("key") or "").startswith("3D:") and self.project is not None:
+            return self.compute_survey(name, level, barriers)  # PLAN 43d: on the survey's own (rotated) bin grid
         x0, y0, cell, nx, ny = self.geometry(name, px, py, level)
         X, Y = np.meshgrid(x0 + cell * np.arange(nx), y0 + cell * np.arange(ny))
         method = s["method"] if len(v) >= 3 else "idw"
@@ -166,6 +168,44 @@ class LiveGridder:
         grid = MapGrid(z, "xy", unit, f"Live: {name}", None, x0, y0, cell, cell)
         grid.level = level
         grid.n_points = len(v)
+        grid.seconds = time.perf_counter() - t0
+        return grid
+
+    def compute_survey(self, name, level="full", barriers=None):
+        """PLAN 43d: a 3D-horizon Live grid on the survey's own inline / crossline bins (every `stride`-th bin), so
+        it carries the survey's rotation and origin exactly like the seismic basemap (it was an axis-aligned XY box
+        that could sit off the outline and ran past the survey edge).  Picked bins keep their picked value; holes
+        are filled inside the survey (per fault block when barriers are on); nothing is drawn outside the survey."""
+        s = self.sources[name]
+        t0 = time.perf_counter()
+        h = self.project.horizons.get(s["horizon"])
+        if h is None:
+            raise KeyError(f"no horizon {s['horizon']!r}")
+        vol = self.project.volume(s["key"][3:])
+        a = h.data.get(s["key"])
+        if a is None or not np.isfinite(np.asarray(a, float)).any():
+            raise ValueError(f"{name}: no picks on {s['key'][3:]}")
+        a = np.asarray(a, float)
+        bin_m = min(float(np.hypot(vol.ax[1], vol.ay[1]) * vol.il_step), float(np.hypot(vol.ax[2], vol.ay[2]) * vol.xl_step)) or 25.0
+        stride = max(1, int(round(float(s["cell"]) / bin_m))) if s.get("cell") else 1
+        while -(-a.shape[0] // stride) * -(-a.shape[1] // stride) > 250_000:
+            stride += 1
+        if level == "coarse":
+            stride *= self.coarse_factor
+        sub = a[::stride, ::stride]
+        geo = SurveyGrid(vol, 0, stride, sub.shape[0], 0, stride, sub.shape[1])
+        X, Y = geo.node_xy()
+        blocks = None
+        bl = barriers if barriers is not None else (self.barrier_lines() if s["barriers"] else [])
+        if bl and min(sub.shape) >= 2:
+            from .framework import fault_blocks
+            blocks = fault_blocks(X, Y, [(np.asarray(fx, float), np.asarray(fy, float)) for fx, fy in bl])
+        z = fill_holes(sub, blocks)
+        unit = "ms"
+        grid = MapGrid(z, "ilxl", unit, f"Live: {name}", geo)
+        grid.level = level
+        grid.n_points = int(np.isfinite(sub).sum())
+        grid.stride = stride
         grid.seconds = time.perf_counter() - t0
         return grid
 
@@ -274,6 +314,96 @@ class LiveGridder:
                 st.get(lid)["src"]["file"] = save_grid(st.project, grid, lid)
         st.get(lid)["src"]["live"] = {"name": name, "level": grid.level, "points": grid.n_points}
         return lid
+
+
+class SurveyGrid:
+    """Every `si`-th inline / `sj`-th crossline of a 3D survey, starting at index (i0, j0): duck-types the Volume3D
+    geometry a MapGrid of kind 'ilxl' needs (il0 / il_step / nil, xl0 / xl_step / nxl, inlines, xlines, ax, ay, xy,
+    ilxl_at, outline) - PLAN 43d."""
+
+    def __init__(self, vol, i0, si, ni, j0, sj, nj):
+        self.parent = vol
+        self.sub = (int(i0), int(si), int(ni), int(j0), int(sj), int(nj))
+        self.ax, self.ay = vol.ax, vol.ay
+        self.il_step, self.xl_step = vol.il_step * int(si), vol.xl_step * int(sj)
+        self.il0, self.xl0 = vol.il0 + vol.il_step * int(i0), vol.xl0 + vol.xl_step * int(j0)
+        self.nil, self.nxl = int(ni), int(nj)
+        self.inlines = self.il0 + self.il_step * np.arange(self.nil)
+        self.xlines = self.xl0 + self.xl_step * np.arange(self.nxl)
+
+    def xy(self, il, xl):
+        return self.parent.xy(il, xl)
+
+    def ilxl_at(self, x, y):
+        return self.parent.ilxl_at(x, y)
+
+    def outline(self):
+        return self.parent.outline()
+
+    def node_xy(self):
+        I, J = np.meshgrid(self.inlines, self.xlines, indexing="ij")
+        return self.xy(I, J)
+
+
+def _coarsen(z, w):
+    """2x2 block sums of value * weight and of weight (odd edges padded)."""
+    ny, nx = z.shape
+    py, px = ny % 2, nx % 2
+    zz = np.pad(z, ((0, py), (0, px)))
+    ww = np.pad(w, ((0, py), (0, px)))
+    sz = zz.reshape(zz.shape[0] // 2, 2, zz.shape[1] // 2, 2).sum(axis=(1, 3))
+    sw = ww.reshape(ww.shape[0] // 2, 2, ww.shape[1] // 2, 2).sum(axis=(1, 3))
+    return sz, sw
+
+
+def _pyramid_fill(z, valid):
+    """Fill NaN nodes of z (only where valid) from coarser averages (fast, O(n)); picked nodes are kept."""
+    z = np.asarray(z, float)
+    have = np.isfinite(z) & valid
+    if not have.any():
+        return np.full(z.shape, np.nan)
+    levels = []
+    cz, cw = np.where(have, z, 0.0), have.astype(float)
+    while True:
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mean = np.where(cw > 0, cz / np.maximum(cw, 1e-300), np.nan)
+        levels.append(mean)
+        if (cw > 0).all() or max(cz.shape) <= 1:
+            break
+        cz, cw = _coarsen(cz, cw)
+    out = levels[-1]
+    if not np.isfinite(out).all():  # one coarse cell with no data left (cannot happen when anything is picked)
+        out = np.where(np.isfinite(out), out, np.nanmean(out))
+    for lev in levels[-2::-1]:
+        up = np.repeat(np.repeat(out, 2, axis=0), 2, axis=1)[:lev.shape[0], :lev.shape[1]]
+        out = np.where(np.isfinite(lev), lev, up)
+    # smooth only the filled nodes (Jacobi relaxation; picked nodes stay fixed)
+    hole = valid & ~have
+    if hole.any() and min(z.shape) >= 3:
+        for _ in range(30):
+            p = np.pad(out, 1, mode="edge")
+            avg = 0.25 * (p[:-2, 1:-1] + p[2:, 1:-1] + p[1:-1, :-2] + p[1:-1, 2:])
+            out = np.where(hole, avg, out)
+    return np.where(valid, out, np.nan)
+
+
+def fill_holes(z, blocks=None):
+    """Picked nodes kept, holes filled inside the grid; with fault blocks each block is filled from its own picks
+    (a block without picks from all of them)."""
+    z = np.asarray(z, float)
+    if blocks is None:
+        return _pyramid_fill(z, np.ones(z.shape, bool))
+    out = np.full(z.shape, np.nan)
+    allf = None
+    for b in np.unique(blocks):
+        m = blocks == b
+        if (np.isfinite(z) & m).any():
+            out[m] = _pyramid_fill(np.where(m, z, np.nan), m)[m]
+        else:
+            if allf is None:
+                allf = _pyramid_fill(z, np.ones(z.shape, bool))
+            out[m] = allf[m]
+    return out
 
 
 def depth_grids(stack, model, horizons=None, prefix="Live depth: "):

@@ -201,11 +201,10 @@ def extract_amplitude(vol, surface_ms, above_ms=0.0, below_ms=0.0, kind="rms", b
         tk = t0_ms + dt_ms * np.arange(k_lo, k_hi + 1)
         if kind == "at":
             idx = (sb - tk[0]) / dt_ms
-            idc = np.clip(np.nan_to_num(idx), 0, tr.shape[2] - 1.000001)
-            k0 = np.floor(idc).astype(int)
-            w = idc - k0
+            from .lininterp import lin_index
+            k0, k1, w = lin_index(idx, tr.shape[2])  # PLAN 43b
             v0 = np.take_along_axis(tr, k0[..., None], 2)[..., 0]
-            v1 = np.take_along_axis(tr, (k0 + 1)[..., None], 2)[..., 0]
+            v1 = np.take_along_axis(tr, k1[..., None], 2)[..., 0]
             inside = (idx >= 0) & (idx <= tr.shape[2] - 1)
             out[a:b] = np.where(fin & inside, v0 * (1 - w) + v1 * w, np.nan)
             continue

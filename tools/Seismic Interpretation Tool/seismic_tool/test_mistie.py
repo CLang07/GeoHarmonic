@@ -216,7 +216,7 @@ def run_gui(check, tmp):
     from .project import SeisProject
     p = SeisProject.open(os.path.join(d, "mistie", "m", "g.seisproj.json"))
     dlg = MistieDialog(p)
-    dlg.window = (100.0, 1100.0)
+    dlg.time_window = (100.0, 1100.0)
     dlg.max_lag = 40.0
     ties, sol = dlg.compute()
     check(len(ties) >= 5 and set(sol) >= {"P", "Q", "R"}, "mistie dialog: ties + solution")

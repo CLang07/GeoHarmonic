@@ -53,13 +53,13 @@ class SurveyBlendDialog(QtWidgets.QDialog):
         self.wells.setChecked(True)
         self.seam = QtWidgets.QCheckBox("Show blended (untick = priority cut)")
         self.seam.setChecked(True)
-        self.show = QtWidgets.QComboBox()
-        self.show.addItems(["Merged grid", "Residual before", "Weight", "Width", "Added slope", "Correction"])
+        self.show_combo = QtWidgets.QComboBox()
+        self.show_combo.addItems(["Merged grid", "Residual before", "Weight", "Width", "Added slope", "Correction"])
         for lab, w in (("Horizon", self.hz), ("Survey A (priority)", self.va), ("Survey B", self.vb),
                        ("Domain", self.domain), ("Method", self.method), ("Allowed added slope", self.slope),
                        ("Units", self.unit), ("Min width (Advanced)", self.wmin), ("Max width (Advanced)", self.wmax),
                        ("Edge trim", self.trim), ("", self.faults), ("", self.wells), ("", self.seam),
-                       ("Show", self.show)):
+                       ("Show", self.show_combo)):
             f.addRow(lab, w)
         row = QtWidgets.QHBoxLayout()
         for text, fn in (("Preview", self.preview), ("Export...", self.export_dialog), ("Close", self.accept)):
@@ -76,7 +76,7 @@ class SurveyBlendDialog(QtWidgets.QDialog):
         self.plot.setAspectLocked(True)
         lay.addWidget(self.plot, 1)
         self.seam.toggled.connect(lambda *_: self.redraw())
-        self.show.currentTextChanged.connect(lambda *_: self.redraw())
+        self.show_combo.currentTextChanged.connect(lambda *_: self.redraw())
         self.resize(1250, 760)
 
     # ------------------------------------------------------------ inputs (42a)
@@ -178,7 +178,7 @@ class SurveyBlendDialog(QtWidgets.QDialog):
         r = self.result
         if r is None:
             return None
-        what = what or self.show.currentText() or "Merged grid"
+        what = what or self.show_combo.currentText() or "Merged grid"
         if what.startswith("Merged"):
             return r.z if self.seam.isChecked() else r.cut
         key = {"Residual before": "residual_before", "Weight": "weight", "Width": "width",
