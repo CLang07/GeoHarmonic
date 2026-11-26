@@ -611,5 +611,48 @@ PLAN.md at the start of this run from your 25 Nov requests). Seismic v0.65.0, We
   6. File > Export section figure > 16:9 slide > PDF.
 - Next: no PLAN items left - add new ones to resume (candidates: the follow-ups listed in items 39-42).
 
-## Run 9 - 2026-11-26 (scheduled, started 20:34 UTC) - IN PROGRESS
-- Item 43 (PC retest fixes + F3 worked-example tutorial). Checkpoint 1: 43a-g fixed + test_retest.py; tutorial next.
+
+## Run 9 - 2026-11-26 (scheduled, 20:34-21:15 UTC) - item 43 done; all PLAN items are done
+- Item 43 PC retest fixes + F3 worked-example tutorial (added to PLAN this run from Chris's second PC install).
+  Seismic v0.66.0, Well Correlation v0.14.1.
+- Fixes (each with a regression test, `43a`-`43g` in test_results.txt):
+  43a Survey blending window opens (attribute `show` renamed show_combo; also Glow settings `width`, Mistie / Well tie
+  `window`); a scan of every Qt-derived class for attributes that hide Qt methods + a GUI test that opens, shows and
+  closes 15 windows. 43b Wheeler last-sample IndexError: new `lininterp.lin_index` (float64, k <= n-2) used in Wheeler,
+  RGT interp_rows, horizon RGT, section display, amplitude extraction, dip-steered semblance; tested float32 + float64.
+  43c Framework 1 block -> 2: half-open segment crossing (`carto.seg_cut`) so a fault point exactly on a grid line cuts,
+  strike-following trace extension, and horizons sorted top -> bottom (F3's came alphabetically - that also broke the
+  stratigraphic rules: active cells 2,912 -> 8,736 on the F3-like test). 43d Live grid of a 3D horizon now built on the
+  survey's own rotated bin grid (`livegrid.SurveyGrid`, holes filled per fault block); test: node (IL 130, XL 350) on
+  its exact X/Y, grid inside the outline, saved / reloaded, contours + Export map. 43e Arbitrary line: open path,
+  double-click / Enter / right-click ends it and opens the section, Esc cancels (the Map-layers panel no longer turns
+  every line into a closed polygon layer). 43f all CSS colour names, bad colour named + style kept, legend escaped.
+  43g filtered wells lose their labels (map, zoom / pan, export).
+- Tutorial: Part 1 = F3 worked example W1-W14 (`dev/tutorial_f3.py`) that RUNS each step on F3 (working copy - Chris's
+  project is not written) and quotes the numbers; Part 2 = tool chapters, RGT / 3D interpretation / prospects now have
+  pictures; new "Fixes in this release" with before / after (Live grid picture). `seismic_tool/synth_f3.py` makes a
+  synthetic F3-like raw folder and runs tools/setup_f3.py on it (CI). build_tutorial: --f3 / --f3-synthetic / --no-pdf,
+  progress line per chapter, tutorial_build_log.txt, TUTORIAL.pdf (letter); installer shows the progress on screen.
+- Files: seismic_tool lininterp.py, synth_f3.py, test_retest.py (new); livegrid, livemap, maplayers, framework,
+  horizons, maps, attributes, rgt/stack, rgt/solve, basin/chrono, selftest, test_pcfixes, test_mistie, test_tie,
+  gui/basemap, live_map, framework_dialog, surveyblend_dialog, glow, mistie_dialog, welltie_dialog, section_panel;
+  well_correlation carto.py; dev/tutorial_f3.py (new), build_tutorial.py, tutorial_content.py; Install
+  GeoHarmonic.bat (tutorial step); docs PLAN / HANDOFF / WHATS_NEW / TUTORIAL.md / .html; .gitignore (PDF, build log).
+- Tests (here: numpy 2.5, Qt mock - no real Qt / GPU): Seismic selftest PASSED (1,235 checks), Seismic guitest PASSED
+  (466), Well Correlation selftest PASSED (198) + guitest PASSED (30), Mistie selftest PASSED. Tutorial builder F3 mode
+  on the synthetic F3-like project: 14/14 chapters ran, every one with >= 1 picture (45 s).
+- Known limitations: no real Qt or real F3 here - the real-Qt halves of 43a / 43e and the F3 run of the tutorial happen
+  on your PC; the 6 km Live-grid shift was not reproduced on the F3-like survey (old code placed it correctly here) -
+  the grid is now built on the survey bins so it cannot leave the outline, but tell Claude if it ever does; the
+  tutorial's RGT step uses horizon-guided RGT on inline 425 (full-volume RGT is 10-20 min) and geobodies on a box;
+  volumes in W13 / W14 use illustrative contacts and parameters, not F3 facts.
+- Test this first (Windows):
+  1. Update_GeoHarmonic.bat, then Install GeoHarmonic.bat -> ALL GOOD; the tutorial step prints one line per F3 chapter.
+  2. tools\Seismic Interpretation Tool\test_results.txt: every `43a`-`43g` line PASS.
+  3. Interpret > Survey horizon blending opens.
+  4. F3: View > Live Map > Live grid... > Horizon: FS6 sits inside the outline; Arbitrary line (3 clicks + double-click)
+     opens the section; rule `X <= 615000 = lime` works; an X filter hides the labels too.
+  5. Interpret > Structural framework + 3D grid > 1. Framework (time): 2 fault blocks with Fault A.
+  6. Desktop shortcut GeoHarmonic - Tutorial: the header says "your F3 Netherlands project" and Part 1 shows F3 numbers
+     (tutorial_local\tutorial_build_log.txt lists any chapter that failed).
+- Next: no PLAN items left - add new ones to resume.

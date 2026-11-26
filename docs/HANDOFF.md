@@ -771,7 +771,41 @@ F0 / F1 (Farewell F-sands), Base Kapuni F-sands, Basement.
   ACROSS the seam (projected on the distance gradient) - the along-seam part is the residual's own variation.
 - GUI `gui/surveyblend_dialog.py` (Interpret > Survey horizon blending); depth via section.depth_model().depth_of_time.
 
-## Illustrated tutorial (PLAN 38d/e)
+## PC retest fixes (PLAN 43, run 9)
+- `lininterp.lin_index(pos, n)` -> (k, k1, w): THE way to index linear interpolation (float64, k <= n - 2, w in [0, 1]);
+  used by rgt/stack.wheeler, rgt/solve.interp_rows, basin/chrono.horizon_rgt, section_panel Wheeler horizons,
+  maps.extract_amplitude 'at', attributes dip-steered semblance. Never `np.clip(x, 0, n - 1.000001)` (float32 rounds it
+  to n - 1).
+- framework: `fault_blocks` / `cell_blocks` use `well_correlation.carto.seg_cut` (half-open crossing: a point exactly on
+  the other segment's line counts as the negative side); `extend_trace` takes the end direction from a point >= 1 % of
+  the trace length away; FrameworkDialog sorts horizons top -> bottom by median time (`top_to_bottom`).
+- Live grid of a 3D horizon (`livegrid.LiveGridder.compute_survey`): MapGrid kind 'ilxl' on `livegrid.SurveyGrid`
+  (every n-th bin of the volume; duck-types Volume3D: il0 / il_step / nil, xl0 ..., ax, ay, xy, ilxl_at, `sub`, `parent`),
+  holes filled by `fill_holes` (pyramid average + Jacobi relaxation, per fault block via framework.fault_blocks);
+  maplayers save_grid / load_grid store `sub` in the npz. Column (well-top) sources stay axis-aligned XY grids.
+- Basemap drawing: `start_polygon(closed=True|False)`, `poly_click(x, y, button, double)` (test entry), own double-click
+  timing (`_is_double`), right-click ends, `poly_callback` (Live Map uses it instead of the polygonDrawn signal - the
+  Layers panel on the same canvas also listened and stored every line as a polygon layer), `cancel_polygon`. Live Map:
+  Enter / Return = `finish_drawing`, Esc = `cancel_drawing`; `drawn()` routes lasso / arbitrary / well section / Map
+  layers polygon.
+- livemap `CSS_COLOURS` + `colour_hex(name)` (ValueError names the colour); `hex_rgba` accepts names; LiveMapWindow
+  `parse_rules` raises ValueError for a bad colour, `apply_style_widgets` keeps the style; `legend_html` escapes text.
+- LiveMapCanvas `update_labels` / `label_ids`: labels only for styled, visible (filtered-in) wells, refreshed on zoom.
+- Renamed attributes that hid Qt methods: SurveyBlendDialog.show -> show_combo, GlowSettingsDialog.width -> width_spin,
+  Mistie / Well tie dialogs .window -> time_window. `test_retest.shadowing_attributes` scans every Qt-derived class.
+- `horizons.Picker.track(..., allowed_mask=)` restricts the tracker to a box.
+- `synth_f3.py`: synthetic F3-like raw folder (.survey with the real F3 bin grid, SEG-Y every 10th line, 7 horizon files,
+  FaultA.txt, 4 wells with LAS / checkshot / markers) -> `make_project(folder)` runs tools/setup_f3.py on it.
+- Tests: `test_retest.py` (run: 43a-d, f; run_gui: 43a, c, e, f, g), test_pcfixes.run_tutorial (43h-k).
+
+## Illustrated tutorial (PLAN 38d/e, F3 worked example PLAN 43h-k)
+- Part 1 = `dev/tutorial_f3.py` (CHAPTERS W1-W14, each `run(ctx)` RUNS the workflow on a small window of F3 and fills
+  ctx.n numbers into the text; pictures via ctx.export (tool exports, any Qt) / ctx.window (real Qt)). Project:
+  `--f3 PATH`, default Documents\F3 Netherlands (a working copy of the .seisproj.json + horizons in the temp folder -
+  Chris's project is never written; volume stores and the well project are read in place), else / `--f3-synthetic` the
+  synthetic F3-like project. A failing chapter is captioned, the rest continue. Progress line per chapter on screen,
+  everything in `<out>/tutorial_build_log.txt`; `TUTORIAL.pdf` (letter, matplotlib) unless --no-pdf. Part 2 = the
+  per-tool chapters of dev/tutorial_content.py (rgt / interp3d / prospects reuse the F3 pictures).
 - `python3 dev/build_tutorial.py` -> docs/TUTORIAL.md, docs/TUTORIAL.html (self-contained, base64 images),
   docs/tutorial/*.png. Text: `dev/tutorial_content.py` (one dict per chapter: purpose, shots, steps, results_re =
   regexes of PASS lines to quote, limits, trouble). Pictures: `SHOTS` = WINDOWS (real Qt: open the window off screen,
@@ -832,6 +866,11 @@ key results with matplotlib to PNG and look at them.
   imports and attribute volumes go to a fresh folder (`volume.unused_store`); edits use r+ memmaps of their own.
 - Units / ids from CSV headers: match whole tokens ("..._LBS" contains "_t"); FracFocus water is gallons; API numbers
   lose leading zeros / gain ".0" in Excel; state production data omit zero months.
+- Never give a QWidget subclass an attribute named like a Qt method (show, width, window, close ...): the Qt mock hides
+  it, real Qt raises "'QComboBox' object is not callable" (PLAN 43a). test_retest scans for it.
+- Exact-on-grid geometry happens on real data (F3 bin centres = framework node rows): strict segment-crossing tests
+  then cut nothing. Use the half-open `seg_cut` for barriers (PLAN 43c). Horizon lists come in name order on imported
+  projects - sort by depth / time before stratigraphic rules.
 - Two Claude sessions may push to `dev` the same day (scheduled run + Chris's interactive session): always
   `git pull --rebase` before pushing and merge both sides' version bumps / WHATS_NEW entries.
 

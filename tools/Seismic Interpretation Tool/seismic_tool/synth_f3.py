@@ -122,12 +122,13 @@ def make_raw(folder, step=10, ns=463, dt_ms=4.0, seed=3):
                 f.write(f"{md:.2f}\t{name}\n")
         md = np.arange(30.0, td, 0.5)
         gr = 80 + 15 * np.sin(md / 23.0) + 2 * rng.standard_normal(len(md))
-        dt = np.full(len(md), 1e6 / VEL / 3.2808)  # us/ft
-        rho = np.full(len(md), 2.2)
+        vint = 1700.0 + 0.45 * md + 8.0 * np.sin(md / 37.0)  # m/s, compaction trend (logs vary: no flat lines)
+        dt = 1e6 / vint / 3.2808 + 1.5 * rng.standard_normal(len(md))  # us/ft
+        rho = 1.95 + 0.00025 * md + 0.004 * rng.standard_normal(len(md))
         for k, (name, mdt) in enumerate(tops):
             below = md >= mdt
             gr = np.where(below & (md < mdt + 12.0), 35.0 + k, gr)  # a clean sand under each marker
-            rho = np.where(below, rho + 0.03 * (1 if k % 2 else -1), rho)
+            rho = np.where(below, rho + 0.12 * amps[k], rho)  # AI step with the reflector's polarity
         _write_las(os.path.join(raw, "Lasfiles", w + "_logs.las"), w, md,
                    [("GR", "GAPI", gr), ("DT", "US/F", dt), ("RHOB", "G/C3", rho)])
         with open(os.path.join(raw, "Checkshot", w + "_TD.txt"), "w") as f:

@@ -9,3 +9,5 @@ __pycache__/
 test_results.txt
 dev/*.zip
 tutorial_local/
+docs/TUTORIAL.pdf
+docs/tutorial_build_log.txt

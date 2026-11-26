@@ -16,6 +16,7 @@ class FrameworkDialog(QtWidgets.QDialog):
         self.depth_model_fn = depth_model_fn
         self.bus = bus
         self.horizons = [h.name for h in project.horizons.items if h.data.get(f"3D:{vol_name}") is not None]
+        self.horizons = self.top_to_bottom(self.horizons)  # PLAN 43c: F3's horizons come in alphabetical order
         self.faults = [f.name for f in project.faults.items if len(f.sticks) >= 2]
         self.rules = {}
         self.layering = None
@@ -39,6 +40,13 @@ class FrameworkDialog(QtWidgets.QDialog):
         lay.addLayout(row)
         if bus is not None:
             bus.subscribe("framework", self._on_event, topics="data")
+
+    def top_to_bottom(self, names):
+        """Horizons sorted shallow -> deep by their median time (the framework rules need the stratigraphic order)."""
+        def med(n):
+            a = np.asarray(self.project.horizons.get(n).data[f"3D:{self.vol_name}"], float)
+            return float(np.nanmedian(a)) if np.isfinite(a).any() else np.inf
+        return sorted(names, key=med)
 
     def _say(self, msg):
         self.message = msg
@@ -79,6 +87,7 @@ class FrameworkDialog(QtWidgets.QDialog):
         ei, ej = index_frame(self.vol)
         self.cell = cell or self.cell or 2.0 * float(min(np.linalg.norm(ei), np.linalg.norm(ej)))
         geom = FW.Geometry.around(xs, ys, self.cell)
+        self.horizons = self.top_to_bottom(self.horizons)
         hz = [(n, self._points(n), self.rules.get(n, "conformable")) for n in self.horizons]
         self.model_t = FW.FrameworkModel(geom, hz, self._traces(), "tps", "time").build()
         self.model = self.model_t

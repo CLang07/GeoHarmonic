@@ -1024,3 +1024,32 @@ Fixes from your first install (25 Nov): the Seismic GUI test FAILED at the 3D Vi
    Priority cut, then Hybrid 2 m/km - the step at the seam should disappear without a visible ramp.
 2. Show > Width: wide stretches = where the surveys disagree most (worth a look at the picks).
 3. Export > load the merged ZMAP+ in Kingdom / Petrel and compare with the priority cut.
+
+## PC retest fixes + F3 worked-example tutorial (PLAN item 43, Seismic v0.66.0 / Well Correlation v0.14.1 - run 9, 26 Nov 2026)
+Fixes from your second install (each has a regression test, `43a`-`43g` in test_results.txt):
+- 43a Survey blending window opens again (a combo box named `show` hid the window's show()); every window class is now
+  scanned for such names (also fixed in Glow settings, Mistie and Well tie dialogs) and the GUI test opens, shows and
+  closes every dialog.
+- 43b Wheeler / basin model: no more "index 300 is out of bounds" at the last sample (one safe interpolation helper used
+  everywhere: Wheeler, RGT, section display, amplitude extraction, dip-steered attributes).
+- 43c Structural framework from the window gets 2 fault blocks (a fault point exactly on a grid line slipped through);
+  horizons are put in stratigraphic order (F3's came alphabetically, which broke the conformable / erosional rules).
+- 43d Live grid of a 3D horizon is built on the survey's own rotated bin grid - it lines up with the outline and the
+  seismic basemap, also in Export map, and never runs past the edge.
+- 43e Live Map Arbitrary line: open line; double-click, Enter or right-click ends it and opens the section; Esc cancels.
+- 43f Rule colours: any CSS colour name (lime, steelblue, dark orange ...) or #rgb / #rrggbb; a bad name is reported and
+  the style kept; legend rows such as `X <= 615000` show correctly.
+- 43g Filters hide well labels with the symbols (map, zoom / pan, Export map).
+Tutorial: Part 1 is now a worked example on F3 (W1-W14: open + tour, well correlation, ties, conditioning, picking +
+tracking, fault mapping, RGT / Wheeler, depth conversion, Live Map, glow, 3D, framework, properties, prospects) that RUNS
+each step on your F3 project during the install and quotes the numbers it got; Part 2 keeps the tool chapters (RGT,
+3D interpretation and prospects now have pictures). Also `tutorial_local\TUTORIAL.pdf` (letter) for the phone.
+
+Test this first:
+1. Update_GeoHarmonic.bat, then Install GeoHarmonic.bat -> ALL GOOD; the tutorial step prints one line per F3 chapter.
+2. test_results.txt (Seismic): every `43a`-`43g` line PASS.
+3. Interpret > Survey horizon blending opens.
+4. F3: View > Live Map > Live grid... > Horizon: FS6 - grid inside the outline; Arbitrary line (3 clicks + double-click)
+   opens the section; rule `X <= 615000 = lime` works; an X filter hides labels too.
+5. Interpret > Structural framework + 3D grid > 1. Framework: 2 fault blocks on F3 with Fault A.
+6. Desktop shortcut GeoHarmonic - Tutorial: Part 1 shows your F3 numbers (first line says "your F3 Netherlands project").

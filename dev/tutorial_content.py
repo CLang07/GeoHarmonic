@@ -22,8 +22,14 @@ Menu paths are written like **Interpret > Velocity model + depth conversion...**
 "Seismic tool" means the *GeoHarmonic - Seismic Interpretation* window; "Well tool" means *GeoHarmonic - Well
 Correlation*.
 
-About the pictures: every screenshot is captured by `dev/build_tutorial.py` from the actual program on a small
-synthetic demo project (3D cube, two horizons, three wells). Nothing is drawn by hand. When a window could not be
+**Part 1** (chapters W1-W14) is one continuous worked example on the F3 Netherlands project, in the order you would
+interpret it. **Part 2** (chapters 3-19) is the reference for each tool.
+
+About the pictures: every picture is made by `dev/build_tutorial.py` from the actual program. The worked example
+RUNS each workflow on your F3 project (small windows of the data, so the installer step stays under 15 minutes) and
+quotes the numbers it got; where F3 is not installed (the build server) it runs on a synthetic F3-like project with
+the same names and survey frame, and the captions say so. The reference chapters use a small synthetic demo
+project. Nothing is drawn by hand. When a window could not be
 opened where the tutorial was built (the build server has no Qt), the caption says so and shows the tool's own
 image export instead. When you run **Install GeoHarmonic.bat** on your PC it rebuilds the tutorial with real
 window screenshots from your machine (see chapter 1) - the desktop shortcut *GeoHarmonic - Tutorial* opens that
@@ -71,55 +77,39 @@ counts on the build server are listed in chapter 2.""",
     ),
     # ------------------------------------------------------------------------------------------------ fixes
     dict(
-        id="fixes", plain=True, title="2. Fixes in this release (first PC install, 25 Nov 2026)",
+        id="fixes", plain=True, title="2. Fixes in this release (second PC install, 26 Nov 2026)",
         purpose="""\
-Your first install (Anaconda Python 3.11.3, PySide6 6.5.3, pyqtgraph 0.13.7, numpy 2.4.6) gave:
+Your second install (Anaconda Python 3.11.3, PySide6 6.5.3, pyqtgraph 0.13.7, numpy 1.26.4) gave: Well Correlation
+self-test + GUI test PASSED (228 checks), Mistie PASSED, Seismic self-test FAILED (1 of ~1,275) and Seismic GUI test
+FAILED (2 of ~320). The fixes of the first install (3D Viewer crash, numpy<2 pin, one crash hiding the rest of the
+test) all held. Each fix below has its own regression test (`test_retest.py`, lines starting `43a` ... `43g`).
 
-| Tool | Self-test | GUI test (real Qt, off screen) |
+| | Before | After |
 |---|---|---|
-| Well Correlation | PASSED | PASSED (218 checks, 0 failures) |
-| Seismic Interpretation | PASSED (~1,000 checks) | **FAILED** at the 3D Viewer |
-| Mistie | PASSED | - |
-
-**Bug 1 - 3D Viewer crash (fixed).** The error was
-`AttributeError: 'PySide6.QtOpenGL.QOpenGLShaderProgram' object has no attribute 'glClearColor'`.
-In plain words: the 3D window kept a "phone number" for the graphics card's drawing functions. Qt does not let
-Python own that number, and handed it to the next object it created (the shader program). The next time the window
-painted, it "dialled" the shader program instead of the graphics card. **Change:** the 3D window now asks Qt for
-the drawing functions every time it paints, resizes or starts (`gui/view3d.py`), and keeps nothing stale.
-
-**Bug 1b - one crash hid the rest of the GUI test (fixed).** Because the test stopped at the 3D Viewer, the
-checks after it (3D interpretation, framework + 3D grid, properties) never ran on your PC. **Change:** every test
-module now runs inside a guard: a crash is written as a FAIL with its full error text and the next module still
-runs (Seismic and Well Correlation tools, and `tools/guitest_runner.py`).
-
-**Bug 2 - "A module that was compiled using NumPy 1.x cannot be run in NumPy 2.4.6" at every start (fixed).**
-PySide6 6.5.3 was built for NumPy 1. **Change:** the installers now ask for `numpy<2` for both Qt tools on every
-run, so your existing `.venv` folders are moved back to numpy 1.26. The code was checked for NumPy-2-only calls.
-
-**Noise - "QFontDatabase: Cannot find font directory" in the off-screen tests (fixed).** The GUI test runner now
-points Qt at `C:\\Windows\\Fonts`.""",
-        shots=["fix_after"],
+| **43a** Survey blending window | opened with *TypeError: 'QComboBox' object is not callable* - a combo box called `show` hid the window's own show() | combo renamed `show_combo`; the GUI test opens, shows and closes every dialog; a check scans every window class for names that hide Qt methods (also fixed: `width` in Glow settings, `window` in the Mistie and Well tie dialogs) |
+| **43b** Basin model / Wheeler | *IndexError: index 300 is out of bounds* when a level sat on the last sample (numpy 1.26 kept a float32 that rounded 299.999999 to 300) | one safe interpolation helper (`lininterp.lin_index`) used by Wheeler, RGT, the section display, amplitude extraction and dip-steered attributes; tested at and beyond the last sample in float32 and float64 |
+| **43c** Structural framework from the window | 1 fault block instead of 2 | a fault trace point lying exactly on a grid line no longer slips through (half-open crossing test), the fault trace is extended along its strike, and the horizons are put in stratigraphic order (F3's come in alphabetical order: FS4, FS6, ... Truncation) |
+| **43d** Live grid of FS6 | drawn ~6 km east of the survey outline and past the east edge | a Live grid of a 3D horizon is built on the survey's own rotated bin grid, exactly like the seismic basemap; it cannot leave the outline (picture below) |
+| **43e** Live Map Arbitrary line | the path closed into a triangle and no section opened (the map's polygon tool also grabbed the line) | an open line: double-click, **Enter** or right-click ends it and opens the arbitrary section; **Esc** cancels; the line stays on the map |
+| **43f** Rule colours | `X <= 615000 = lime` gave *invalid literal for int() with base 16: 'li'*; legend showed *X ● other* | every CSS / SVG colour name (lime, steelblue, dark orange ...) and #rgb / #rrggbb; a bad name is named in the status bar and the style is kept; legend rows are escaped (`<=` is text) |
+| **43g** Filters | wells hidden by a filter kept their name labels | labels follow the filter on the map, after zoom / pan and in Export map |
+""",
+        shots=["fix_livegrid"],
         steps=[
-            "Double-click **Update_GeoHarmonic.bat** on the Desktop.",
-            "Double-click **Install GeoHarmonic.bat** in the GeoHarmonic folder. It downgrades numpy to 1.26 in both Qt "
-            "tool environments (you will see *Installing numpy 1.x ...*) and re-runs every test.",
-            "Wait for **ALL GOOD**. In `tools\\Seismic Interpretation Tool\\test_results.txt` search for `38a`: the "
-            "lines *38a: real OpenGL - initializeGL, paintGL x2, resize, paintGL* and *grabFramebuffer returns the "
-            "rendered image* must say PASS (or SKIP + *software fallback* on a PC without OpenGL).",
-            "`install_log.txt` now shows *Qt OK - PySide6 6.5.3 - numpy 1.26.x* for both tools, and starting a tool "
-            "no longer prints the NumPy 1.x warning.",
-            "Open the Seismic tool, **View > 3D Viewer** (**Ctrl+Shift+3**): the window title bar must not mention "
-            "*software rendering* on your RTX card; drag the planes, orbit, zoom.",
+            "Double-click **Update_GeoHarmonic.bat** on the Desktop, then **Install GeoHarmonic.bat** (re-runs every "
+            "test and rebuilds this tutorial on your F3 project).",
+            "Wait for **ALL GOOD**. In `tools\\Seismic Interpretation Tool\\test_results.txt` search for `43a` ... "
+            "`43g`: every line must say PASS.",
+            "Seismic tool: **Interpret > Survey horizon blending (adaptive seam, overlapping surveys)...** opens.",
+            "F3: **View > Live Map** > **Live grid...** > *Horizon: FS6*: the grid fills the outline exactly.",
+            "Live Map **Arbitrary line**: three clicks + double-click -> the section window opens.",
         ],
         results="""\
-Before: the GUI test stopped with the AttributeError above. After (build server, Qt mock + software renderer):
-the 3D Viewer draws the scene shown above, and the regression tests pass:""",
-        results_re=[r"^PASS 38[abc]"],
-        limits=["The build server has no graphics card: the real-OpenGL regression test only runs on your PC (it "
-                "is part of Install GeoHarmonic.bat / Run all tests.bat)."],
-        trouble=["If the 3D Viewer still fails on your PC, it now switches to *software rendering* with the reason "
-                 "in the status bar instead of crashing - send `test_results.txt` to Claude."],
+The regression checks on the build server (Qt mock; the window parts run against real Qt on your PC):""",
+        results_re=[r"^PASS 43[a-g]"],
+        limits=["The build server has no Qt / graphics card: the real-Qt parts of 43a / 43e (open every window, "
+                "double-click) run on your PC in the installer's GUI test."],
+        trouble=["If a 43 line says FAIL on your PC, send `test_results.txt` to Claude."],
     ),
     # ------------------------------------------------------------------------------------------------ well corr
     dict(
@@ -216,7 +206,7 @@ the section.""",
         purpose="""\
 PaleoScan-style relative geologic time: a dip field, a global RGT solve, then hundreds of iso-RGT horizons (the
 horizon stack), a Wheeler (chronostratigraphic) display and stratal slices.""",
-        shots=[],
+        shots=["f3_wheeler"],
         steps=[
             "**Interpret > Compute dip field (current 3D volume)...**.",
             "**Interpret > Compute RGT (current 3D volume)...** (or *all 2D lines*). Optional constraints: **Interpret > "
@@ -588,7 +578,7 @@ tops are re-tied exactly afterwards.""",
 Interpret directly in 3D: pick horizon points and fault sticks on the planes, track from 3D seeds, render an
 amplitude / attribute volume with an opacity curve, and extract geobodies (connected bodies above a threshold) -
 like Petrel's 3D interpretation and geobody tools.""",
-        shots=[],
+        shots=["f3_interp3d"],
         steps=[
             "In the 3D Viewer toolbar: **Pick horizon...** (choose or type a name), click on a plane (a click without "
             "dragging picks). **Stop picking** when done.",
@@ -651,7 +641,7 @@ volumetrics per zone and fault block with P90 / P50 / P10.""",
 Exploration and development tools built on the map hub: DHI checklist and Rose-style prospect risking +
 volumetrics, migration (flow paths, traps, fill-spill), fault / top seal, structural timing, well spacing with
 drainage ellipses and gun-barrel views, depletion / remaining resource and an M&A screen.""",
-        shots=[],
+        shots=["f3_prospects"],
         steps=[
             "**Map layers > Add... > DHI checklist (amplitude grid vs structure grid)...** - scores the DHI evidence "
             "and stores a prospect row (risk + volumetrics).",
@@ -668,8 +658,10 @@ drainage ellipses and gun-barrel views, depletion / remaining resource and an M&
     dict(
         id="rebuild", plain=True, title="19. Rebuilding this tutorial",
         purpose="""\
-The tutorial is generated, never edited by hand: `dev/build_tutorial.py` builds the demo project, opens every
-window, captures the screenshots, adds the callouts and writes `docs/TUTORIAL.md` + `docs/TUTORIAL.html`. On your
+The tutorial is generated, never edited by hand: `dev/build_tutorial.py` runs the F3 worked example (`dev/tutorial_f3.py`,
+on `Documents\\F3 Netherlands` when it exists - a working copy, your project is not changed - else on the synthetic
+F3-like project), builds the demo project for the tool chapters, opens every window, captures the screenshots, adds
+the callouts and writes `TUTORIAL.md`, `TUTORIAL.html`, `TUTORIAL.pdf` (letter) and `tutorial_build_log.txt`. On your
 PC, **Install GeoHarmonic.bat** runs it with real Qt and writes `tutorial_local\\TUTORIAL.html` (the desktop
 shortcut opens that copy).""",
         shots=[],
@@ -677,3 +669,15 @@ shortcut opens that copy).""",
         results="", results_re=[], limits=[], trouble=[],
     ),
 ]
+
+
+F3_INTRO = dict(
+    id="f3_intro", plain=True, title="Part 1 - Worked example: F3 Netherlands, start to finish",
+    purpose="""\
+F3 is dGB's public North Sea block (Dutch sector): a 3D volume *F3 original*, four wells (F02-1, F03-2, F03-4,
+F06-1) with logs, checkshots and markers, seven interpreted horizons (Shallow, Truncation, FS8, FS7, FS6, FS4, MFS4)
+and Fault A. **Set up F3 project.bat** builds the GeoHarmonic project in `Documents\\F3 Netherlands`. The chapters
+below follow one interpretation from opening the project to prospects; each one says what the step is for (and what
+it replaces in Kingdom / Petrel), the clicks, the result with the numbers this build got, and what to look for.""",
+    shots=[], steps=[], results="", results_re=[], limits=[], trouble=[],
+)

@@ -615,9 +615,11 @@ class Picker:
         return flt.barrier_3d(faults, s, tol_samples) if key.startswith("3D:") else \
             flt.barrier_line(faults, s, tol_samples)
 
-    def track(self, h, key, seeds_ij=None, params=None, scope=None, snapshot=True, progress=None, faults=None):
+    def track(self, h, key, seeds_ij=None, params=None, scope=None, snapshot=True, progress=None, faults=None,
+              allowed_mask=None):
         """Autotrack on one survey from seed traces (list of (i, j); None = all current picks).
-        scope: None (whole survey) or ("Inline", il) / ("Crossline", xl) for 3D. Returns nodes added."""
+        scope: None (whole survey) or ("Inline", il) / ("Crossline", xl) for 3D; allowed_mask: optional bool grid
+        (nil, nxl) of the traces the tracker may visit (a box / polygon). Returns nodes added."""
         params = params or TrackParams()
         s = self.survey(key)
         g = self.grid(h, key)
@@ -640,6 +642,9 @@ class Picker:
                 allowed[:, s.xl_index(scope[1])] = True
             else:
                 allowed[:] = True
+        if allowed_mask is not None and g.ndim == 2:
+            am = np.asarray(allowed_mask, bool)
+            allowed = am if allowed is None else (allowed & am)
         get = self._traces(key, params.smooth)
         eb = self.barrier(key, faults)
         n = track_grid(get, idx, seeds, params, s.dt * 1000.0, s.ns, allowed=allowed, progress=progress,

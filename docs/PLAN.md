@@ -1027,7 +1027,7 @@ is fixed by 38a, but it has not yet run on a real GPU: 3D sub-items are built ag
 
 ## Phase 5 - PC retest fixes (added 2026-11-26, after the second install test on Chris's PC)
 
-43. **PC retest fixes + F3 worked-example tutorial** - status: partial (run 9, 2026-11-26: 43a-g fixed with regression tests test_retest.py, Seismic v0.66.0 / Well Correlation v0.14.1; 43h-k tutorial in progress)
+43. **PC retest fixes + F3 worked-example tutorial** - status: done (run 9, 2026-11-26, Seismic v0.66.0 / Well Correlation v0.14.1: 43a-g fixes + test_retest.py (lininterp.py, livegrid.SurveyGrid / fill_holes, carto.seg_cut, Basemap open polylines + poly_callback, livemap colour_hex, LiveMapCanvas.update_labels, FrameworkDialog top_to_bottom); 43h-k dev/tutorial_f3.py (W1-W14), synth_f3.py, build_tutorial --f3 / --f3-synthetic / PDF / log, installer progress on screen. Follow-ups: real-Qt + real-F3 run of the tutorial only happens on the PC; the F3 RGT chapter uses horizon-guided RGT on one inline (full-volume RGT too slow for the installer); geobodies in the tutorial on a box; root cause of the 6 km Live-grid shift not reproduced here - the grid now cannot leave the survey by construction)
    Second install on Chris's Windows PC (26 Nov 2026; Anaconda Python 3.11.3, per-tool .venv, PySide6 6.5.3,
    pyqtgraph 0.13.7, numpy 1.26.4 now pinned): Well Correlation self-test + real-Qt GUI test PASSED (228 checks);
    Mistie self-test PASSED; Seismic self-test FAILED (1 of ~1,275) and Seismic GUI test FAILED (2 of ~320). The 3D

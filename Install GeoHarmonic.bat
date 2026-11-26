@@ -203,10 +203,12 @@ set "TPY=%ROOT%\tools\Seismic Interpretation Tool\.venv\Scripts\python.exe"
 set "TUT=%ROOT%\docs\TUTORIAL.html"
 if not exist "%TPY%" exit /b 0
 if not exist "%ROOT%\dev\build_tutorial.py" exit /b 0
-echo       Building the tutorial (about 1 minute)...
+echo       Building the tutorial: worked example on Documents\F3 Netherlands when it exists, else on a
+echo       synthetic F3-like project; then the tool chapters - a few minutes, one line per chapter...
 echo ===== Tutorial ===== >> "%LOG%"
 if exist "%ROOT%\tutorial_local\TUTORIAL.html" del /q "%ROOT%\tutorial_local\TUTORIAL.html" >nul 2>&1
-"%TPY%" -u "%ROOT%\dev\build_tutorial.py" --pc >> "%LOG%" 2>&1
+rem progress lines on screen; errors in install_log.txt; full log in tutorial_local\tutorial_build_log.txt
+"%TPY%" -u "%ROOT%\dev\build_tutorial.py" --pc 2>> "%LOG%"
 if exist "%ROOT%\tutorial_local\TUTORIAL.html" set "TUT=%ROOT%\tutorial_local\TUTORIAL.html"
 if exist "%ROOT%\tutorial_local\TUTORIAL.html" echo       Tutorial built: tutorial_local\TUTORIAL.html
 if not exist "%ROOT%\tutorial_local\TUTORIAL.html" echo       Note: tutorial not rebuilt - the shortcut opens docs\TUTORIAL.html. See install_log.txt

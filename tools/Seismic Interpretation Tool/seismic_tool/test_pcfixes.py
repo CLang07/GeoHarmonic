@@ -144,10 +144,11 @@ def run_tutorial(check, tmp):
     out = tempfile.mkdtemp(dir=tmp, prefix="tut_")
     res = os.path.join(out, "res.txt")
     with open(res, "w") as f:
-        f.write("PASS 38a: example check (1.0 ms)\nPASS 33a: plane (3 planes)\nSELFTEST PASSED\n")
+        f.write("PASS 38a: example check (1.0 ms)\nPASS 43a: example check (2.0 ms)\nPASS 33a: plane (3 planes)\n"
+                "SELFTEST PASSED\n")
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
-    p = subprocess.run([sys.executable, builder, "--mock", "--out", out, "--results", res], cwd=REPO, env=env,
+    p = subprocess.run([sys.executable, builder, "--mock", "--f3-synthetic", "--out", out, "--results", res], cwd=REPO, env=env,
                        capture_output=True, text=True, timeout=600)
     ok = p.returncode == 0 and "TUTORIAL BUILT" in p.stdout
     check(ok, "38e: build_tutorial.py runs in one command" + ("" if ok else f" (rc={p.returncode}: "
@@ -180,6 +181,33 @@ def run_tutorial(check, tmp):
           f"38d: pictures <= 1400 px wide (max {max(widths) if widths else 0}), HTML "
           f"{os.path.getsize(os.path.join(out, 'TUTORIAL.html')) / 1e6:.1f} MB < 25 MB")
     check(all(f"](tutorial/{os.path.basename(f)})" in md for f in pngs), "38d: TUTORIAL.md links every picture in tutorial/")
-    check("not captured (no Qt on the build server" in page and "PASS 38a: example check (1.0 ms)" in page,
+    check("not captured (no Qt on the build server" in page and "PASS 43a: example check (2.0 ms)" in page,
           "38d: windows that cannot be drawn are named in the caption (no mock-ups); test numbers quoted")
     check('<ol class=\'legend\'>' in page, "38d: numbered callouts with a legend")
+    # PLAN 43h-k: the F3 worked example (synthetic F3-like project here; Chris's F3 on his PC)
+    sys.path.insert(0, os.path.join(REPO, "dev"))
+    try:
+        import tutorial_f3 as TF
+        importlib.reload(TF)
+    finally:
+        sys.path.pop(0)
+    f3ids = [c["id"] for c in TF.CHAPTERS]
+    check(len(f3ids) >= 14 and all(f"id='{i}'" in page for i in f3ids) and "id='f3_intro'" in page,
+          f"43h: F3 worked example chapters in the tutorial ({len(f3ids)} steps, open project ... prospects)")
+    logp = os.path.join(out, "tutorial_build_log.txt")
+    log = open(logp, encoding="utf-8").read() if os.path.exists(logp) else ""
+    done = re.findall(r"^\[F3 (\d+)/(\d+)\]", log, flags=re.M)
+    pics = [int(n) for n in re.findall(r"^    ok \([\d.]+ s, (\d+) pictures\)", log, flags=re.M)]
+    check(len(done) == len(f3ids) and len(pics) == len(f3ids) and min(pics or [0]) >= 1,
+          f"43i: every F3 chapter ran on the synthetic F3-like project with >= 1 picture (progress line per chapter, "
+          f"log file; pictures per chapter {pics})")
+    check("synthetic F3-like" in page and "FAILED" not in "".join(re.findall(r"^    FAILED.*$", log, flags=re.M)),
+          "43i: captions say which project the worked example ran on")
+    m = re.search(r"Live grid FS6: .*?, X ([\d,]+)-([\d,]+) m = the outline \(X ([\d,]+)-([\d,]+) m\)", page)
+    check(bool(m) and m.group(1) == m.group(3) and m.group(2) == m.group(4),
+          "43h: the worked example quotes the Live grid lining up with the F3 outline (fix 43d)")
+    pdf = os.path.join(out, "TUTORIAL.pdf")
+    check(os.path.exists(pdf) and os.path.getsize(pdf) > 50000 and open(pdf, "rb").read(5) == b"%PDF-",
+          f"43j: letter-size PDF of the tutorial ({os.path.getsize(pdf) / 1e6 if os.path.exists(pdf) else 0:.1f} MB)")
+    check("id='fixes'" in page and all(f"43{x}" in page for x in "abcdefg") and "first PC install, 25 Nov" not in page,
+          "43h: 'Fixes in this release' lists 43a-g (the first-install fix claims are gone)")
